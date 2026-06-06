@@ -15,6 +15,12 @@ public static class VerificationProfileIds
             HighAssuranceV1,
         ],
         StringComparer.Ordinal);
+
+    public static bool RequiresHighAssuranceEvidence(string? profileId) =>
+        string.Equals(profileId, HighAssuranceV1, StringComparison.Ordinal);
+
+    public static bool AcceptsDevelopmentEvidence(string? profileId) =>
+        !RequiresHighAssuranceEvidence(profileId);
 }
 
 public static class VerificationResultCodes
@@ -55,7 +61,9 @@ public static class VerificationResultCodes
     public const string UnsupportedLiveDependency = "unsupported_live_dependency";
     public const string FutureEvidencePending = "future_evidence_pending";
     public const string PublicationProofEvidencePending = "publication_proof_evidence_pending";
+    public const string PublicationProofNotRequiredForDevelopment = "publication_proof_not_required_for_development";
     public const string ReleaseIntegrityEvidencePending = "release_integrity_evidence_pending";
+    public const string ReleaseIntegrityDevelopmentPlaceholder = "release_integrity_development_placeholder";
     public const string ReleaseIntegrityEvidenceValid = "release_integrity_evidence_valid";
     public const string ReleaseIntegrityManifestMissing = "release_integrity_manifest_missing";
     public const string ReleaseIntegrityEvidenceModeNotAllowed = "release_integrity_evidence_mode_not_allowed";
@@ -115,6 +123,8 @@ public static class VerificationResultCodes
     public const string EligibilityPublicPrivacyBoundaryViolation = "eligibility_public_privacy_boundary_violation";
     public const string EligibilityBallotPrivacyBoundaryViolation = "eligibility_ballot_privacy_boundary_violation";
     public const string EligibilityDevOnlyVerificationBlocked = "eligibility_dev_only_verification_blocked";
+    public const string EligibilityDevelopmentProviderValid = "eligibility_development_provider_valid";
+    public const string EligibilityContactCodeProviderNotReady = "eligibility_contact_code_provider_not_ready";
     public const string TrusteeControlDomainEvidenceValid = "trustee_control_domain_evidence_valid";
     public const string TrusteeControlProfileMissing = "trustee_control_profile_missing";
     public const string TrusteeThresholdProfileMismatch = "trustee_threshold_profile_mismatch";

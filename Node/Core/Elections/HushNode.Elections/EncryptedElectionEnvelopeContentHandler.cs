@@ -3749,7 +3749,11 @@ public class EncryptedElectionEnvelopeContentHandler(
             return false;
         }
 
-        var profile = repository.GetCeremonyProfileAsync(profileId).GetAwaiter().GetResult();
+        var registryProfiles = repository.GetCeremonyProfilesAsync().GetAwaiter().GetResult();
+        var profile = ElectionSelectableProfileCatalog.ResolveProfile(
+            election!.GovernanceMode,
+            profileId,
+            registryProfiles);
         if (profile is null || (profile.DevOnly && !_ceremonyOptions.EnableDevCeremonyProfiles))
         {
             return false;

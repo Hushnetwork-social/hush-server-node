@@ -2,6 +2,11 @@
   "Elections": {
     "Ceremony": {
       "EnableDevCeremonyProfiles": true
+    },
+    "DeploymentProof": {
+      "Provider": "development_runtime",
+      "DevelopmentRuntimeDeploymentTarget": "local-development-hushservernode",
+      "DevelopmentRuntimePublicPackageRef": "local-development-runtime://hush-server-node"
     }
   }
 }

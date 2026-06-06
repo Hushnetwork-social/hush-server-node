@@ -232,6 +232,50 @@ public class ElectionDeploymentProofBindingServiceTests
     }
 
     [Fact]
+    public async Task BindForOpenAsync_WithDevelopmentWebClientProofWithoutExpectedCatalog_AcceptsWithLimitations()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var observedAt = new DateTime(2026, 5, 26, 15, 25, 0, DateTimeKind.Utc);
+        var election = CreateElection(ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId) with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = observedAt,
+            LastUpdatedAt = observedAt,
+        };
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election,
+            election.OwnerPublicAddress,
+            recordedAt: observedAt);
+        var service = CreateService(
+            CreateActiveContext(ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations, observedAt) with
+            {
+                ObservedWebClientProof = CreateWebClientProof(
+                    "local-dev-webclient-proof-not-claiming",
+                    Hash('0'),
+                    ElectionDeploymentProofObservationSource.Feat144Handshake,
+                    ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations),
+            },
+            proofFamilies: [CreateProofFamilyStatus(observedAt, ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations)]);
+
+        var result = await service.BindForOpenAsync(repository, election, openArtifact);
+        await context.SaveChangesAsync();
+
+        result.IsAllowed.Should().BeTrue();
+
+        var observations = await repository.GetDeploymentProofComponentObservationsAsync(result.CheckpointId!.Value);
+        var webClientObservation = observations.Single(x =>
+            x.ComponentId == ElectionDeploymentProofComponentId.HushWebClient);
+        webClientObservation.ExpectedDeploymentProofId.Should().BeNull();
+        webClientObservation.ObservedDeploymentProofId.Should().Be("local-dev-webclient-proof-not-claiming");
+        webClientObservation.EvidenceStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations);
+        webClientObservation.ObservationSource.Should()
+            .Be(ElectionDeploymentProofObservationSource.Feat144Handshake);
+        webClientObservation.MismatchCode.Should().BeNull();
+    }
+
+    [Fact]
     public async Task BindForOpenAsync_WithMissingProductionProof_BlocksWithoutPersistingCheckpoint()
     {
         using var context = CreateContext();
@@ -260,6 +304,53 @@ public class ElectionDeploymentProofBindingServiceTests
         result.FailureCodes.Should().Contain("deployment_proof_missing");
         (await repository.GetDeploymentProofLedgerAsync(election.ElectionId)).Should().BeNull();
         (await repository.GetDeploymentProofCheckpointsAsync(election.ElectionId)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task BindForOpenAsync_WithDevelopmentRuntimeProvider_AllowsProductionLikeOpenWithLimitations()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var observedAt = DateTime.UtcNow;
+        var election = CreateElection(ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId) with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = observedAt,
+            LastUpdatedAt = observedAt,
+        };
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election,
+            election.OwnerPublicAddress,
+            recordedAt: observedAt);
+        var service = new ElectionDeploymentProofBindingService(
+            new ElectionDeploymentProofProfilePolicy(ElectionDeploymentProofOptions.Default),
+            new DevelopmentRuntimeActiveDeploymentProofProvider(new ElectionDeploymentProofProviderOptions(
+                ElectionDeploymentProofProviderOptions.ProviderDevelopmentRuntime,
+                "local-rehearsal-node",
+                "local-development-runtime://hush-server-node",
+                ElectionDeploymentProofProviderOptions.DefaultDevelopmentRuntimeProofIdPrefix)));
+
+        var result = await service.BindForOpenAsync(repository, election, openArtifact);
+        await context.SaveChangesAsync();
+
+        result.IsAllowed.Should().BeTrue();
+        result.WasCaptured.Should().BeTrue();
+        result.EvidenceStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations);
+        result.ClaimEffect.Should().Be(ElectionDeploymentProofClaimEffect.AcceptedWithLimitations);
+
+        var ledger = await repository.GetDeploymentProofLedgerAsync(election.ElectionId);
+        ledger.Should().NotBeNull();
+        ledger!.Status.Should().Be(ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations);
+        ledger.DeploymentProfile.Should().Be(ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId);
+        ledger.ActiveProofSetIdAtOpen.Should().StartWith("DPP-SERVER-DEV-");
+
+        var observations = await repository.GetDeploymentProofComponentObservationsAsync(result.CheckpointId!.Value);
+        observations.Should().Contain(x =>
+            x.ComponentId == ElectionDeploymentProofComponentId.HushServerNode &&
+            x.EvidenceStatus == ElectionDeploymentProofEvidenceStatus.Accepted &&
+            x.DeploymentProofId != null &&
+            x.DeploymentProofId.StartsWith("DPP-SERVER-DEV-", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -480,11 +571,12 @@ public class ElectionDeploymentProofBindingServiceTests
     private static ActiveDeploymentProofComponent CreateWebClientProof(
         string proofId,
         string artifactHash,
-        ElectionDeploymentProofObservationSource observationSource) =>
+        ElectionDeploymentProofObservationSource observationSource,
+        ElectionDeploymentProofEvidenceStatus evidenceStatus = ElectionDeploymentProofEvidenceStatus.Accepted) =>
         new(
             ElectionDeploymentProofComponentId.HushWebClient,
             proofId,
-            ElectionDeploymentProofEvidenceStatus.Accepted,
+            evidenceStatus,
             "git:refs/tags/deployment-proof-v1",
             "sha256:" + artifactHash,
             Hash('f'),

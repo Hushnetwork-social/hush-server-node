@@ -3654,7 +3654,7 @@ public class ElectionQueryApplicationServiceTests
         response.Status.Sp08ReleaseIntegrity.RestrictedEvidenceAvailable.Should().BeTrue();
         response.Status.Sp08ReleaseIntegrity.EvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder);
         response.Status.Sp08ReleaseIntegrity.NotForReleaseIntegrityClaims.Should().BeTrue();
-        response.Status.Sp08ReleaseIntegrity.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityEvidencePending);
+        response.Status.Sp08ReleaseIntegrity.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder);
         response.Status.Sp08ReleaseIntegrity.ReleaseManifestHash.Should().NotBeNullOrWhiteSpace();
         response.Status.Sp08ReleaseIntegrity.EvidenceFileCount.Should().Be(3);
         response.Status.Sp08ReleaseIntegrity.ComponentCount.Should().BeGreaterThanOrEqualTo(6);
@@ -3778,7 +3778,7 @@ public class ElectionQueryApplicationServiceTests
         response.Status.Sp08ReleaseIntegrity.Should().NotBeNull();
         response.Status.Sp08ReleaseIntegrity.EvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder);
         response.Status.Sp08ReleaseIntegrity.BlocksHighAssurance.Should().BeTrue();
-        response.Status.Sp08ReleaseIntegrity.PrimaryIssue.Should().Contain("development placeholder");
+        response.Status.Sp08ReleaseIntegrity.PrimaryIssue.Should().Contain("lifecycle release bindings");
         response.Status.Sp08ReleaseIntegrity.LifecycleBindings.Should().OnlyContain(x => !x.MatchesSealedPolicy);
     }
 

@@ -1938,7 +1938,8 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             blockers.Add("Latest roster import evidence contains rejected rows.");
         }
 
-        if (election.ContactCodeProviderReadiness != ElectionContactCodeProviderReadiness.Ready)
+        if (election.ContactCodeProviderReadiness != ElectionContactCodeProviderReadiness.Ready &&
+            !IsDevelopmentContactCodeProviderAccepted(election))
         {
             blockers.Add($"Contact-code provider readiness is {election.ContactCodeProviderReadiness}.");
         }
@@ -2047,14 +2048,21 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             return HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilityPolicyMissing;
         }
 
-        if (election.ContactCodeProviderReadiness != ElectionContactCodeProviderReadiness.Ready)
-        {
-            return HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilityDevOnlyVerificationBlocked;
-        }
-
         if (openBlockers.Any(x => x.Contains("duplicate linked actors", StringComparison.OrdinalIgnoreCase)))
         {
             return HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilityLinkEvidenceMissing;
+        }
+
+        if (election.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.DevOnly)
+        {
+            return IsDevelopmentContactCodeProviderAccepted(election)
+                ? HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilityDevelopmentProviderValid
+                : HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilityDevOnlyVerificationBlocked;
+        }
+
+        if (election.ContactCodeProviderReadiness != ElectionContactCodeProviderReadiness.Ready)
+        {
+            return HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilityContactCodeProviderNotReady;
         }
 
         return openBlockers.Count == 0
@@ -2062,13 +2070,31 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             : HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilitySchemaInvalid;
     }
 
+    private static bool IsDevelopmentContactCodeProviderAccepted(ElectionRecord election) =>
+        election.SelectedProfileDevOnly &&
+        election.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.DevOnly;
+
     private IReadOnlyList<ElectionCeremonyProfileRecord> FilterVisibleCeremonyProfiles(
         ElectionRecord election,
-        IReadOnlyList<ElectionCeremonyProfileRecord> ceremonyProfiles) =>
-        ElectionSelectableProfileCatalog.GetSelectableProfiles(
+        IReadOnlyList<ElectionCeremonyProfileRecord> ceremonyProfiles)
+    {
+        var visibleProfiles = ElectionSelectableProfileCatalog.GetSelectableProfiles(
             election.GovernanceMode,
             ceremonyProfiles,
             includeDevProfiles: _ceremonyOptions.EnableDevCeremonyProfiles);
+        var selectedProfile = ElectionSelectableProfileCatalog.ResolveProfile(
+            election.GovernanceMode,
+            election.SelectedProfileId,
+            ceremonyProfiles);
+
+        if (selectedProfile is null ||
+            visibleProfiles.Any(profile => string.Equals(profile.ProfileId, selectedProfile.ProfileId, StringComparison.Ordinal)))
+        {
+            return visibleProfiles;
+        }
+
+        return visibleProfiles.Append(selectedProfile).ToArray();
+    }
 
     private static ElectionEligibilityActorRoleProto ResolveEligibilityActorRole(
         ElectionRecord election,

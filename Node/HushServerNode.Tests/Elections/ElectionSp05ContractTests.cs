@@ -166,6 +166,8 @@ public class ElectionSp05ContractTests
             VerificationResultCodes.EligibilityPublicPrivacyBoundaryViolation,
             VerificationResultCodes.EligibilityBallotPrivacyBoundaryViolation,
             VerificationResultCodes.EligibilityDevOnlyVerificationBlocked,
+            VerificationResultCodes.EligibilityDevelopmentProviderValid,
+            VerificationResultCodes.EligibilityContactCodeProviderNotReady,
         };
 
         codes.Should().OnlyHaveUniqueItems();

@@ -801,6 +801,11 @@ public sealed class ElectionDeploymentProofBindingService(
 
         if (expected is null)
         {
+            if (observed.EvidenceStatus == ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations)
+            {
+                return new WebClientComparison(observed.EvidenceStatus, MismatchCode: null);
+            }
+
             return new WebClientComparison(
                 ElectionDeploymentProofEvidenceStatus.Mismatch,
                 ElectionDeploymentProofConstants.Feat144WebClientExpectedProofMissingCode);

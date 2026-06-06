@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Security.Cryptography;
 using HushShared.Elections.Model;
 
 namespace HushNode.Elections;
@@ -204,6 +206,149 @@ public sealed class LocalDevelopmentActiveDeploymentProofProvider : IActiveDeplo
             DateTime.UtcNow));
 }
 
+public sealed class DevelopmentRuntimeActiveDeploymentProofProvider(
+    ElectionDeploymentProofProviderOptions options) : IActiveDeploymentProofProvider
+{
+    private const string ComponentId = "hush-server-node";
+
+    private readonly Lazy<RuntimeProofSnapshot> _runtimeProof = new(() => BuildRuntimeProof(options));
+
+    public Task<ActiveDeploymentProofContext> GetActiveDeploymentProofContextAsync(
+        ElectionDeploymentProofProfile profile,
+        DateTime observedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var runtimeProof = _runtimeProof.Value;
+
+        return Task.FromResult(new ActiveDeploymentProofContext(
+            ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations,
+            observedAtUtc,
+            string.IsNullOrWhiteSpace(options.DevelopmentRuntimeDeploymentTarget)
+                ? ElectionDeploymentProofProviderOptions.DefaultDevelopmentRuntimeDeploymentTarget
+                : options.DevelopmentRuntimeDeploymentTarget,
+            ElectionDeploymentProofConstants.DeploymentProtocolVersion,
+            PublicCatalogRef: options.DevelopmentRuntimePublicPackageRef,
+            PlatformCeremonyId: ElectionDeploymentProofProviderOptions.DevelopmentRuntimePlatformCeremonyId,
+            ServerProof: runtimeProof.ServerProof,
+            ExpectedWebClientProof: null,
+            ProviderErrors: Array.Empty<ActiveDeploymentProofProviderError>()));
+    }
+
+    public Task<IReadOnlyList<ActiveDeploymentProofEvent>> GetDeploymentEventsSinceAsync(
+        ElectionDeploymentProofProfile profile,
+        DateTime sinceUtc,
+        DateTime untilUtc,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var runtimeProof = _runtimeProof.Value;
+        if (runtimeProof.Event.OccurredAtUtc < sinceUtc || runtimeProof.Event.OccurredAtUtc > untilUtc)
+        {
+            return Task.FromResult<IReadOnlyList<ActiveDeploymentProofEvent>>(Array.Empty<ActiveDeploymentProofEvent>());
+        }
+
+        return Task.FromResult<IReadOnlyList<ActiveDeploymentProofEvent>>([runtimeProof.Event]);
+    }
+
+    public Task<ActiveProofFamilyStatus> ResolveProofFamilyStatusAsync(
+        string proofFamilyId,
+        string? activeServerProofId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return Task.FromResult(new ActiveProofFamilyStatus(
+            NormalizeRequired(proofFamilyId, nameof(proofFamilyId)),
+            ProofFamilyVersion: "v1",
+            PackageId: "development-runtime-self-attestation",
+            PackageHash: _runtimeProof.Value.ServerProof.PackageHash,
+            PromotedRegisterRef: options.DevelopmentRuntimePublicPackageRef,
+            ElectionDeploymentProofConstants.Feat137SourceFeature,
+            ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations,
+            MismatchCode: null,
+            "Development runtime proof accepted for local rehearsal with explicit limitations.",
+            DateTime.UtcNow));
+    }
+
+    private static RuntimeProofSnapshot BuildRuntimeProof(ElectionDeploymentProofProviderOptions options)
+    {
+        var assembly = typeof(DevelopmentRuntimeActiveDeploymentProofProvider).Assembly;
+        var assemblyName = assembly.GetName();
+        var assemblyVersion = assemblyName.Version?.ToString() ?? "unknown";
+        var informationalVersion = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+        var artifactHash = ComputeAssemblyHash(assembly);
+        var proofId = BuildProofId(options, artifactHash);
+        var sourceRef = string.IsNullOrWhiteSpace(informationalVersion)
+            ? $"assembly:{assemblyName.Name}/{assemblyVersion}"
+            : $"assembly:{assemblyName.Name}/{informationalVersion}";
+        var publicPackageRef = string.IsNullOrWhiteSpace(options.DevelopmentRuntimePublicPackageRef)
+            ? $"local-development-runtime://{ComponentId}/{proofId}"
+            : options.DevelopmentRuntimePublicPackageRef;
+        var serverProof = new ActiveDeploymentProofComponent(
+            ElectionDeploymentProofComponentId.HushServerNode,
+            proofId,
+            ElectionDeploymentProofEvidenceStatus.Accepted,
+            sourceRef,
+            "sha256:" + artifactHash,
+            artifactHash,
+            publicPackageRef,
+            PreviousProofId: null,
+            SupersedesProofIds: Array.Empty<string>(),
+            ElectionDeploymentProofObservationSource.Provider);
+        var eventTime = DateTime.UtcNow;
+        var deploymentEvent = new ActiveDeploymentProofEvent(
+            $"DPE-DEV-RUNTIME-{artifactHash[..12].ToUpperInvariant()}",
+            "development-runtime-self-attestation",
+            DeploymentRunId: proofId,
+            ElectionDeploymentProofComponentId.HushServerNode,
+            BeforeProofId: null,
+            AfterProofId: proofId,
+            ElectionDeploymentProofImpactClassification.OperationalConfigChange,
+            "Current HushServerNode development runtime hash captured for local rehearsal.",
+            ["runtime-assembly-hash"],
+            "accepted_with_limitations",
+            "development-runtime-local-operator",
+            eventTime,
+            ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations);
+
+        return new RuntimeProofSnapshot(serverProof, deploymentEvent);
+    }
+
+    private static string BuildProofId(ElectionDeploymentProofProviderOptions options, string artifactHash)
+    {
+        var prefix = string.IsNullOrWhiteSpace(options.DevelopmentRuntimeProofIdPrefix)
+            ? ElectionDeploymentProofProviderOptions.DefaultDevelopmentRuntimeProofIdPrefix
+            : options.DevelopmentRuntimeProofIdPrefix.Trim();
+
+        return prefix + artifactHash[..12].ToUpperInvariant();
+    }
+
+    private static string ComputeAssemblyHash(Assembly assembly)
+    {
+        var location = assembly.Location;
+        if (string.IsNullOrWhiteSpace(location) || !File.Exists(location))
+        {
+            return Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(assembly.FullName ?? assembly.GetName().Name ?? ComponentId)))
+                .ToLowerInvariant();
+        }
+
+        using var stream = File.OpenRead(location);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+
+    private static string NormalizeRequired(string value, string paramName) =>
+        string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("Value is required.", paramName)
+            : value.Trim();
+
+    private sealed record RuntimeProofSnapshot(
+        ActiveDeploymentProofComponent ServerProof,
+        ActiveDeploymentProofEvent Event);
+}
+
 public sealed class FixtureActiveDeploymentProofProvider(
     ActiveDeploymentProofContext activeContext,
     IReadOnlyList<ActiveDeploymentProofEvent>? events = null,
@@ -303,6 +448,46 @@ public sealed record ElectionDeploymentProofOptions(
                 .Select(x => x.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+}
+
+public sealed record ElectionDeploymentProofProviderOptions(
+    string Provider,
+    string DevelopmentRuntimeDeploymentTarget,
+    string? DevelopmentRuntimePublicPackageRef,
+    string DevelopmentRuntimeProofIdPrefix)
+{
+    public const string ProviderLocalDevelopment = "local_development";
+    public const string ProviderDevelopmentRuntime = "development_runtime";
+    public const string DefaultDevelopmentRuntimeDeploymentTarget = "local-development-runtime";
+    public const string DefaultDevelopmentRuntimeProofIdPrefix = "DPP-SERVER-DEV-";
+    public const string DevelopmentRuntimePlatformCeremonyId = "development-runtime-self-attestation-v1";
+
+    public static ElectionDeploymentProofProviderOptions Default =>
+        new(
+            ProviderLocalDevelopment,
+            DefaultDevelopmentRuntimeDeploymentTarget,
+            DevelopmentRuntimePublicPackageRef: null,
+            DefaultDevelopmentRuntimeProofIdPrefix);
+
+    public string Provider { get; init; } =
+        string.IsNullOrWhiteSpace(Provider)
+            ? ProviderLocalDevelopment
+            : Provider.Trim();
+
+    public string DevelopmentRuntimeDeploymentTarget { get; init; } =
+        string.IsNullOrWhiteSpace(DevelopmentRuntimeDeploymentTarget)
+            ? DefaultDevelopmentRuntimeDeploymentTarget
+            : DevelopmentRuntimeDeploymentTarget.Trim();
+
+    public string? DevelopmentRuntimePublicPackageRef { get; init; } =
+        string.IsNullOrWhiteSpace(DevelopmentRuntimePublicPackageRef)
+            ? null
+            : DevelopmentRuntimePublicPackageRef.Trim();
+
+    public string DevelopmentRuntimeProofIdPrefix { get; init; } =
+        string.IsNullOrWhiteSpace(DevelopmentRuntimeProofIdPrefix)
+            ? DefaultDevelopmentRuntimeProofIdPrefix
+            : DevelopmentRuntimeProofIdPrefix.Trim();
 }
 
 public sealed record ElectionDeploymentProofProfile(

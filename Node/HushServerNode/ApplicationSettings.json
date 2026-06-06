@@ -47,7 +47,14 @@
         },
         "ProtocolPackages": {
             "ApprovedCatalogRelativePath": "ProtocolPackages/ApprovedProtocolPackageCatalog.json",
-            "FailOnMissingCatalog": false
+            "FailOnMissingCatalog": false,
+            "RemoteSyncEnabled": true,
+            "RemoteReleasesApiUrl": "https://api.github.com/repos/Hushnetwork-social/protocol-omega-packages/releases",
+            "RemotePackageId": "omega-hushvoting-v1",
+            "RemoteReleaseTagPrefix": "ProtocolOmega-HushVoting-v1-",
+            "RemoteAssetNamePrefix": "Protocol-Omega-HushVoting-v1-Artifacts",
+            "RemoteMaxReleasesToInspect": 20,
+            "RemoteRequestTimeoutSeconds": 20
         },
         "AdminOnlyProtectedTallyEnvelope": {
             "Provider": "auto",

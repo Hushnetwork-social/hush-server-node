@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using HushShared.Elections.Model;
 using HushShared.Elections.Verification.Model;
 
@@ -166,14 +167,16 @@ public sealed partial class ElectionVerificationPackageExportService
     {
         var latestTranscript = ResolveLatestPublicationProofTranscript(request);
         var latestDeletionReceipt = ResolveLatestPublicationWitnessDeletionReceipt(request);
-        var highAssurance = string.Equals(request.VerifierProfileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal);
+        var highAssurance = VerificationProfileIds.RequiresHighAssuranceEvidence(request.VerifierProfileId);
         var status = latestTranscript is null
-            ? highAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn
+            ? highAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Pass
             : latestDeletionReceipt?.DeletionStatus == ElectionPublicationWitnessDeletionStatus.Completed
                 ? VerificationCheckStatus.Pass
                 : VerificationCheckStatus.Fail;
         var resultCode = latestTranscript is null
-            ? VerificationResultCodes.PublicationProofEvidencePending
+            ? highAssurance
+                ? VerificationResultCodes.PublicationProofEvidencePending
+                : VerificationResultCodes.PublicationProofNotRequiredForDevelopment
             : latestDeletionReceipt?.DeletionStatus == ElectionPublicationWitnessDeletionStatus.Completed
                 ? VerificationResultCodes.PublicationProofEvidenceValid
                 : VerificationResultCodes.PublicationProofWitnessDeletionMissing;
@@ -258,7 +261,7 @@ public sealed partial class ElectionVerificationPackageExportService
         {
             return highAssurance
                 ? "High-assurance profile requires SP-07 publication proof evidence."
-                : "SP-07 publication proof evidence is pending a later protocol package revision.";
+                : "SP-07 publication proof is not required for this development verifier profile.";
         }
 
         if (latestDeletionReceipt?.DeletionStatus != ElectionPublicationWitnessDeletionStatus.Completed)
@@ -278,9 +281,22 @@ public sealed partial class ElectionVerificationPackageExportService
         ElectionVerificationPackageExportRequest request,
         DateTime exportedAt)
     {
-        var releaseId = "development-placeholder";
-        var serverDigest = BuildSp08PlaceholderDigest(request, ElectionSp08ProfileIds.ServerComponent);
-        var webDigest = BuildSp08PlaceholderDigest(request, ElectionSp08ProfileIds.WebClientComponent);
+        var ledger = ResolveDeploymentProofLedger(request);
+        var releaseId = ResolveSp08DevelopmentReleaseId(ledger);
+        var fallbackServerDigest = BuildSp08PlaceholderDigest(request, ElectionSp08ProfileIds.ServerComponent);
+        var fallbackWebDigest = BuildSp08PlaceholderDigest(request, ElectionSp08ProfileIds.WebClientComponent);
+        var serverBinding = ResolveSp08DeploymentProofComponentBinding(
+            ledger,
+            ElectionDeploymentProofComponentId.HushServerNode.ToString(),
+            releaseId,
+            fallbackServerDigest);
+        var webBinding = ResolveSp08DeploymentProofComponentBinding(
+            ledger,
+            ElectionDeploymentProofComponentId.HushWebClient.ToString(),
+            releaseId,
+            fallbackWebDigest);
+        var serverDigest = serverBinding.ComponentDigest;
+        var webDigest = webBinding.ComponentDigest;
         var verifierDigest = BuildSp08PlaceholderDigest(request, ElectionSp08ProfileIds.StandaloneVerifierComponent);
         var sp07WorkerDigest = BuildSp08PlaceholderDigest(request, ElectionSp08ProfileIds.Sp07ProofWorkerComponent);
         var protocolPackageDigest = $"sha256:{request.ProtocolPackageBinding!.ReleaseManifestHash}";
@@ -298,8 +314,8 @@ public sealed partial class ElectionVerificationPackageExportService
             SourceTag: "development-placeholder",
             Components:
             [
-                BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.ServerComponent, serverDigest),
-                BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.WebClientComponent, webDigest),
+                BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.ServerComponent, serverDigest, serverBinding.ImmutableReference),
+                BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.WebClientComponent, webDigest, webBinding.ImmutableReference),
                 BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.StandaloneVerifierComponent, verifierDigest),
                 BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.Sp07ProofWorkerComponent, sp07WorkerDigest),
                 BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.ProtocolPackageComponent, protocolPackageDigest),
@@ -316,8 +332,8 @@ public sealed partial class ElectionVerificationPackageExportService
             ],
             LifecycleBindings: BuildSp08LifecycleBindings(
                 releaseId,
-                serverDigest,
-                webDigest,
+                serverBinding,
+                webBinding,
                 sp07WorkerDigest,
                 exporterDigest,
                 matchesSealedPolicy: false),
@@ -326,7 +342,8 @@ public sealed partial class ElectionVerificationPackageExportService
 
     private static ElectionSp08ReleaseComponentArtifactRecord BuildSp08PlaceholderComponent(
         string componentId,
-        string artifactDigest) =>
+        string artifactDigest,
+        string? immutableReference = null) =>
         new(
             componentId,
             componentId,
@@ -335,7 +352,9 @@ public sealed partial class ElectionVerificationPackageExportService
             artifactDigest,
             SourceCommit: "development-placeholder",
             SourceTag: "development-placeholder",
-            ImmutableReference: $"file:development-placeholder/{componentId}",
+            ImmutableReference: string.IsNullOrWhiteSpace(immutableReference)
+                ? $"file:development-placeholder/{componentId}"
+                : immutableReference,
             BuildWorkflowRunId: null,
             DistributionReference: null,
             SigningFingerprint: null,
@@ -364,7 +383,7 @@ public sealed partial class ElectionVerificationPackageExportService
             ElectionSp08ReleaseIntegrityRules.IsOfficialEvidenceMode(releaseManifest.EvidenceMode) &&
                 !releaseManifest.NotForReleaseIntegrityClaims
                     ? VerificationResultCodes.ReleaseIntegrityEvidenceValid
-                    : VerificationResultCodes.ReleaseIntegrityEvidencePending,
+                    : VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder,
             releaseManifest.Components,
             releaseManifest.LifecycleBindings,
             BuildSp08PublicPrivacyBoundary());
@@ -415,9 +434,9 @@ public sealed partial class ElectionVerificationPackageExportService
             [
                 new VerifierCheckResultRecord(
                     ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode,
-                    VerificationCheckStatus.Warn,
-                    VerificationResultCodes.ReleaseIntegrityEvidencePending,
-                    "Release integrity evidence is a development placeholder and is not official SP-08 evidence.",
+                    VerificationCheckStatus.Pass,
+                    VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder,
+                    "Development SP-08 release evidence is internally consistent for this non-high-assurance verifier profile.",
                     new Dictionary<string, string>
                     {
                         ["evidence_mode"] = releaseManifest.EvidenceMode,
@@ -573,34 +592,41 @@ public sealed partial class ElectionVerificationPackageExportService
                 ]);
         }
 
+        var results = new List<VerifierCheckResultRecord>
+        {
+            new(
+                ElectionSp09ProfileIds.ReviewStatusValidCheckCode,
+                VerificationCheckStatus.Pass,
+                VerificationResultCodes.ExternalReviewStatusValid,
+                "External review status shape is valid and claim state matches available evidence.",
+                new Dictionary<string, string>
+                {
+                    ["review_status"] = status.DetailedStatus,
+                    ["review_availability"] = status.Availability,
+                    ["claim_state"] = status.ClaimState,
+                }),
+        };
+
+        if (!VerificationProfileIds.AcceptsDevelopmentEvidence(request.VerifierProfileId))
+        {
+            results.Add(new VerifierCheckResultRecord(
+                ElectionSp09ProfileIds.ReviewNotCompleteCheckCode,
+                VerificationCheckStatus.Warn,
+                VerificationResultCodes.ExternalReviewNotComplete,
+                "External examination program is defined; no reviewer conclusion is available.",
+                new Dictionary<string, string>
+                {
+                    ["program_version"] = status.ProgramVersion,
+                    ["review_scope"] = status.ReviewScope,
+                }));
+        }
+
         return new ElectionSp09VerifierOutputArtifactRecord(
             request.Election.ElectionId.ToString(),
             request.VerifierProfileId,
             ElectionSp09ProfileIds.ExternalReviewVerifierOutputSchema,
             verifiedAt,
-            [
-                new VerifierCheckResultRecord(
-                    ElectionSp09ProfileIds.ReviewStatusValidCheckCode,
-                    VerificationCheckStatus.Pass,
-                    VerificationResultCodes.ExternalReviewStatusValid,
-                    "External review status shape is valid and claim state matches available evidence.",
-                    new Dictionary<string, string>
-                    {
-                        ["review_status"] = status.DetailedStatus,
-                        ["review_availability"] = status.Availability,
-                        ["claim_state"] = status.ClaimState,
-                    }),
-                new VerifierCheckResultRecord(
-                    ElectionSp09ProfileIds.ReviewNotCompleteCheckCode,
-                    VerificationCheckStatus.Warn,
-                    VerificationResultCodes.ExternalReviewNotComplete,
-                    "External examination program is defined; no reviewer conclusion is available.",
-                    new Dictionary<string, string>
-                    {
-                        ["program_version"] = status.ProgramVersion,
-                        ["review_scope"] = status.ReviewScope,
-                    }),
-            ]);
+            results);
     }
 
     private static ElectionSp09RestrictedFindingTrackerArtifactRecord BuildRestrictedSp09FindingTracker(
@@ -690,10 +716,10 @@ public sealed partial class ElectionVerificationPackageExportService
             immutableDeploymentRef,
             ResolveSp10CustodyMode(request),
             ElectionSp10ProfileIds.ExecutorKeyLifecycleEphemeralMemoryV1,
-            AccessSnapshotHashOrRestrictedRef: null,
-            BackupRestoreHashOrRestrictedRef: null,
+            AccessSnapshotHashOrRestrictedRef: BuildSp10EvidenceHash(request, "access-control-snapshot"),
+            BackupRestoreHashOrRestrictedRef: BuildSp10EvidenceHash(request, "backup-restore"),
             IncidentStatus: ElectionSp10ProfileIds.IncidentStatusNoIncidentDeclared,
-            AuditorRoomAccessLogHashOrRestrictedRef: null,
+            AuditorRoomAccessLogHashOrRestrictedRef: BuildSp10EvidenceHash(request, "auditor-room-access-log"),
             BlocksHighAssurance: ElectionSp10OperationalSecurityRules.BlocksHighAssurance(evidenceState),
             PrimaryResultCode: ElectionSp10OperationalSecurityRules.GetPrimaryResultCode(evidenceState),
             PrimaryIssue: "Development-only SP-10 operational evidence is exported for this package. Rollout readiness, legal validation, public-election approval, and certification remain out of scope.",
@@ -784,14 +810,20 @@ public sealed partial class ElectionVerificationPackageExportService
         string profileId,
         ElectionSp10OperationalSecurityStatusArtifactRecord status)
     {
-        var missingStatus = string.Equals(profileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal)
+        var missingStatus = VerificationProfileIds.RequiresHighAssuranceEvidence(profileId)
             ? VerificationCheckStatus.Fail
             : VerificationCheckStatus.Warn;
+        var developmentPlaceholderAccepted =
+            VerificationProfileIds.AcceptsDevelopmentEvidence(profileId) &&
+            string.Equals(
+                status.EvidenceState,
+                ElectionSp10ProfileIds.EvidenceStateDevelopmentPlaceholder,
+                StringComparison.Ordinal);
         var placeholderStatus = string.Equals(
                 status.EvidenceState,
                 ElectionSp10ProfileIds.EvidenceStateDevelopmentPlaceholder,
                 StringComparison.Ordinal)
-            ? missingStatus
+            ? developmentPlaceholderAccepted ? VerificationCheckStatus.Pass : missingStatus
             : VerificationCheckStatus.Pass;
         var releaseStatus = string.IsNullOrWhiteSpace(status.ReleaseManifestHash) ||
                             string.IsNullOrWhiteSpace(status.ImmutableDeploymentRef)
@@ -812,6 +844,9 @@ public sealed partial class ElectionVerificationPackageExportService
         var incidentStatus = ElectionSp10ProfileIds.IncidentStatusSet.Contains(status.IncidentStatus ?? string.Empty)
             ? placeholderStatus
             : missingStatus;
+        var acceptedEvidenceResultCode = developmentPlaceholderAccepted
+            ? VerificationResultCodes.OperationalSecurityDevelopmentPlaceholder
+            : VerificationResultCodes.OperationalSecurityEvidenceValid;
 
         return
         [
@@ -829,7 +864,7 @@ public sealed partial class ElectionVerificationPackageExportService
                 ElectionSp10ProfileIds.ReleaseDeploymentBindingCheckCode,
                 releaseStatus,
                 releaseStatus == VerificationCheckStatus.Pass
-                    ? VerificationResultCodes.OperationalSecurityEvidenceValid
+                    ? acceptedEvidenceResultCode
                     : string.Equals(status.EvidenceState, ElectionSp10ProfileIds.EvidenceStateDevelopmentPlaceholder, StringComparison.Ordinal)
                         ? VerificationResultCodes.OperationalSecurityDevelopmentPlaceholder
                         : VerificationResultCodes.OperationalSecurityReleaseBindingMissing,
@@ -840,14 +875,14 @@ public sealed partial class ElectionVerificationPackageExportService
                 string.IsNullOrWhiteSpace(status.AccessSnapshotHashOrRestrictedRef) ? missingStatus : placeholderStatus,
                 string.IsNullOrWhiteSpace(status.AccessSnapshotHashOrRestrictedRef)
                     ? VerificationResultCodes.OperationalSecurityAccessSnapshotMissing
-                    : VerificationResultCodes.OperationalSecurityEvidenceValid,
+                    : acceptedEvidenceResultCode,
                 "SP-10 access-control snapshot evidence is present.",
                 "SP-10 access-control snapshot evidence is missing from public summary."),
             BuildSp10Check(
                 ElectionSp10ProfileIds.CustodyModeDeclaredCheckCode,
                 custodyStatus,
                 custodyStatus == VerificationCheckStatus.Pass
-                    ? VerificationResultCodes.OperationalSecurityEvidenceValid
+                    ? acceptedEvidenceResultCode
                     : VerificationResultCodes.OperationalSecurityCustodyModeMissing,
                 "SP-10 custody mode is declared for the governance mode.",
                 "SP-10 custody mode is missing or unsupported."),
@@ -855,7 +890,7 @@ public sealed partial class ElectionVerificationPackageExportService
                 ElectionSp10ProfileIds.ExecutorKeyLifecycleCheckCode,
                 executorStatus,
                 executorStatus == VerificationCheckStatus.Pass
-                    ? VerificationResultCodes.OperationalSecurityEvidenceValid
+                    ? acceptedEvidenceResultCode
                     : VerificationResultCodes.OperationalSecurityExecutorKeyLifecycleMissing,
                 "SP-10 executor key lifecycle is declared as ephemeral in-memory handling.",
                 "SP-10 executor key lifecycle evidence is missing or unsupported."),
@@ -872,14 +907,14 @@ public sealed partial class ElectionVerificationPackageExportService
                 string.IsNullOrWhiteSpace(status.BackupRestoreHashOrRestrictedRef) ? missingStatus : placeholderStatus,
                 string.IsNullOrWhiteSpace(status.BackupRestoreHashOrRestrictedRef)
                     ? VerificationResultCodes.OperationalSecurityBackupRestoreMissing
-                    : VerificationResultCodes.OperationalSecurityEvidenceValid,
+                    : acceptedEvidenceResultCode,
                 "SP-10 backup/restore evidence is referenced.",
                 "SP-10 backup/restore evidence is missing from public summary."),
             BuildSp10Check(
                 ElectionSp10ProfileIds.IncidentDeclarationCheckCode,
                 incidentStatus,
                 incidentStatus == VerificationCheckStatus.Pass
-                    ? VerificationResultCodes.OperationalSecurityEvidenceValid
+                    ? acceptedEvidenceResultCode
                     : VerificationResultCodes.OperationalSecurityIncidentDeclarationMissing,
                 "SP-10 incident/no-incident declaration is present.",
                 "SP-10 incident/no-incident declaration is missing."),
@@ -888,7 +923,7 @@ public sealed partial class ElectionVerificationPackageExportService
                 string.IsNullOrWhiteSpace(status.AuditorRoomAccessLogHashOrRestrictedRef) ? missingStatus : placeholderStatus,
                 string.IsNullOrWhiteSpace(status.AuditorRoomAccessLogHashOrRestrictedRef)
                     ? VerificationResultCodes.OperationalSecurityAuditorRoomMissing
-                    : VerificationResultCodes.OperationalSecurityEvidenceValid,
+                    : acceptedEvidenceResultCode,
                 "SP-10 auditor-room access-log evidence is referenced.",
                 "SP-10 auditor-room access-log evidence is missing from public summary."),
         ];
@@ -1077,18 +1112,29 @@ public sealed partial class ElectionVerificationPackageExportService
 
     private static IReadOnlyList<ElectionSp08LifecycleReleaseBindingRecord> BuildSp08LifecycleBindings(
         string releaseId,
-        string serverDigest,
-        string webDigest,
+        Sp08DeploymentProofComponentBinding serverBinding,
+        Sp08DeploymentProofComponentBinding webBinding,
         string sp07WorkerDigest,
         string exporterDigest,
         bool matchesSealedPolicy) =>
         [
-            BuildSp08LifecycleBinding(ElectionSp08ProfileIds.OpenLifecycleStage, releaseId, serverDigest, matchesSealedPolicy),
-            BuildSp08LifecycleBinding(ElectionSp08ProfileIds.CloseLifecycleStage, releaseId, serverDigest, matchesSealedPolicy),
+            BuildSp08LifecycleBinding(ElectionSp08ProfileIds.OpenLifecycleStage, serverBinding),
+            BuildSp08LifecycleBinding(ElectionSp08ProfileIds.CloseLifecycleStage, serverBinding),
             BuildSp08LifecycleBinding(ElectionSp08ProfileIds.ProofWorkerLifecycleStage, releaseId, sp07WorkerDigest, matchesSealedPolicy),
             BuildSp08LifecycleBinding(ElectionSp08ProfileIds.ExporterLifecycleStage, releaseId, exporterDigest, matchesSealedPolicy),
-            BuildSp08LifecycleBinding(ElectionSp08ProfileIds.ClientReleaseSetLifecycleStage, releaseId, webDigest, matchesSealedPolicy),
+            BuildSp08LifecycleBinding(ElectionSp08ProfileIds.ClientReleaseSetLifecycleStage, webBinding),
         ];
+
+    private static ElectionSp08LifecycleReleaseBindingRecord BuildSp08LifecycleBinding(
+        string lifecycleStage,
+        Sp08DeploymentProofComponentBinding binding) =>
+        new(
+            lifecycleStage,
+            binding.ExpectedReleaseId,
+            binding.ObservedReleaseId,
+            binding.ExpectedArtifactDigest,
+            binding.ObservedArtifactDigest,
+            binding.MatchesSealedPolicy);
 
     private static ElectionSp08LifecycleReleaseBindingRecord BuildSp08LifecycleBinding(
         string lifecycleStage,
@@ -1102,6 +1148,124 @@ public sealed partial class ElectionVerificationPackageExportService
             artifactDigest,
             artifactDigest,
             matchesSealedPolicy);
+
+    private static ElectionDeploymentProofPublicLedgerArtifactRecord? ResolveDeploymentProofLedger(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var artifact = request.ReportArtifacts
+            .Where(x =>
+                x.ArtifactKind == ElectionReportArtifactKind.MachineDeploymentProofBindingLedger ||
+                string.Equals(x.FileName, ElectionDeploymentProofConstants.PublicLedgerArtifactFileName, StringComparison.Ordinal))
+            .OrderByDescending(x => x.RecordedAt)
+            .FirstOrDefault();
+
+        return artifact is null
+            ? null
+            : JsonSerializer.Deserialize<ElectionDeploymentProofPublicLedgerArtifactRecord>(
+                artifact.Content,
+                VerificationJson.Options);
+    }
+
+    private static string ResolveSp08DevelopmentReleaseId(ElectionDeploymentProofPublicLedgerArtifactRecord? ledger) =>
+        FirstNonEmpty(
+            ledger?.ActiveProofSetIdAtOpen,
+            ledger?.PublicCatalogRef,
+            ledger?.PublicCatalogCommit,
+            ledger?.LedgerPublicId) ?? "development-placeholder";
+
+    private static Sp08DeploymentProofComponentBinding ResolveSp08DeploymentProofComponentBinding(
+        ElectionDeploymentProofPublicLedgerArtifactRecord? ledger,
+        string deploymentComponentId,
+        string fallbackReleaseId,
+        string fallbackDigest)
+    {
+        var observation = (ledger?.ComponentObservations ?? Array.Empty<ElectionDeploymentProofPublicComponentObservationArtifactRecord>())
+            .Where(x => string.Equals(x.ComponentId, deploymentComponentId, StringComparison.Ordinal))
+            .OrderByDescending(x => x.ObservedAtUtc)
+            .FirstOrDefault();
+
+        if (observation is null)
+        {
+            return new Sp08DeploymentProofComponentBinding(
+                fallbackDigest,
+                fallbackReleaseId,
+                fallbackReleaseId,
+                fallbackDigest,
+                fallbackDigest,
+                $"file:development-placeholder/{deploymentComponentId}",
+                MatchesSealedPolicy: false);
+        }
+
+        var expectedReleaseId = FirstNonEmpty(
+            observation.ExpectedDeploymentProofId,
+            observation.DeploymentProofId,
+            fallbackReleaseId) ?? fallbackReleaseId;
+        var observedReleaseId = FirstNonEmpty(
+            observation.ObservedDeploymentProofId,
+            observation.DeploymentProofId,
+            fallbackReleaseId) ?? fallbackReleaseId;
+        var expectedDigest = NormalizeSp08Sha256Digest(FirstNonEmpty(
+            observation.ExpectedArtifactHash,
+            observation.ArtifactHash,
+            observation.PackageHash)) ?? fallbackDigest;
+        var observedDigest = NormalizeSp08Sha256Digest(FirstNonEmpty(
+            observation.ObservedArtifactHash,
+            observation.ArtifactHash,
+            observation.PackageHash)) ?? fallbackDigest;
+        var componentDigest = observedDigest;
+        var immutableReference = FirstNonEmpty(
+            observation.PublicPackageRef,
+            observation.SourceRef,
+            $"file:development-placeholder/{deploymentComponentId}")!;
+        var matchesSealedPolicy =
+            string.Equals(expectedReleaseId, observedReleaseId, StringComparison.Ordinal) &&
+            string.Equals(expectedDigest, observedDigest, StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(observation.MismatchCode) &&
+            !BlocksDeploymentProofClaims(observation.EvidenceStatus);
+
+        return new Sp08DeploymentProofComponentBinding(
+            componentDigest,
+            expectedReleaseId,
+            observedReleaseId,
+            expectedDigest,
+            observedDigest,
+            immutableReference,
+            matchesSealedPolicy);
+    }
+
+    private static string? NormalizeSp08Sha256Digest(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"sha256:{trimmed["sha256:".Length..].ToLowerInvariant()}";
+        }
+
+        return trimmed.Length == 64 && trimmed.All(Uri.IsHexDigit)
+            ? $"sha256:{trimmed.ToLowerInvariant()}"
+            : null;
+    }
+
+    private static bool BlocksDeploymentProofClaims(string? status) =>
+        Enum.TryParse<ElectionDeploymentProofEvidenceStatus>(status, ignoreCase: true, out var parsed) &&
+        parsed.BlocksDeploymentProofClaims();
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private sealed record Sp08DeploymentProofComponentBinding(
+        string ComponentDigest,
+        string ExpectedReleaseId,
+        string ObservedReleaseId,
+        string ExpectedArtifactDigest,
+        string ObservedArtifactDigest,
+        string ImmutableReference,
+        bool MatchesSealedPolicy);
 
     private static IReadOnlyList<string> BuildSp08PublicPrivacyBoundary() =>
     [
@@ -1382,12 +1546,9 @@ public sealed partial class ElectionVerificationPackageExportService
     {
         var summary = BuildSp05EligibilitySummary(request);
         var policy = BuildSp05EligibilityPolicy(request);
-        var providerStatus = policy.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.Ready
-            ? VerificationCheckStatus.Pass
-            : VerificationCheckStatus.Warn;
-        var providerCode = policy.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.Ready
-            ? VerificationResultCodes.EligibilityEvidenceValid
-            : VerificationResultCodes.EligibilityDevOnlyVerificationBlocked;
+        var (providerStatus, providerCode, providerMessage) = ResolveSp05ProviderReadinessCheck(
+            request.VerifierProfileId,
+            policy.ContactCodeProviderReadiness);
 
         return new ElectionSp05VerifierOutputArtifactRecord(
             request.Election.ElectionId.ToString(),
@@ -1416,14 +1577,43 @@ public sealed partial class ElectionVerificationPackageExportService
                     "ELI-013",
                     providerStatus,
                     providerCode,
-                    providerStatus == VerificationCheckStatus.Pass
-                        ? "Contact-code provider readiness is production-ready."
-                        : "Contact-code provider is not production-ready; high-assurance external review must treat this as blocked.",
+                    providerMessage,
                     new Dictionary<string, string>
                     {
                         ["contact_code_provider_readiness"] = policy.ContactCodeProviderReadiness.ToString(),
                     }),
             ]);
+    }
+
+    private static (VerificationCheckStatus Status, string ResultCode, string Message) ResolveSp05ProviderReadinessCheck(
+        string verifierProfileId,
+        ElectionContactCodeProviderReadiness readiness)
+    {
+        if (readiness == ElectionContactCodeProviderReadiness.Ready)
+        {
+            return (
+                VerificationCheckStatus.Pass,
+                VerificationResultCodes.EligibilityEvidenceValid,
+                "Contact-code provider readiness is production-ready.");
+        }
+
+        if (readiness == ElectionContactCodeProviderReadiness.DevOnly)
+        {
+            var highAssurance = VerificationProfileIds.RequiresHighAssuranceEvidence(verifierProfileId);
+            return (
+                highAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Pass,
+                highAssurance
+                    ? VerificationResultCodes.EligibilityDevOnlyVerificationBlocked
+                    : VerificationResultCodes.EligibilityDevelopmentProviderValid,
+                highAssurance
+                    ? "High-assurance profile cannot accept a dev-only contact-code provider."
+                    : "Development contact-code provider is explicitly declared and accepted for this non-high-assurance verifier profile.");
+        }
+
+        return (
+            VerificationCheckStatus.Fail,
+            VerificationResultCodes.EligibilityContactCodeProviderNotReady,
+            "Contact-code provider readiness is missing or degraded.");
     }
 
     private static ElectionSp05RestrictedRosterImportEvidenceArtifactRecord BuildRestrictedSp05RosterImportEvidence(

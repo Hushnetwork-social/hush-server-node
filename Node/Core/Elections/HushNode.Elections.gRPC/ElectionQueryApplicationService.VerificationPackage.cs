@@ -1020,11 +1020,7 @@ public partial class ElectionQueryApplicationService
             context.LatestReportPackage?.Status == ElectionReportPackageStatus.Sealed &&
             context.ProtocolPackageBinding?.Status == ProtocolPackageBindingStatus.Sealed &&
             HasSealedBallotDefinition(context);
-        var providerReady =
-            context.Election.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.Ready;
-        var latestResultCode = providerReady
-            ? VerificationResultCodes.EligibilityEvidenceValid
-            : VerificationResultCodes.EligibilityDevOnlyVerificationBlocked;
+        var latestResultCode = ResolveSp05ProviderReadinessResultCode(context.Election);
         var message = !context.CanViewPackageStatus
             ? "SP-05 eligibility evidence status is not visible to this actor."
             : latestImportEvidence is null
@@ -1050,6 +1046,24 @@ public partial class ElectionQueryApplicationService
             LatestEliResultCode = latestResultCode,
             Message = message,
         };
+    }
+
+    private static string ResolveSp05ProviderReadinessResultCode(ElectionRecord election)
+    {
+        if (election.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.Ready)
+        {
+            return VerificationResultCodes.EligibilityEvidenceValid;
+        }
+
+        if (election.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.DevOnly &&
+            election.SelectedProfileDevOnly)
+        {
+            return VerificationResultCodes.EligibilityDevelopmentProviderValid;
+        }
+
+        return election.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.DevOnly
+            ? VerificationResultCodes.EligibilityDevOnlyVerificationBlocked
+            : VerificationResultCodes.EligibilityContactCodeProviderNotReady;
     }
 
     private static bool IsSp06EvidenceExpected(ElectionRecord election) =>
@@ -1098,7 +1112,9 @@ public partial class ElectionQueryApplicationService
 
         if (!includePackageHashes)
         {
-            view.PrimaryResultCode = VerificationResultCodes.ReleaseIntegrityEvidencePending;
+            view.PrimaryResultCode = officialRequired
+                ? VerificationResultCodes.ReleaseIntegrityEvidencePending
+                : VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder;
             view.Message = "SP-08 release-integrity details are available from the verification package status endpoint.";
             return view;
         }

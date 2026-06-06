@@ -25,13 +25,42 @@ public sealed record DecryptedElectionEnvelope<TTransaction>(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public TAction? DeserializeAction<TAction>() =>
-        JsonSerializer.Deserialize<TAction>(ActionPayloadJson, JsonOptions);
+    public TAction? DeserializeAction<TAction>()
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<TAction>(ActionPayloadJson, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+        catch (NotSupportedException)
+        {
+            return default;
+        }
+    }
 
-    public TAction? DeserializeActionArtifacts<TAction>() =>
-        string.IsNullOrWhiteSpace(ActionArtifactsJson)
-            ? default
-            : JsonSerializer.Deserialize<TAction>(ActionArtifactsJson, JsonOptions);
+    public TAction? DeserializeActionArtifacts<TAction>()
+    {
+        if (string.IsNullOrWhiteSpace(ActionArtifactsJson))
+        {
+            return default;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<TAction>(ActionArtifactsJson, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+        catch (NotSupportedException)
+        {
+            return default;
+        }
+    }
 }
 
 public class ElectionEnvelopeCryptoService(

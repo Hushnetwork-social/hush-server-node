@@ -4,8 +4,8 @@
   "profiles": [
     {
       "profileId": "dkg-dev-3of5",
-      "displayName": "Development 3 of 5",
-      "description": "Fast dev/test ceremony profile for the initial 3-of-5 trustee rollout over 5 trustees.",
+      "displayName": "HushVoting! Veritas 500 readable audit",
+      "description": "Readable non-binding audit ceremony profile for Veritas 500 rehearsals.",
       "providerKey": "hush-dkg-profile-manifest",
       "profileVersion": "omega-v1.0.0-dev-3of5",
       "trusteeCount": 5,
@@ -13,13 +13,53 @@
       "devOnly": true
     },
     {
+      "profileId": "dkg-dev-7of10",
+      "displayName": "HushVoting! Veritas 2k readable audit",
+      "description": "Readable non-binding audit ceremony profile for Veritas 2k rehearsals.",
+      "providerKey": "hush-dkg-profile-manifest",
+      "profileVersion": "omega-v1.0.0-dev-7of10",
+      "trusteeCount": 10,
+      "requiredApprovalCount": 7,
+      "devOnly": true
+    },
+    {
+      "profileId": "dkg-dev-8of13",
+      "displayName": "HushVoting! Veritas 10k readable audit",
+      "description": "Readable non-binding audit ceremony profile for Veritas 10k rehearsals.",
+      "providerKey": "hush-dkg-profile-manifest",
+      "profileVersion": "omega-v1.0.0-dev-8of13",
+      "trusteeCount": 13,
+      "requiredApprovalCount": 8,
+      "devOnly": true
+    },
+    {
       "profileId": "dkg-prod-3of5",
-      "displayName": "Production-Like 3 of 5",
-      "description": "Production-like manifest-backed ceremony profile for the initial 3-of-5 trustee rollout over 5 trustees.",
+      "displayName": "HushVoting! Veritas 500",
+      "description": "Protected Veritas 500 license ceremony profile for binding elections and protected audit runs.",
       "providerKey": "hush-dkg-profile-manifest",
       "profileVersion": "omega-v1.0.0-prod-3of5",
       "trusteeCount": 5,
       "requiredApprovalCount": 3,
+      "devOnly": false
+    },
+    {
+      "profileId": "dkg-prod-7of10",
+      "displayName": "HushVoting! Veritas 2k",
+      "description": "Protected Veritas 2k license ceremony profile for larger trustee-governed elections.",
+      "providerKey": "hush-dkg-profile-manifest",
+      "profileVersion": "omega-v1.0.0-prod-7of10",
+      "trusteeCount": 10,
+      "requiredApprovalCount": 7,
+      "devOnly": false
+    },
+    {
+      "profileId": "dkg-prod-8of13",
+      "displayName": "HushVoting! Veritas 10k",
+      "description": "Protected Veritas 10k license ceremony profile for high-scale trustee-governed elections.",
+      "providerKey": "hush-dkg-profile-manifest",
+      "profileVersion": "omega-v1.0.0-prod-8of13",
+      "trusteeCount": 13,
+      "requiredApprovalCount": 8,
       "devOnly": false
     }
   ]

@@ -993,7 +993,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
-    public async Task AcceptBallotCastAsync_WithoutPreparedBallotPrecommit_ReturnsPreparedBallotMissing()
+    public async Task AcceptBallotCastAsync_WithoutChallengeAndPreparedBallotPrecommit_ReturnsChallengeRequired()
     {
         var store = new ElectionStore();
         var service = CreateService(store);
@@ -1017,9 +1017,37 @@ public class ElectionLifecycleServiceTests
         var result = await service.AcceptBallotCastAsync(request);
 
         result.IsSuccess.Should().BeFalse();
-        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.PreparedBallotMissing);
+        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.ChallengeRequiredBeforeCast);
         store.AcceptedBallots.Should().BeEmpty();
         store.CheckoffConsumptions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WithIndexedChallengeAndInlineFinalPackage_AcceptsAndRecordsPreparedCast()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        var removedFinalPrepared = scenario.PreparedBallotCommitment!;
+        store.PreparedBallotCommitments.RemoveAll(x => x.PreparedBallotId == removedFinalPrepared.PreparedBallotId);
+
+        var result = await service.AcceptBallotCastAsync(CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-inline-final",
+            ballotNullifier: "nullifier-inline-final"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.PreparedBallotCommitment.Should().NotBeNull();
+        result.PreparedBallotCommitment!.PreparedBallotId.Should().Be(removedFinalPrepared.PreparedBallotId);
+        result.PreparedBallotCommitment.State.Should().Be(ElectionPreparedBallotState.Cast);
+        result.PreparedBallotCommitment.AcceptedBallotId.Should().Be(result.AcceptedBallot!.Id);
+        result.AcceptedBallot.PreparedBallotId.Should().Be(removedFinalPrepared.PreparedBallotId);
+        result.AcceptedBallot.PreparedBallotHash.Should().Be(removedFinalPrepared.PreparedBallotHash);
+        store.PreparedBallotCommitments.Should().ContainSingle(x =>
+            x.PreparedBallotId == removedFinalPrepared.PreparedBallotId &&
+            x.State == ElectionPreparedBallotState.Cast);
+        store.AcceptedBallots.Should().ContainSingle();
+        store.CheckoffConsumptions.Should().ContainSingle();
     }
 
     [Fact]
@@ -1959,6 +1987,40 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task StartElectionCeremonyAsync_WithEnterpriseProfile_StartsCeremonyFromEncodedShape()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var profileId = ElectionSelectableProfileCatalog.BuildEnterpriseProfileId(10, 20);
+        var election = CreateTrusteeElection(
+            requiredApprovalCount: 10,
+            selectedProfileId: profileId,
+            selectedProfileDevOnly: false);
+
+        store.Elections[election.ElectionId] = election;
+        for (var index = 1; index <= 20; index++)
+        {
+            var invitation = CreateAcceptedTrusteeInvitation(
+                election,
+                $"trustee-{index}",
+                $"Trustee {index}");
+            store.TrusteeInvitations[invitation.Id] = invitation;
+        }
+
+        var result = await service.StartElectionCeremonyAsync(new StartElectionCeremonyRequest(
+            election.ElectionId,
+            "owner-address",
+            profileId));
+
+        result.IsSuccess.Should().BeTrue();
+        result.CeremonyVersion.Should().NotBeNull();
+        result.CeremonyVersion!.ProfileId.Should().Be(profileId);
+        result.CeremonyVersion.TrusteeCount.Should().Be(20);
+        result.CeremonyVersion.RequiredApprovalCount.Should().Be(10);
+        store.CeremonyVersions.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task AcceptTrusteeInvitation_WithAcceptedRosterChangeAfterCeremonyProgress_SupersedesActiveVersion()
     {
         var store = new ElectionStore();
@@ -2676,7 +2738,7 @@ public class ElectionLifecycleServiceTests
         result.Sp08Summary!.EvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder);
         result.Sp08Summary.NotForReleaseIntegrityClaims.Should().BeTrue();
         result.Sp08Summary.BlocksHighAssurance.Should().BeFalse();
-        result.Sp08Summary.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityEvidencePending);
+        result.Sp08Summary.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder);
         result.Sp08Summary.ReadinessBlockers.Should().BeEmpty();
         result.Sp08Summary.PrimaryIssue.Should().Contain("not official release evidence");
     }

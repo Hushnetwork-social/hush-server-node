@@ -102,6 +102,31 @@ public record ProtocolPackageManifestRecord(
             nameof(AccessLocations));
 }
 
+public record ProtocolOmegaCircuitBindingRecord(
+    string CircuitVersion,
+    string CircuitArtifactMode,
+    IReadOnlyList<ProtocolPackageFileHashRecord> CircuitArtifacts,
+    string? DeploymentRequirement)
+{
+    public string CircuitVersion { get; init; } =
+        ProtocolPackageRecordValidation.NormalizeRequiredValue(
+            CircuitVersion,
+            nameof(CircuitVersion));
+
+    public string CircuitArtifactMode { get; init; } =
+        ProtocolPackageRecordValidation.NormalizeRequiredValue(
+            CircuitArtifactMode,
+            nameof(CircuitArtifactMode));
+
+    public IReadOnlyList<ProtocolPackageFileHashRecord> CircuitArtifacts { get; init; } =
+        ProtocolPackageRecordValidation.NormalizeRequiredRecordList(
+            CircuitArtifacts,
+            nameof(CircuitArtifacts));
+
+    public string? DeploymentRequirement { get; init; } =
+        ProtocolPackageRecordValidation.NormalizeOptionalValue(DeploymentRequirement);
+}
+
 public record ProtocolOmegaPackageReleaseManifestRecord(
     string PackageId,
     string PackageVersion,
@@ -117,6 +142,7 @@ public record ProtocolOmegaPackageReleaseManifestRecord(
 {
     private readonly IReadOnlyList<ProtocolPackageFileHashRecord> _releaseFiles =
         Array.Empty<ProtocolPackageFileHashRecord>();
+    private readonly ProtocolOmegaCircuitBindingRecord? _circuitBinding;
 
     public string PackageId { get; init; } =
         ProtocolPackageRecordValidation.NormalizeRequiredValue(
@@ -164,6 +190,12 @@ public record ProtocolOmegaPackageReleaseManifestRecord(
         init => _releaseFiles = ProtocolPackageRecordValidation.NormalizeRequiredRecordList(
             value,
             nameof(ReleaseFiles));
+    }
+
+    public ProtocolOmegaCircuitBindingRecord? CircuitBinding
+    {
+        get => _circuitBinding;
+        init => _circuitBinding = value;
     }
 }
 

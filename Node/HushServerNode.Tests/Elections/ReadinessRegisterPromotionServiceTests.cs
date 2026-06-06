@@ -401,6 +401,143 @@ public sealed class ReadinessRegisterPromotionServiceTests
     }
 
     [Fact]
+    public void Promote_WithInternalAudit95Source_AppliesV018Promotion()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        MutateRegisterForFeat156Baseline(paths);
+        WriteCompletedFeatureFoldersForFeat156(paths);
+        WriteFeat156PromotionSource(paths, targetVersion: "v0.1.7");
+        var service = new ReadinessRegisterPromotionService();
+        var baseline = service.Promote(new ReadinessRegisterPromotionOptions(
+            paths,
+            "hushvoting-readiness-register",
+            "v0.1.7",
+            "pilot_only_with_limitations",
+            ValidateOnly: false,
+            Scaffold: false,
+            GeneratedAt: null));
+        var finalPaths = paths with { SourceRoot = baseline.VersionOutputRoot };
+        WriteInternalAudit95PromotionSource(finalPaths);
+
+        var options = new ReadinessRegisterPromotionOptions(
+            finalPaths,
+            "hushvoting-readiness-register",
+            "v0.1.8",
+            "pilot_only_with_limitations",
+            ValidateOnly: false,
+            Scaffold: false,
+            GeneratedAt: null);
+        var result = service.Promote(options);
+        var promotedRegister = JsonNode.Parse(File.ReadAllText(Path.Combine(
+            result.VersionOutputRoot,
+            ReadinessRegisterPromotionService.RegisterFileName)))!.AsObject();
+        var scorecard = File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.ScorecardFileName));
+        var publicSummary = File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.PublicSafeSummaryFileName));
+        var catalog = JsonNode.Parse(File.ReadAllText(finalPaths.CatalogPath))!.AsObject();
+
+        result.RegisterVersionId.Should().Be("RDY-REG-v0.1.8");
+        result.GeneratedAt.Should().Be(new DateTimeOffset(2026, 6, 4, 12, 0, 0, TimeSpan.Zero));
+        result.TotalScore.Should().Be(95);
+        result.StrongestAllowedClaim.Should().Be("friendly_organization_pilot");
+        catalog["currentRegisterVersionId"]!.GetValue<string>().Should().Be("RDY-REG-v0.1.8");
+        promotedRegister["score"]!["total"]!.GetValue<int>().Should().Be(95);
+        promotedRegister["blockers"]!.AsArray()
+            .Select(node => node!.AsObject())
+            .Where(blocker => blocker["blockerId"]!.GetValue<string>().StartsWith("RDY-BLOCK-INTERNAL_AUDIT_95_DIM", StringComparison.Ordinal))
+            .Should()
+            .OnlyContain(blocker => blocker["status"]!.GetValue<string>() == "resolved" && blocker["severity"]!.GetValue<string>() == "green");
+        promotedRegister["scoreChanges"]!.AsArray()
+            .Select(node => node!.AsObject()["scoreChangeId"]!.GetValue<string>())
+            .Should()
+            .Contain("RDY-SCORE-20260604-010");
+        FindDimension(promotedRegister, "RDY-DIM-001")["currentScore"]!.GetValue<int>().Should().Be(10);
+        FindDimension(promotedRegister, "RDY-DIM-010")["currentScore"]!.GetValue<int>().Should().Be(9);
+        FindClaim(promotedRegister, "production_organizational_rollout")["status"]!.GetValue<string>().Should().Be("future_gated");
+        FindClaim(promotedRegister, "public_or_state_election")["status"]!.GetValue<string>().Should().Be("external_boundary");
+        var directNonBindingProfile = promotedRegister["claimProfiles"]!.AsArray()
+            .Select(node => node!.AsObject())
+            .Single(profile => profile["profileId"]!.GetValue<string>() == "hushvoting.direct.non_binding");
+        var directBindingProfile = promotedRegister["claimProfiles"]!.AsArray()
+            .Select(node => node!.AsObject())
+            .Single(profile => profile["profileId"]!.GetValue<string>() == "hushvoting.direct.binding");
+        promotedRegister["claimProfiles"]!.AsArray().Should().HaveCount(10);
+        directNonBindingProfile["productMode"]!.GetValue<string>().Should().Be("HushVoting! Direct");
+        directNonBindingProfile["bindingStatus"]!.GetValue<string>().Should().Be("Non-Binding");
+        directNonBindingProfile["isNonBindingElection"]!.GetValue<bool>().Should().BeTrue();
+        directNonBindingProfile["gateSeverity"]!.GetValue<string>().Should().Be("green");
+        directNonBindingProfile["gateStatus"]!.GetValue<string>().Should().Be("passed");
+        directNonBindingProfile["verifierWarningCount"]!.GetValue<int>().Should().Be(0);
+        directNonBindingProfile["verifierWarnings"]!.AsArray()
+            .Select(node => node!.AsObject()["resultCode"]!.GetValue<string>())
+            .Should()
+            .BeEmpty();
+        directNonBindingProfile["evidenceRefs"]!.AsArray()
+            .Select(node => node!.GetValue<string>())
+            .Should()
+            .Contain("hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Direct-Non-Binding-20260605102141/public-verifier-output-current-public-20260605c/VerifierOutput.json");
+        directBindingProfile["productMode"]!.GetValue<string>().Should().Be("HushVoting! Direct");
+        directBindingProfile["bindingStatus"]!.GetValue<string>().Should().Be("Binding");
+        directBindingProfile["isNonBindingElection"]!.GetValue<bool>().Should().BeFalse();
+        directBindingProfile["gateStatus"]!.GetValue<string>().Should().Be("passed");
+        directBindingProfile["verifierWarningCount"]!.GetValue<int>().Should().Be(0);
+        scorecard.Should().Contain("Total score: 95/100");
+        scorecard.Should().Contain("internal-audit-95 hardening is accepted");
+        scorecard.Should().Contain("## HushVoting Claim Profiles");
+        scorecard.Should().Contain("Non-Binding HushVoting! Direct");
+        scorecard.Should().Contain("## Environment Operational Checklists");
+        scorecard.Should().Contain("PreProduction is optional");
+        scorecard.Should().Contain("Production runs the full readiness workflow directly");
+        scorecard.Should().Contain("production-activation-addendum.json");
+        scorecard.Should().Contain("claim blocking is decided by the promotion policy, not by editing the checklist");
+        scorecard.Should().NotContain("operational_security_access_snapshot_missing");
+        scorecard.Should().Contain("Binding HushVoting! Direct");
+        scorecard.Should().Contain("passed");
+        scorecard.Should().NotContain("production rollout is future-gated by the 95+ hardening plan");
+        publicSummary.Should().Contain("Hush-owned internal-audit-95 hardening is accepted");
+        publicSummary.ToLowerInvariant().Should().NotContain("total score");
+
+        service.Promote(options with { CheckOnly = true }).RegisterVersionId.Should().Be("RDY-REG-v0.1.8");
+    }
+
+    [Fact]
+    public void Promote_WithInternalAudit95ProposalTampered_FailsClosed()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        MutateRegisterForFeat156Baseline(paths);
+        WriteCompletedFeatureFoldersForFeat156(paths);
+        WriteFeat156PromotionSource(paths, targetVersion: "v0.1.7");
+        var service = new ReadinessRegisterPromotionService();
+        var baseline = service.Promote(new ReadinessRegisterPromotionOptions(
+            paths,
+            "hushvoting-readiness-register",
+            "v0.1.7",
+            "pilot_only_with_limitations",
+            ValidateOnly: false,
+            Scaffold: false,
+            GeneratedAt: null));
+        var finalPaths = paths with { SourceRoot = baseline.VersionOutputRoot };
+        var tamperedArtifact = WriteInternalAudit95PromotionSource(finalPaths);
+        File.AppendAllText(tamperedArtifact, "tampered");
+
+        var act = () => service.Promote(new ReadinessRegisterPromotionOptions(
+            finalPaths,
+            "hushvoting-readiness-register",
+            "v0.1.8",
+            "pilot_only_with_limitations",
+            ValidateOnly: false,
+            Scaffold: false,
+            GeneratedAt: null));
+
+        act.Should().Throw<ReadinessRegisterPromotionException>()
+            .Where(x => x.Message.Contains("Internal audit 95 promotion source failed validation", StringComparison.Ordinal) &&
+                x.Details.Any(detail => detail.Contains("hash mismatch", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void Promote_WithFeat156ReviewerArtifactTampered_CheckOnlyFailsClosed()
     {
         var tempRoot = CreateWorkspace();
@@ -824,8 +961,10 @@ public sealed class ReadinessRegisterPromotionServiceTests
 
     private static void WriteFeat156PromotionSource(
         ReadinessRegisterPromotionPaths paths,
-        string? extraForbiddenClaimNeedle = null)
+        string? extraForbiddenClaimNeedle = null,
+        string targetVersion = "v0.1.6")
     {
+        var internalAuditPlanningTarget = targetVersion == "v0.1.7";
         var forbiddenClaimNeedles = new JsonArray(
             "production green",
             "public/state election ready",
@@ -857,27 +996,37 @@ public sealed class ReadinessRegisterPromotionServiceTests
             },
             ["targetRegister"] = new JsonObject
             {
-                ["registerVersionId"] = "RDY-REG-v0.1.6",
-                ["registerVersion"] = "v0.1.6",
+                ["registerVersionId"] = $"RDY-REG-{targetVersion}",
+                ["registerVersion"] = targetVersion,
                 ["status"] = "AcceptedInternal",
                 ["totalScore"] = 80,
-                ["strongestAllowedClaim"] = "production_organizational_rollout",
-                ["publicationStatus"] = "production_rollout_with_limitations",
+                ["strongestAllowedClaim"] = internalAuditPlanningTarget
+                    ? "friendly_organization_pilot"
+                    : "production_organizational_rollout",
+                ["publicationStatus"] = internalAuditPlanningTarget
+                    ? "pilot_only_with_limitations"
+                    : "production_rollout_with_limitations",
                 ["productionClaim"] = new JsonObject
                 {
                     ["claimLevel"] = "production_organizational_rollout",
                     ["severity"] = "amber",
-                    ["status"] = "allowed_with_limitations",
-                    ["publicSafeStatus"] = "production_rollout_with_limitations",
-                    ["wording"] = "HushVoting may support limited organizational rollout only when promoted evidence, residual limits, customer-owned governance responsibilities, and public or state blockers remain visible.",
+                    ["status"] = internalAuditPlanningTarget ? "future_gated" : "allowed_with_limitations",
+                    ["publicSafeStatus"] = internalAuditPlanningTarget
+                        ? "not_ready_for_public_claim"
+                        : "production_rollout_with_limitations",
+                    ["wording"] = internalAuditPlanningTarget
+                        ? "Production organizational rollout is a future execution gate after Hush-owned 95+ internal audit hardening is complete; then rehearsal and binding-election proof validity can be produced and verified."
+                        : "HushVoting may support limited organizational rollout only when promoted evidence, residual limits, customer-owned governance responsibilities, and public or state blockers remain visible.",
                 },
                 ["publicStateClaim"] = new JsonObject
                 {
                     ["claimLevel"] = "public_or_state_election",
-                    ["severity"] = "red",
-                    ["status"] = "blocked",
+                    ["severity"] = internalAuditPlanningTarget ? "amber" : "red",
+                    ["status"] = internalAuditPlanningTarget ? "external_boundary" : "blocked",
                     ["publicSafeStatus"] = "public_claim_blocked",
-                    ["wording"] = "Public or state election readiness remains blocked and requires external authority, jurisdiction, certification, transparency, accessibility, procurement, and dispute-remedy prerequisites outside this promotion.",
+                    ["wording"] = internalAuditPlanningTarget
+                        ? "Public or state election readiness is a downstream external boundary; Hush can prepare technical evidence, but authority, jurisdiction, certification, transparency, accessibility, procurement, and dispute-remedy prerequisites sit outside this internal audit report."
+                        : "Public or state election readiness remains blocked and requires external authority, jurisdiction, certification, transparency, accessibility, procurement, and dispute-remedy prerequisites outside this promotion.",
                 },
             },
             ["scoreModel"] = new JsonObject
@@ -886,7 +1035,8 @@ public sealed class ReadinessRegisterPromotionServiceTests
                 ["acceptedInputDelta"] = 8,
                 ["feat156Delta"] = 1,
                 ["targetTotal"] = 80,
-                ["minimumProductionLimitedScore"] = 80,
+                ["minimumProductionLimitedScore"] = internalAuditPlanningTarget ? null : 80,
+                ["internalAuditTargetScore"] = internalAuditPlanningTarget ? 95 : null,
                 ["scoreCannotBypassBlockers"] = true,
             },
             ["scoreMovements"] = new JsonArray(
@@ -911,19 +1061,23 @@ public sealed class ReadinessRegisterPromotionServiceTests
                 {
                     ["blockerId"] = "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
                     ["claimLevel"] = "production_organizational_rollout",
-                    ["targetSeverity"] = "amber",
-                    ["targetStatus"] = "allowed_with_limitations",
-                    ["decision"] = "allow_with_limitations",
-                    ["limitationWording"] = "Allowed only for limited organizational rollout with visible residual risks and customer-owned governance responsibilities.",
-                    ["residualRisk"] = "Repeated operating history, customer-site variance, independent validation, and legal sufficiency remain unproven.",
+                    ["targetSeverity"] = internalAuditPlanningTarget ? "red" : "amber",
+                    ["targetStatus"] = internalAuditPlanningTarget ? "superseded" : "allowed_with_limitations",
+                    ["decision"] = internalAuditPlanningTarget ? "replace_with_internal_audit_95_plan" : "allow_with_limitations",
+                    ["limitationWording"] = internalAuditPlanningTarget
+                        ? "The old production-policy blocker is superseded by the Hush-owned internal audit 95+ hardening plan."
+                        : "Allowed only for limited organizational rollout with visible residual risks and customer-owned governance responsibilities.",
+                    ["residualRisk"] = internalAuditPlanningTarget
+                        ? "The current promoted score is 80/100 against a Hush-owned 95+ internal audit target; the gap is owned by Hush and tracked as internal hardening blockers."
+                        : "Repeated operating history, customer-site variance, independent validation, and legal sufficiency remain unproven.",
                 },
                 new JsonObject
                 {
                     ["blockerId"] = "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
                     ["claimLevel"] = "public_or_state_election",
-                    ["targetSeverity"] = "red",
-                    ["targetStatus"] = "open",
-                    ["decision"] = "keep_policy_blocked",
+                    ["targetSeverity"] = internalAuditPlanningTarget ? "red" : "red",
+                    ["targetStatus"] = internalAuditPlanningTarget ? "superseded" : "open",
+                    ["decision"] = internalAuditPlanningTarget ? "move_to_downstream_report" : "keep_policy_blocked",
                     ["limitationWording"] = "No public or state election readiness is claimed by this register.",
                     ["residualRisk"] = "Jurisdiction, authority approval, certification, public accessibility, procurement, transparency, and dispute-remedy prerequisites remain outside this promotion.",
                 }),
@@ -1049,6 +1203,137 @@ public sealed class ReadinessRegisterPromotionServiceTests
                 ["acceptedForPromotion"] = true,
             },
         };
+
+    private static string WriteInternalAudit95PromotionSource(ReadinessRegisterPromotionPaths paths)
+    {
+        var movementSpecs = new (string FeatureId, string DimensionId, int TargetScore, string BlockerId, string[] Gates, string SourceGapRow, string EvidenceId)[]
+        {
+            ("FEAT-157", "RDY-DIM-001", 10, "RDY-BLOCK-INTERNAL_AUDIT_95_DIM001-001", ["AT-RDY-001"], "Protocol/evidence architecture", "RDY-EVID-AT-RDY-001-FEAT-157-001"),
+            ("FEAT-158", "RDY-DIM-002", 10, "RDY-BLOCK-INTERNAL_AUDIT_95_DIM002-001", ["AT-RDY-007"], "Verifier/sample/tamper corpus", "RDY-EVID-AT-RDY-007-FEAT-158-001"),
+            ("FEAT-159", "RDY-DIM-003", 10, "RDY-BLOCK-INTERNAL_AUDIT_95_DIM003-001", ["AT-RDY-008"], "Cross-device receipt/inclusion verification", "RDY-EVID-AT-RDY-008-FEAT-159-001"),
+            ("FEAT-160", "RDY-DIM-004", 10, "RDY-BLOCK-INTERNAL_AUDIT_95_DIM004-001", ["AT-RDY-001"], "Protocol/evidence architecture", "RDY-EVID-AT-RDY-001-FEAT-160-001"),
+            ("FEAT-161", "RDY-DIM-005", 9, "RDY-BLOCK-INTERNAL_AUDIT_95_DIM005-001", ["AT-RDY-002", "AT-RDY-003", "AT-RDY-004"], "Per-election KMS custody lifecycle", "RDY-EVID-AT-RDY-002-FEAT-161-001"),
+            ("FEAT-162", "RDY-DIM-006", 9, "RDY-BLOCK-INTERNAL_AUDIT_95_DIM006-001", ["AT-RDY-005"], "Trusted deployment ceremony", "RDY-EVID-AT-RDY-005-FEAT-162-001"),
+            ("FEAT-163", "RDY-DIM-007", 10, "RDY-BLOCK-INTERNAL_AUDIT_95_DIM007-001", ["AT-RDY-006", "AT-RDY-014"], "Operational readiness package", "RDY-EVID-AT-RDY-006-FEAT-163-001"),
+            ("FEAT-164", "RDY-DIM-008", 9, "RDY-BLOCK-INTERNAL_AUDIT_95_DIM008-001", ["AT-RDY-009", "AT-RDY-010"], "Retention/log privacy proof", "RDY-EVID-AT-RDY-009-FEAT-164-001"),
+            ("FEAT-165", "RDY-DIM-009", 9, "RDY-BLOCK-INTERNAL_AUDIT_95_DIM009-001", ["AT-RDY-011", "AT-RDY-015"], "Dispute/continuity readiness", "RDY-EVID-AT-RDY-011-FEAT-165-001"),
+            ("FEAT-166", "RDY-DIM-010", 9, "RDY-BLOCK-INTERNAL_AUDIT_95_DIM010-001", ["AT-RDY-012", "AT-RDY-013", "AT-RDY-014"], "Legal/governance boundary wrapper", "RDY-EVID-AT-RDY-012-FEAT-166-001"),
+        };
+        var movements = new JsonArray();
+        string? firstArtifact = null;
+        foreach (var spec in movementSpecs)
+        {
+            var relativePath = $"unit-test/internal-audit-95/{spec.FeatureId}-score-proposal.json";
+            var fullPath = Path.Combine(paths.WorkspaceRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            File.WriteAllText(
+                fullPath,
+                $$"""
+                {"featureId":"{{spec.FeatureId}}","dimensionId":"{{spec.DimensionId}}","from":8,"to":{{spec.TargetScore}}}
+                """);
+            firstArtifact ??= fullPath;
+            movements.Add(CreateInternalAudit95Movement(
+                spec.FeatureId,
+                spec.DimensionId,
+                spec.TargetScore,
+                spec.BlockerId,
+                spec.Gates,
+                spec.SourceGapRow,
+                spec.EvidenceId,
+                relativePath,
+                ComputeSha256Hex(File.ReadAllBytes(fullPath))));
+        }
+
+        var source = new JsonObject
+        {
+            ["schemaVersion"] = "internal-audit-95-promotion-source.v1",
+            ["sourceId"] = "IA95-PROMOTION-20260604-001",
+            ["featureId"] = "FEAT-130",
+            ["status"] = "accepted",
+            ["generatedAt"] = "2026-06-04T12:00:00Z",
+            ["baselineRegister"] = new JsonObject
+            {
+                ["registerVersionId"] = "RDY-REG-v0.1.7",
+                ["registerVersion"] = "v0.1.7",
+                ["status"] = "AcceptedInternal",
+                ["totalScore"] = 80,
+                ["strongestAllowedClaim"] = "friendly_organization_pilot",
+                ["publicationStatus"] = "pilot_only_with_limitations",
+            },
+            ["targetRegister"] = new JsonObject
+            {
+                ["registerVersionId"] = "RDY-REG-v0.1.8",
+                ["registerVersion"] = "v0.1.8",
+                ["status"] = "AcceptedInternal",
+                ["totalScore"] = 95,
+                ["strongestAllowedClaim"] = "friendly_organization_pilot",
+                ["publicationStatus"] = "pilot_only_with_limitations",
+                ["productionFutureGateWording"] = "Production organizational rollout remains a downstream execution gate after internal-audit-95 hardening; local rehearsal, binding-election proof generation, proof verification, customer governance, and external review must be accepted before claiming rollout readiness.",
+                ["publicStateExternalBoundaryWording"] = "Public or state election readiness is a downstream external boundary; Hush can prepare technical evidence, but authority, jurisdiction, certification, transparency, accessibility, procurement, and dispute-remedy prerequisites sit outside this internal audit report.",
+            },
+            ["scoreMovements"] = movements,
+        };
+
+        var sourcePath = Path.Combine(
+            paths.WorkspaceRoot,
+            "hush-documents",
+            "PrivateServer_ElectronicVoting",
+            "Internal-Audit-95-Promotion-Register",
+            "package",
+            "internal-audit-95-promotion-source.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+        File.WriteAllText(sourcePath, source.ToJsonString(JsonOptions));
+        return firstArtifact!;
+    }
+
+    private static JsonObject CreateInternalAudit95Movement(
+        string featureId,
+        string dimensionId,
+        int acceptedScore,
+        string blockerId,
+        IReadOnlyList<string> gates,
+        string sourceGapRow,
+        string evidenceId,
+        string artifactRelativePath,
+        string artifactHash) =>
+        new()
+        {
+            ["movementId"] = $"IA95-SCORE-{dimensionId}-{featureId}",
+            ["featureId"] = featureId,
+            ["dimensionId"] = dimensionId,
+            ["previousScore"] = 8,
+            ["acceptedScore"] = acceptedScore,
+            ["delta"] = acceptedScore - 8,
+            ["status"] = "accepted",
+            ["freshness"] = "current",
+            ["directRegisterMutation"] = false,
+            ["targetBlockerId"] = blockerId,
+            ["acceptanceGateIds"] = ToJsonArray(gates),
+            ["sourceGapRows"] = new JsonArray(sourceGapRow),
+            ["evidenceIds"] = new JsonArray(evidenceId),
+            ["artifactRefs"] = new JsonArray(
+                new JsonObject
+                {
+                    ["artifactId"] = $"{featureId}-SCORE-PROPOSAL",
+                    ["path"] = artifactRelativePath,
+                    ["sha256Hash"] = artifactHash,
+                    ["visibility"] = "restricted",
+                }),
+            ["claimEffect"] = $"Raises {dimensionId} evidence to {acceptedScore} for the RDY-REG-v0.1.8 internal-audit-95 promotion.",
+            ["residualRisk"] = $"{featureId} residual risk remains bounded by downstream execution and external-boundary wording.",
+            ["resolutionCriteria"] = $"{featureId} accepted score proposal was consumed by RDY-REG-v0.1.8 and resolves {blockerId}.",
+        };
+
+    private static JsonArray ToJsonArray(IEnumerable<string> values)
+    {
+        var result = new JsonArray();
+        foreach (var value in values)
+        {
+            result.Add(value);
+        }
+
+        return result;
+    }
 
     private static void WriteFeat150CleanupSource(ReadinessRegisterPromotionPaths paths)
     {

@@ -311,7 +311,7 @@ public sealed partial class HushVotingPackageVerifier
             packagePath,
             VerificationPackageFileNames.TallyReplay,
             cancellationToken);
-        var isHighAssurance = string.Equals(profileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal);
+        var isHighAssurance = VerificationProfileIds.RequiresHighAssuranceEvidence(profileId);
         var transcriptExists = File.Exists(ResolvePackagePath(
             packagePath,
             VerificationPackageFileNames.Sp07PublicationProofTranscript));
@@ -328,17 +328,32 @@ public sealed partial class HushVotingPackageVerifier
             !string.IsNullOrWhiteSpace(tallyReplay.PublicationProofTranscriptHash) ||
             !string.IsNullOrWhiteSpace(tallyReplay.PublicationProofHash);
 
+        if (!isHighAssurance &&
+            (!proofClaimed || await UsesDevelopmentReleaseEvidenceAsync(packagePath, cancellationToken)))
+        {
+            return
+            [
+                CreateResult(
+                    "VFY-SP07-001",
+                    VerificationCheckStatus.Pass,
+                    VerificationResultCodes.PublicationProofNotRequiredForDevelopment,
+                    "SP-07 publication proof is not required while the package uses development release evidence.",
+                    new Dictionary<string, string>
+                    {
+                        ["sp07_artifacts_present"] = proofClaimed.ToString(),
+                    }),
+            ];
+        }
+
         if (!proofClaimed)
         {
             return
             [
                 CreateResult(
                     "VFY-SP07-001",
-                    isHighAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn,
+                    VerificationCheckStatus.Fail,
                     VerificationResultCodes.PublicationProofEvidencePending,
-                    isHighAssurance
-                        ? "High-assurance profile requires SP-07 publication proof evidence."
-                        : "SP-07 publication proof evidence is pending a later protocol package revision."),
+                    "High-assurance profile requires SP-07 publication proof evidence."),
             ];
         }
 
@@ -464,6 +479,28 @@ public sealed partial class HushVotingPackageVerifier
         return results;
     }
 
+    private static async Task<bool> UsesDevelopmentReleaseEvidenceAsync(
+        string packagePath,
+        CancellationToken cancellationToken)
+    {
+        var releaseIntegrityPath = ResolvePackagePath(packagePath, VerificationPackageFileNames.Sp08ReleaseIntegrity);
+        if (!File.Exists(releaseIntegrityPath))
+        {
+            return false;
+        }
+
+        var releaseIntegrity = await ReadJsonAsync<ElectionSp08ReleaseIntegrityArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp08ReleaseIntegrity,
+            cancellationToken);
+
+        return ElectionSp08ReleaseIntegrityRules.IsDevelopmentPlaceholder(releaseIntegrity.EvidenceMode) ||
+            string.Equals(
+                releaseIntegrity.PrimaryResultCode,
+                VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder,
+                StringComparison.Ordinal);
+    }
+
     private static async Task<IReadOnlyList<VerifierCheckResultRecord>> CheckExternalReviewEvidenceAsync(
         string packagePath,
         AuditPackageManifestRecord auditManifest,
@@ -529,8 +566,8 @@ public sealed partial class HushVotingPackageVerifier
         if (!string.Equals(status.Availability, ElectionSp09ProfileIds.AvailabilityAvailable, StringComparison.Ordinal))
         {
             var claimedReviewed = ElectionSp09ExternalReviewRules.IsReviewedClaimState(status.ClaimState);
-            var publicAnonymous = string.Equals(profileId, VerificationProfileIds.PublicAnonymousV1, StringComparison.Ordinal);
-            if (claimedReviewed || !publicAnonymous)
+            var acceptsDevelopmentEvidence = VerificationProfileIds.AcceptsDevelopmentEvidence(profileId);
+            if (claimedReviewed || !acceptsDevelopmentEvidence)
             {
                 results.Add(CreateResult(
                     claimedReviewed
@@ -881,11 +918,18 @@ public sealed partial class HushVotingPackageVerifier
                  !ElectionSp08ReleaseIntegrityRules.IsOfficialEvidenceMode(releaseIntegrity.EvidenceMode) ||
                  releaseIntegrity.NotForReleaseIntegrityClaims)
         {
+            ValidateSp08DevelopmentPlaceholderEvidence(results, releaseManifest);
             results.Add(CreateResult(
                 ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode,
-                VerificationCheckStatus.Warn,
-                VerificationResultCodes.ReleaseIntegrityEvidencePending,
-                "SP-08 release integrity evidence is a development placeholder and is not official release evidence.",
+                results.Any(x => x.Status == VerificationCheckStatus.Fail)
+                    ? VerificationCheckStatus.Fail
+                    : VerificationCheckStatus.Pass,
+                results.Any(x => x.Status == VerificationCheckStatus.Fail)
+                    ? VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed
+                    : VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder,
+                results.Any(x => x.Status == VerificationCheckStatus.Fail)
+                    ? "SP-08 development release evidence is malformed or inconsistent."
+                    : "SP-08 development release evidence is internally consistent for this non-high-assurance verifier profile.",
                 new Dictionary<string, string>
                 {
                     ["release_manifest_hash"] = actualManifestHash,
@@ -1035,6 +1079,86 @@ public sealed partial class HushVotingPackageVerifier
                         ["artifact_reference"] = component.ImmutableReference,
                     }));
             }
+        }
+    }
+
+    private static void ValidateSp08DevelopmentPlaceholderEvidence(
+        List<VerifierCheckResultRecord> results,
+        ElectionSp08ReleaseManifestArtifactRecord releaseManifest)
+    {
+        var componentIds = releaseManifest.Components
+            .Select(x => x.ComponentId)
+            .ToHashSet(StringComparer.Ordinal);
+        var missingComponents = ElectionSp08ProfileIds.RequiredHighAssuranceComponentIds
+            .Where(componentId => !componentIds.Contains(componentId))
+            .ToArray();
+        if (missingComponents.Length > 0)
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.ComponentHashesCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityComponentHashMismatch,
+                "SP-08 development release evidence is missing required component placeholders.",
+                missingComponents.ToDictionary(componentId => componentId, _ => "missing", StringComparer.Ordinal)));
+        }
+
+        foreach (var component in releaseManifest.Components)
+        {
+            if (!component.IsPlaceholder ||
+                !string.Equals(
+                    component.EvidenceMode,
+                    ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder,
+                    StringComparison.Ordinal) ||
+                !IsSp08Sha256Prefixed(component.ArtifactDigest) ||
+                string.IsNullOrWhiteSpace(component.ImmutableReference))
+            {
+                results.Add(CreateResult(
+                    ElectionSp08ProfileIds.ComponentHashesCheckCode,
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.ReleaseIntegrityComponentHashMismatch,
+                    $"SP-08 development component '{component.ComponentId}' is not a complete development proof placeholder."));
+            }
+        }
+
+        var lifecycleStages = releaseManifest.LifecycleBindings
+            .Select(x => x.LifecycleStage)
+            .ToHashSet(StringComparer.Ordinal);
+        var missingStages = new[]
+            {
+                ElectionSp08ProfileIds.OpenLifecycleStage,
+                ElectionSp08ProfileIds.CloseLifecycleStage,
+                ElectionSp08ProfileIds.ProofWorkerLifecycleStage,
+                ElectionSp08ProfileIds.ExporterLifecycleStage,
+                ElectionSp08ProfileIds.ClientReleaseSetLifecycleStage,
+            }
+            .Where(stage => !lifecycleStages.Contains(stage))
+            .ToArray();
+        if (missingStages.Length > 0)
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.LifecycleBindingCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityLifecycleMismatch,
+                "SP-08 development release evidence is missing lifecycle bindings.",
+                missingStages.ToDictionary(stage => stage, _ => "missing", StringComparer.Ordinal)));
+        }
+
+        var mismatch = releaseManifest.LifecycleBindings.FirstOrDefault(x =>
+            !string.Equals(x.ExpectedReleaseId, x.ObservedReleaseId, StringComparison.Ordinal) ||
+            !string.Equals(x.ExpectedArtifactDigest, x.ObservedArtifactDigest, StringComparison.OrdinalIgnoreCase));
+        if (mismatch is not null)
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.LifecycleBindingCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityLifecycleMismatch,
+                "SP-08 development lifecycle evidence changed during the election workflow.",
+                new Dictionary<string, string>
+                {
+                    ["lifecycle_stage"] = mismatch.LifecycleStage,
+                    ["expected_release_id"] = mismatch.ExpectedReleaseId,
+                    ["observed_release_id"] = mismatch.ObservedReleaseId,
+                }));
         }
     }
 
@@ -2310,17 +2434,30 @@ public sealed partial class HushVotingPackageVerifier
                 "SP-05 verifier output does not match the package election id or verifier profile."));
         }
 
-        var providerReady = policy.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.Ready;
-        if (!providerReady)
+        if (policy.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.DevOnly)
         {
-            var highAssurance = string.Equals(profileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal);
+            var highAssurance = VerificationProfileIds.RequiresHighAssuranceEvidence(profileId);
             results.Add(CreateResult(
                 "ELI-013",
-                highAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn,
-                VerificationResultCodes.EligibilityDevOnlyVerificationBlocked,
+                highAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Pass,
+                highAssurance
+                    ? VerificationResultCodes.EligibilityDevOnlyVerificationBlocked
+                    : VerificationResultCodes.EligibilityDevelopmentProviderValid,
                 highAssurance
                     ? "High-assurance profile cannot accept a dev-only or missing contact-code provider."
-                    : "Contact-code provider is not marked production-ready; development profile records this as a warning.",
+                    : "Development contact-code provider is explicitly declared and accepted for this non-high-assurance verifier profile.",
+                new Dictionary<string, string>
+                {
+                    ["contact_code_provider_readiness"] = policy.ContactCodeProviderReadiness.ToString(),
+                }));
+        }
+        else if (policy.ContactCodeProviderReadiness != ElectionContactCodeProviderReadiness.Ready)
+        {
+            results.Add(CreateResult(
+                "ELI-013",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.EligibilityContactCodeProviderNotReady,
+                "Contact-code provider readiness is missing or degraded.",
                 new Dictionary<string, string>
                 {
                     ["contact_code_provider_readiness"] = policy.ContactCodeProviderReadiness.ToString(),

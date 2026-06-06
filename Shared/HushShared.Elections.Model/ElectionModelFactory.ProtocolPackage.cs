@@ -55,7 +55,8 @@ public static partial class ElectionModelFactory
         IReadOnlyList<ProtocolPackageAccessLocationRecord> proofAccessLocations,
         IReadOnlyList<ProtocolPackageFileHashRecord>? releaseFiles = null,
         ProtocolPackageExternalReviewStatus externalReviewStatus = ProtocolPackageExternalReviewStatus.NotReviewed,
-        DateTime? releasedAt = null) =>
+        DateTime? releasedAt = null,
+        ProtocolOmegaCircuitBindingRecord? circuitBinding = null) =>
         new(
             packageId,
             packageVersion,
@@ -70,6 +71,7 @@ public static partial class ElectionModelFactory
             releasedAt ?? DateTime.UtcNow)
         {
             ReleaseFiles = releaseFiles ?? Array.Empty<ProtocolPackageFileHashRecord>(),
+            CircuitBinding = circuitBinding,
         };
 
     public static ApprovedProtocolPackageCatalogEntryRecord CreateApprovedProtocolPackageCatalogEntry(

@@ -20,6 +20,7 @@ namespace HushNode.Elections;
 
 public class ElectionLifecycleService : IElectionLifecycleService
 {
+    private const string Sp04InlineFinalProofStatementId = "hushvoting-sp04-inline-final-cast-proof-v1";
     private static readonly JsonSerializerOptions ResultPayloadJsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan TallyExecutorLeaseDuration = TimeSpan.FromMinutes(10);
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider;
@@ -40,6 +41,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly IElectionSp07PublicationProofSessionRunner? _publicationProofSessionRunner;
     private readonly IElectionSp08ReleaseEvidenceProvider _sp08ReleaseEvidenceProvider;
     private readonly IElectionDeploymentProofBindingService _deploymentProofBindingService;
+    private readonly IProtocolPackageCatalogSyncService _protocolPackageCatalogSyncService;
     private readonly IBabyJubJub _curve;
     private readonly ProtocolPackageBindingService _protocolPackageBindingService = new();
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
@@ -78,7 +80,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null,
         IElectionSp08ReleaseEvidenceProvider? sp08ReleaseEvidenceProvider = null,
         IAdminOnlyProtectedTallyCustodyLifecycleAuthority? adminOnlyProtectedTallyCustodyLifecycleAuthority = null,
-        IElectionDeploymentProofBindingService? deploymentProofBindingService = null)
+        IElectionDeploymentProofBindingService? deploymentProofBindingService = null,
+        IProtocolPackageCatalogSyncService? protocolPackageCatalogSyncService = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
@@ -101,6 +104,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         _publicationProofSessionRunner = publicationProofSessionRunner;
         _sp08ReleaseEvidenceProvider = sp08ReleaseEvidenceProvider ?? new ElectionSp08ReleaseEvidenceProvider();
         _deploymentProofBindingService = deploymentProofBindingService ?? NoopElectionDeploymentProofBindingService.Instance;
+        _protocolPackageCatalogSyncService =
+            protocolPackageCatalogSyncService ?? NoopProtocolPackageCatalogSyncService.Instance;
         _curve = curve ?? new BabyJubJubCurve();
     }
 
@@ -124,6 +129,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Draft election validation failed.",
                 validationErrors);
         }
+
+        await SyncProtocolPackageCatalogForProfileAsync(request.Draft.SelectedProfileId);
 
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
@@ -344,6 +351,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
     public async Task<ElectionCommandResult> RefreshProtocolPackageBindingAsync(RefreshElectionProtocolPackageBindingRequest request)
     {
+        await SyncProtocolPackageCatalogForElectionAsync(request.ElectionId);
+
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
@@ -1437,6 +1446,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
             };
             var completedCeremony = sp04Validation.CeremonyRecord! with
             {
+                PreparedPackageCount = sp04Validation.PreparedBallotCreatedInline
+                    ? sp04Validation.CeremonyRecord.PreparedPackageCount + 1
+                    : sp04Validation.CeremonyRecord.PreparedPackageCount,
                 FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
                 LastUpdatedAt = acceptedAt,
             };
@@ -1448,7 +1460,14 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 await repository.SaveAcceptedBallotAsync(acceptedBallot);
                 await repository.SaveBallotMemPoolEntryAsync(ballotMemPoolEntry);
                 await repository.SaveCastIdempotencyRecordAsync(idempotencyRecord);
-                await repository.UpdatePreparedBallotCommitmentAsync(castPreparedBallot);
+                if (sp04Validation.PreparedBallotCreatedInline)
+                {
+                    await repository.SavePreparedBallotCommitmentAsync(castPreparedBallot);
+                }
+                else
+                {
+                    await repository.UpdatePreparedBallotCommitmentAsync(castPreparedBallot);
+                }
                 await repository.UpdateVoterCeremonyRecordAsync(completedCeremony);
                 await repository.SaveElectionAsync(updatedElection);
                 await unitOfWork.CommitAsync();
@@ -2264,6 +2283,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
     public async Task<ElectionOpenValidationResult> EvaluateOpenReadinessAsync(EvaluateElectionOpenReadinessRequest request)
     {
+        await SyncProtocolPackageCatalogForElectionAsync(request.ElectionId);
+
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var election = await repository.GetElectionAsync(request.ElectionId);
@@ -2307,8 +2328,37 @@ public class ElectionLifecycleService : IElectionLifecycleService
             sp08ReleaseEvidence: sp08ReleaseEvidence);
     }
 
+    private async Task SyncProtocolPackageCatalogForElectionAsync(ElectionId electionId)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionAsync(electionId);
+        if (election?.LifecycleState != ElectionLifecycleState.Draft)
+        {
+            return;
+        }
+
+        await SyncProtocolPackageCatalogForProfileAsync(election.SelectedProfileId);
+    }
+
+    private async Task SyncProtocolPackageCatalogForProfileAsync(string selectedProfileId)
+    {
+        var syncResult = await _protocolPackageCatalogSyncService.SyncLatestApprovedPackageForProfileAsync(selectedProfileId);
+        if (!syncResult.IsSuccess)
+        {
+            _logger.LogWarning(
+                "[ElectionLifecycleService] Protocol Omega package remote sync did not complete: {Message}",
+                syncResult.Message);
+        }
+    }
+
     public async Task<ElectionCommandResult> StartGovernedProposalAsync(StartElectionGovernedProposalRequest request)
     {
+        if (request.ActionType == ElectionGovernedActionType.Open)
+        {
+            await SyncProtocolPackageCatalogForElectionAsync(request.ElectionId);
+        }
+
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
@@ -2555,6 +2605,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
     public async Task<ElectionCommandResult> OpenElectionAsync(OpenElectionRequest request)
     {
+        await SyncProtocolPackageCatalogForElectionAsync(request.ElectionId);
+
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
@@ -4782,9 +4834,55 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "A receipt commitment and commitment scheme are required for final cast acceptance."));
         }
 
+        var ceremonyRecord = await repository.GetVoterCeremonyRecordAsync(
+            request.ElectionId,
+            rosterEntry.OrganizationVoterId);
+        if (ceremonyRecord is null ||
+            !string.Equals(ceremonyRecord.LinkedActorPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal) ||
+            !string.Equals(ceremonyRecord.CeremonyProfileId, ElectionSp04ProfileIds.ChallengeSpoilV1, StringComparison.Ordinal) ||
+            ceremonyRecord.SpoiledPackageCount < 1)
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.ChallengeRequiredBeforeCast,
+                "At least one successful challenge/spoil is required before final cast acceptance."));
+        }
+
+        if (ceremonyRecord.FinalState == ElectionVoterCeremonyFinalState.FinalCastAccepted)
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.AlreadyVoted,
+                "This voter ceremony already has a final accepted cast."));
+        }
+
         var preparedBallotCommitment = await repository.GetPreparedBallotCommitmentAsync(request.PreparedBallotId.Value);
-        if (preparedBallotCommitment is null ||
-            preparedBallotCommitment.ElectionId != request.ElectionId)
+        var preparedBallotCreatedInline = false;
+        if (preparedBallotCommitment is null)
+        {
+            var existingPreparedWithSameHash = await repository.GetPreparedBallotCommitmentByHashAsync(
+                request.ElectionId,
+                request.PreparedBallotHash);
+            if (existingPreparedWithSameHash is not null)
+            {
+                return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.PreparedBallotHashMismatch,
+                    "The final cast prepared ballot hash is already bound to a different prepared ballot."));
+            }
+
+            preparedBallotCommitment = ElectionModelFactory.CreatePreparedBallotCommitmentRecord(
+                request.ElectionId,
+                rosterEntry.OrganizationVoterId,
+                request.ActorPublicAddress,
+                request.PreparedBallotHash,
+                request.BallotDefinitionVersion.Value,
+                request.BallotDefinitionHash,
+                Sp04InlineFinalProofStatementId,
+                acceptedAt,
+                preparedBallotId: request.PreparedBallotId.Value,
+                ceremonyProfileId: ElectionSp04ProfileIds.ChallengeSpoilV1);
+            preparedBallotCreatedInline = true;
+        }
+
+        if (preparedBallotCommitment.ElectionId != request.ElectionId)
         {
             return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
                 ElectionCastAcceptanceFailureReason.PreparedBallotMissing,
@@ -4835,27 +4933,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "The prepared ballot was already accepted as a final cast."));
         }
 
-        var ceremonyRecord = await repository.GetVoterCeremonyRecordAsync(
-            request.ElectionId,
-            rosterEntry.OrganizationVoterId);
-        if (ceremonyRecord is null ||
-            !string.Equals(ceremonyRecord.LinkedActorPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal) ||
-            !string.Equals(ceremonyRecord.CeremonyProfileId, ElectionSp04ProfileIds.ChallengeSpoilV1, StringComparison.Ordinal) ||
-            ceremonyRecord.SpoiledPackageCount < 1)
-        {
-            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
-                ElectionCastAcceptanceFailureReason.ChallengeRequiredBeforeCast,
-                "At least one successful challenge/spoil is required before final cast acceptance."));
-        }
-
-        if (ceremonyRecord.FinalState == ElectionVoterCeremonyFinalState.FinalCastAccepted)
-        {
-            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
-                ElectionCastAcceptanceFailureReason.AlreadyVoted,
-                "This voter ceremony already has a final accepted cast."));
-        }
-
-        return Sp04CastValidationOutcome.Success(preparedBallotCommitment, ceremonyRecord);
+        return Sp04CastValidationOutcome.Success(
+            preparedBallotCommitment,
+            ceremonyRecord,
+            preparedBallotCreatedInline);
     }
 
     private async Task<ElectionCastAcceptanceResult?> ValidateCastBoundaryContextAsync(
@@ -5457,7 +5538,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return VerificationResultCodes.ReleaseIntegrityManifestMissing;
         }
 
-        if (releaseEvidence.PrimaryResultCode == VerificationResultCodes.ReleaseIntegrityEvidencePending &&
+        if ((releaseEvidence.PrimaryResultCode == VerificationResultCodes.ReleaseIntegrityEvidencePending ||
+             releaseEvidence.PrimaryResultCode == VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder) &&
             (releaseEvidence.NotForReleaseIntegrityClaims ||
              !ElectionSp08ReleaseIntegrityRules.IsOfficialEvidenceMode(releaseEvidence.EvidenceMode)))
         {
@@ -5798,7 +5880,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return governedDraftLock;
         }
 
-        var profile = await repository.GetCeremonyProfileAsync(profileId);
+        var registryProfiles = await repository.GetCeremonyProfilesAsync();
+        var profile = ElectionSelectableProfileCatalog.ResolveProfile(
+            election.GovernanceMode,
+            profileId,
+            registryProfiles);
         if (profile is null)
         {
             return ElectionCommandResult.Failure(
@@ -8941,15 +9027,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private sealed record Sp04CastValidationOutcome(
         ElectionCastAcceptanceResult? Failure,
         ElectionPreparedBallotCommitmentRecord? PreparedBallotCommitment,
-        ElectionVoterCeremonyRecord? CeremonyRecord)
+        ElectionVoterCeremonyRecord? CeremonyRecord,
+        bool PreparedBallotCreatedInline)
     {
         public static Sp04CastValidationOutcome Fail(ElectionCastAcceptanceResult failure) =>
-            new(failure, null, null);
+            new(failure, null, null, false);
 
         public static Sp04CastValidationOutcome Success(
             ElectionPreparedBallotCommitmentRecord preparedBallotCommitment,
-            ElectionVoterCeremonyRecord ceremonyRecord) =>
-            new(null, preparedBallotCommitment, ceremonyRecord);
+            ElectionVoterCeremonyRecord ceremonyRecord,
+            bool preparedBallotCreatedInline = false) =>
+            new(null, preparedBallotCommitment, ceremonyRecord, preparedBallotCreatedInline);
     }
 
     private sealed record ReportPackageFinalizationContext(

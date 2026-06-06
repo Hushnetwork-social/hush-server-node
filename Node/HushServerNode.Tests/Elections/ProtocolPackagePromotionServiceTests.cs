@@ -40,11 +40,22 @@ public class ProtocolPackagePromotionServiceTests : IDisposable
         second.CatalogEntry.IsLatestForCompatibleProfiles.Should().BeTrue();
         second.CatalogEntry.ApprovalStatus.Should().Be(ProtocolPackageApprovalStatus.ApprovedInternal);
         second.CatalogEntry.CompatibleProfileIds.Should().Contain(ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId);
+        second.CatalogEntry.CompatibleProfileIds.Should().Contain(ElectionSelectableProfileCatalog.TrusteeVeritas2KProductionProfileId);
+        second.CatalogEntry.CompatibleProfileIds.Should().Contain(ElectionSelectableProfileCatalog.TrusteeVeritas10KProductionProfileId);
 
         second.SpecificationManifest.Files.Should().HaveCount(ProtocolPackagePromotionService.RequiredSpecificationFiles.Count);
         second.ProofManifest.Files.Should().HaveCount(ProtocolPackagePromotionService.RequiredProofFiles.Count);
         second.ReleaseManifest.ReleaseFiles.Should().HaveCount(ProtocolPackagePromotionService.RequiredReleaseFiles.Count);
         second.ReleaseManifest.ReleaseFiles.Should().ContainSingle(x => x.RelativePath == "ChangeLog.md");
+        second.ReleaseManifest.CircuitBinding.Should().NotBeNull();
+        second.ReleaseManifest.CircuitBinding!.CircuitVersion.Should().Be("omega-v1.0.0");
+        second.ReleaseManifest.CircuitBinding.CircuitArtifactMode.Should().Be("bundled_deployment");
+        second.ReleaseManifest.CircuitBinding.CircuitArtifacts.Should().ContainSingle(x =>
+            x.RelativePath == "hush-web-client/public/circuits/omega-v1.0.0/reaction.wasm" &&
+            x.Sha256Hash == "71d1ee45d944313bb2c86a1851f3b09a481481675fa80ddfd3205d99d7613f8b");
+        second.ReleaseManifest.CircuitBinding.CircuitArtifacts.Should().ContainSingle(x =>
+            x.RelativePath == "hush-web-client/public/circuits/omega-v1.0.0/reaction.zkey" &&
+            x.Sha256Hash == "65620abc5030404403c19b22b623e115807eb2603cb5953f195959a76ba91b5c");
         second.SpecificationManifest.Files.Should().OnlyContain(x => x.Sha256Hash.Length == 64 && x.SizeBytes > 0);
         second.ProofManifest.Files.Should().OnlyContain(x => x.Sha256Hash.Length == 64 && x.SizeBytes > 0);
         second.ReleaseManifest.ReleaseFiles.Should().OnlyContain(x => x.Sha256Hash.Length == 64 && x.SizeBytes > 0);
@@ -89,6 +100,13 @@ public class ProtocolPackagePromotionServiceTests : IDisposable
             ProtocolPackagePromotionService.ProofPackageFolderName,
             $"{ProtocolPackagePromotionService.ProofPackageFolderName}.zip")).Should().BeTrue();
         File.Exists(paths.ServerCatalogPath).Should().BeTrue();
+        File.ReadAllText(Path.Combine(
+                paths.OfficialArtifactsRoot,
+                "v1.0.0",
+                ProtocolPackagePromotionService.ReleaseManifestFileName))
+            .Should().Contain("\"circuitBinding\"")
+            .And.Contain("\"circuitVersion\": \"omega-v1.0.0\"")
+            .And.Contain("hush-web-client/public/circuits/omega-v1.0.0/reaction.zkey");
 
         var catalog = JsonSerializer.Deserialize<ApprovedProtocolPackageCatalogEntryRecord[]>(
             File.ReadAllText(paths.ServerCatalogPath),
@@ -242,6 +260,40 @@ public class ProtocolPackagePromotionServiceTests : IDisposable
         second.ReleaseManifest.ReleaseManifestHash.Should().NotBe(first.ReleaseManifest.ReleaseManifestHash);
         second.ReleaseManifest.SpecAccessLocations.Single().Location.Should()
             .StartWith("https://docs.hushnetwork.social/protocol-omega/hushvoting-v1/v1.0.0/");
+    }
+
+    [Fact]
+    public void Promote_NormalizesProtocolPackageVersionAndPublicUrlsInJsonSources()
+    {
+        var paths = CreatePaths();
+        WriteCompleteSourcePackage(paths.WorkingSourceRoot);
+        var samplePath = Path.Combine(
+            paths.WorkingSourceRoot,
+            ProtocolPackagePromotionService.SpecificationPackageFolderName,
+            "Sample-Election-Record.json");
+        File.WriteAllText(
+            samplePath,
+            """
+            {
+              "protocolPackageVersion": "v1.2.0",
+              "specAccessLocations": [
+                {
+                  "location": "https://www.hushnetwork.social/protocol-omega/hushvoting-v1/v1.2.0/Protocol-Specification-Package/Protocol-Specification-Package.zip"
+                }
+              ]
+            }
+            """);
+
+        new ProtocolPackagePromotionService().Promote(CreateOptions(paths, packageVersion: "v1.2.1"));
+
+        File.ReadAllText(Path.Combine(
+                paths.OfficialArtifactsRoot,
+                "v1.2.1",
+                ProtocolPackagePromotionService.SpecificationPackageFolderName,
+                "Sample-Election-Record.json"))
+            .Should().Contain("\"protocolPackageVersion\": \"v1.2.1\"")
+            .And.Contain("/protocol-omega/hushvoting-v1/v1.2.1/")
+            .And.NotContain("/protocol-omega/hushvoting-v1/v1.2.0/");
     }
 
     [Fact]

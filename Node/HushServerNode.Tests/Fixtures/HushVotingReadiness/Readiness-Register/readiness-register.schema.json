@@ -94,6 +94,12 @@
         "$ref": "#/$defs/claimLevel"
       }
     },
+    "claimProfiles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/claimProfile"
+      }
+    },
     "blockers": {
       "type": "array",
       "items": {
@@ -332,6 +338,150 @@
             "pilot_only_with_limitations",
             "public_claim_blocked"
           ]
+        }
+      }
+    },
+    "claimProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profileId",
+        "label",
+        "productMode",
+        "governanceEffect",
+        "bindingStatus",
+        "isNonBindingElection",
+        "thresholdProfile",
+        "profileClass",
+        "gateSeverity",
+        "gateStatus",
+        "claimLevel",
+        "claimWording",
+        "limitationWording",
+        "evidenceRefs",
+        "requiredEvidence",
+        "verifierWarningCount",
+        "verifierWarnings"
+      ],
+      "properties": {
+        "profileId": {
+          "enum": [
+            "hushvoting.direct.non_binding",
+            "hushvoting.direct.binding",
+            "hushvoting.veritas_3_of_5.non_binding",
+            "hushvoting.veritas_3_of_5.binding",
+            "hushvoting.veritas_7_of_10.non_binding",
+            "hushvoting.veritas_7_of_10.binding",
+            "hushvoting.veritas_8_of_13.non_binding",
+            "hushvoting.veritas_8_of_13.binding",
+            "hushvoting.enterprise_n_of_k.non_binding",
+            "hushvoting.enterprise_n_of_k.binding"
+          ]
+        },
+        "label": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "productMode": {
+          "enum": [
+            "HushVoting! Direct",
+            "HushVoting! Veritas",
+            "HushVoting! Enterprise"
+          ]
+        },
+        "governanceEffect": {
+          "enum": [
+            "non_binding",
+            "binding"
+          ]
+        },
+        "bindingStatus": {
+          "enum": [
+            "Non-Binding",
+            "Binding"
+          ]
+        },
+        "isNonBindingElection": {
+          "type": "boolean"
+        },
+        "thresholdProfile": {
+          "enum": [
+            "direct",
+            "3/5",
+            "7/10",
+            "8/13",
+            "n/k"
+          ]
+        },
+        "profileClass": {
+          "enum": [
+            "standard",
+            "enterprise"
+          ]
+        },
+        "gateSeverity": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "gateStatus": {
+          "enum": [
+            "passed",
+            "with_warnings",
+            "not_observed",
+            "future_gated",
+            "blocked"
+          ]
+        },
+        "claimLevel": {
+          "$ref": "#/$defs/claimLevelId"
+        },
+        "claimWording": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "limitationWording": {
+          "type": "string"
+        },
+        "evidenceRefs": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "requiredEvidence": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "verifierWarningCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verifierWarnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/claimProfileVerifierWarning"
+          }
+        }
+      }
+    },
+    "claimProfileVerifierWarning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkCode",
+        "resultCode",
+        "message",
+        "evidenceRef"
+      ],
+      "properties": {
+        "checkCode": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "resultCode": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "message": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "evidenceRef": {
+          "$ref": "#/$defs/nonEmptyString"
         }
       }
     },

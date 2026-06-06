@@ -1,6 +1,8 @@
 using FluentAssertions;
 using HushNode.Elections;
+using HushShared.Elections.Model;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace HushServerNode.Tests.Elections;
@@ -66,6 +68,45 @@ public sealed class ElectionsHostBuildSp07WorkerPathTests
         options.Timeout.Should().Be(TimeSpan.FromSeconds(45));
         options.Threads.Should().Be(2);
         options.WorkingDirectory.Should().Be(AppContext.BaseDirectory);
+    }
+
+    [Fact]
+    public async Task CreateActiveDeploymentProofProvider_WithDevelopmentRuntimeMode_ShouldAcceptCurrentRuntimeWithLimitations()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Elections:DeploymentProof:Provider"] = "development_runtime",
+                ["Elections:DeploymentProof:DevelopmentRuntimeDeploymentTarget"] = "local-rehearsal-node",
+                ["Elections:DeploymentProof:DevelopmentRuntimePublicPackageRef"] =
+                    "local-development-runtime://hush-server-node",
+            })
+            .Build();
+        var options = ElectionsHostBuild.CreateDeploymentProofProviderOptions(configuration);
+        var services = new ServiceCollection();
+        services.AddSingleton(options);
+        services.AddSingleton<IActiveDeploymentProofProvider>(sp =>
+            ElectionsHostBuild.CreateActiveDeploymentProofProvider(sp));
+
+        var provider = services.BuildServiceProvider().GetRequiredService<IActiveDeploymentProofProvider>();
+        var profile = new ElectionDeploymentProofProfile(
+            ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId,
+            IsDevOnly: false,
+            ElectionBindingStatus.Binding,
+            ElectionGovernanceMode.AdminOnly,
+            ElectionDeploymentProofProfileClass.HushManagedProductionLike);
+
+        var context = await provider.GetActiveDeploymentProofContextAsync(
+            profile,
+            new DateTime(2026, 6, 4, 12, 0, 0, DateTimeKind.Utc));
+
+        context.ProviderStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations);
+        context.DeploymentTarget.Should().Be("local-rehearsal-node");
+        context.ServerProof.Should().NotBeNull();
+        context.ServerProof!.DeploymentProofId.Should().StartWith("DPP-SERVER-DEV-");
+        context.ServerProof.EvidenceStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.Accepted);
+        context.ServerProof.PublicPackageRef.Should().Be("local-development-runtime://hush-server-node");
+        context.ProviderErrors.Should().BeEmpty();
     }
 
     private static string CreateWorker(string root, string profile)

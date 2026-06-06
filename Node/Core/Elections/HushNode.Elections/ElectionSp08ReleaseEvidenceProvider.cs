@@ -117,7 +117,7 @@ public sealed class ElectionSp08ReleaseEvidenceProvider : IElectionSp08ReleaseEv
             ReleaseManifestHash: string.Empty,
             ProtocolPackageManifestName: ProtocolPackagePromotionService.ReleaseManifestFileName,
             ProtocolPackageManifestHash: protocolPackageValidation.Binding?.ReleaseManifestHash ?? string.Empty,
-            PrimaryResultCode: VerificationResultCodes.ReleaseIntegrityEvidencePending,
+            PrimaryResultCode: VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder,
             PrimaryIssue:
                 "Development placeholder SP-08 release evidence is present for this development profile. It is not official release evidence and must not support release-integrity claims.",
             Components: [],
@@ -177,7 +177,7 @@ public sealed class ElectionSp08ReleaseEvidenceProvider : IElectionSp08ReleaseEv
             manifest.NotForReleaseIntegrityClaims)
         {
             return new(
-                VerificationResultCodes.ReleaseIntegrityEvidencePending,
+                VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder,
                 "Development placeholder SP-08 release evidence is present. It is not official release evidence and must not support release-integrity claims.");
         }
 

@@ -79,6 +79,9 @@ public sealed class ReadinessRegisterPromotionService
     private const string Feat156TargetVersion = "v0.1.6";
     private const string Feat156TargetPublicationStatus = "production_rollout_with_limitations";
     private const string Feat156PromotionSourceFileName = "production-rollout-promotion-source.json";
+    private const string InternalAudit95FinalTargetVersion = "v0.1.8";
+    private const string InternalAudit95FinalTargetPublicationStatus = "pilot_only_with_limitations";
+    private const string InternalAudit95PromotionSourceFileName = "internal-audit-95-promotion-source.json";
 
     private static readonly Regex VersionPattern = new("^v[0-9]+\\.[0-9]+\\.[0-9]+$", RegexOptions.Compiled);
     private static readonly Regex RegisterVersionIdPattern = new("^RDY-REG-v[0-9]+\\.[0-9]+\\.[0-9]+$", RegexOptions.Compiled);
@@ -132,6 +135,86 @@ public sealed class ReadinessRegisterPromotionService
         "friendly_organization_pilot",
         "production_organizational_rollout",
         "public_or_state_election",
+    ];
+
+    private static readonly string[] ClaimProfileIds =
+    [
+        "hushvoting.direct.non_binding",
+        "hushvoting.direct.binding",
+        "hushvoting.veritas_3_of_5.non_binding",
+        "hushvoting.veritas_3_of_5.binding",
+        "hushvoting.veritas_7_of_10.non_binding",
+        "hushvoting.veritas_7_of_10.binding",
+        "hushvoting.veritas_8_of_13.non_binding",
+        "hushvoting.veritas_8_of_13.binding",
+        "hushvoting.enterprise_n_of_k.non_binding",
+        "hushvoting.enterprise_n_of_k.binding",
+    ];
+
+    private const string DirectNonBindingCurrentVerifierOutputRef =
+        "hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Direct-Non-Binding-20260605102141/public-verifier-output-current-public-20260605c/VerifierOutput.json";
+
+    private const string DirectBindingCurrentVerifierOutputRef =
+        "hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Direct-Rehearsal-II-20260604215137/public-verifier-output-current-public-20260605c/VerifierOutput.json";
+
+    private static readonly OperationalChecklistRow[] EnvironmentOperationalChecklistRows =
+    [
+        new(
+            "Development",
+            "Machine",
+            "Required",
+            "Verify product mode, bindingStatus, isNonBindingElection, package manifest/hash integrity, verifier profile, development release binding, and public/restricted privacy boundary.",
+            "Direct profile evidence refs; VFY-*; SP-08 development proof; OPS-000, OPS-001, OPS-003, OPS-004, OPS-005, OPS-007",
+            "Can pass internal technical Direct claim profiles only."),
+        new(
+            "Development",
+            "Human",
+            "Not required",
+            "No real privileged-access attempt, backup/restore rehearsal, or auditor-room access trial is required for the local development profile.",
+            "None",
+            "No production, customer, public/state, legal, certification, or rollout claim."),
+        new(
+            "PreProduction",
+            "Machine",
+            "Optional full candidate",
+            "When a PreProduction environment exists, verify SP-10 refs/hashes, package-manifest entries, restricted refs, timestamps, release/deployment binding, migration package hash, and immutable candidate identity.",
+            "OPS-002, OPS-006, OPS-008 plus SP-08 release/deployment refs",
+            "Can accept a production candidate before activation if the same immutable candidate is later promoted."),
+        new(
+            "PreProduction",
+            "Human",
+            "Optional full candidate or attested",
+            "Authorized reviewer records direct observations or attaches a signed tester/auditor document that states the PreProduction human checks were completed.",
+            "Access-control review, restore-test review, auditor-room review/signoff, or signed external attestation",
+            "Feeds the candidate promotion policy; the editable checklist itself does not directly block a claim."),
+        new(
+            "Production Direct",
+            "Machine",
+            "Required when no PreProduction candidate exists",
+            "Run the full machine readiness workflow in Production: immutable deployment refs, signed restricted evidence refs, fresh access snapshot, fresh backup/restore evidence, auditor-room access-log binding, and migration/package evidence.",
+            "Full production machine checklist including OPS-002, OPS-006, OPS-008",
+            "Required when deploying directly to Production."),
+        new(
+            "Production Direct",
+            "Human",
+            "Required or attested when no PreProduction candidate exists",
+            "Operational/security reviewer records observations or attaches a signed tester/auditor document covering access rejection tests, backup/restore evidence, auditor-room controls, exceptions, and residual risk.",
+            "Human checklist signoff, external attestation, and restricted reviewer extract",
+            "Feeds the production promotion policy; the editable checklist itself does not directly block a claim."),
+        new(
+            "Production Activation",
+            "Machine",
+            "Required when promoting an accepted PreProduction candidate",
+            "Verify the production activation uses the same accepted release manifest, container/build digest, protocol package, migration package, and approved environment-delta refs.",
+            "production-activation-addendum.json; release/deployment/migration/config delta proof",
+            "Allows Production activation without repeating the full readiness report when the candidate is unchanged."),
+        new(
+            "Production Activation",
+            "Human",
+            "Required signoff",
+            "Activation signer confirms the traffic switch, rollback/backup readiness, and approved environment deltas for the accepted candidate.",
+            "Activation signoff and restricted activation notes",
+            "Feeds the promotion policy; the editable checklist itself does not directly block a claim."),
     ];
 
     private static readonly HashSet<string> EvidenceStates = new(StringComparer.Ordinal)
@@ -203,7 +286,14 @@ public sealed class ReadinessRegisterPromotionService
         var register = ReadJsonObject(options.Paths.RegisterPath, RegisterFileName);
         var example = ReadJsonObject(options.Paths.ExamplePath, ExampleFileName);
         var feat156Promotion = TryApplyFeat156ProductionRolloutPromotion(register, options);
+        var internalAudit95Promotion = TryApplyInternalAudit95FinalPromotion(register, options);
+
         ApplyCommandOverrides(register, options);
+        if (internalAudit95Promotion is not null || IsInternalAudit95Accepted(register))
+        {
+            EnsureInternalAudit95ClaimProfiles(register);
+            example["claimProfiles"] = BuildInternalAudit95ExampleClaimProfiles();
+        }
 
         var validationErrors = new List<string>();
         ValidateSchemaDocument(schema, validationErrors);
@@ -216,7 +306,7 @@ public sealed class ReadinessRegisterPromotionService
                 validationErrors);
         }
 
-        var generatedAt = options.GeneratedAt ?? feat156Promotion?.GeneratedAt ?? DateTimeOffset.UtcNow;
+        var generatedAt = options.GeneratedAt ?? internalAudit95Promotion?.GeneratedAt ?? feat156Promotion?.GeneratedAt ?? DateTimeOffset.UtcNow;
         var registerVersion = GetRequiredString(register, "registerVersion");
         var registerVersionId = GetRequiredString(register, "registerVersionId");
         var status = GetRequiredString(register, "status");
@@ -479,6 +569,254 @@ public sealed class ReadinessRegisterPromotionService
         var generatedAt = ParseRequiredTimestamp(source, "generatedAt");
         ApplyFeat156ProductionRolloutPromotionSource(register, source, generatedAt, sourceValidation.RecalculatedScore, options.Paths.WorkspaceRoot);
         return new Feat156PromotionApplication(generatedAt);
+    }
+
+    private static InternalAudit95PromotionApplication? TryApplyInternalAudit95FinalPromotion(
+        JsonObject register,
+        ReadinessRegisterPromotionOptions options)
+    {
+        if (!IsInternalAudit95FinalPromotionRequest(options))
+        {
+            return null;
+        }
+
+        var sourcePath = GetInternalAudit95PromotionSourcePath(options.Paths);
+        if (!File.Exists(sourcePath))
+        {
+            throw new ReadinessRegisterPromotionException(
+                "Internal audit 95 promotion source is missing.",
+                [Path.GetRelativePath(options.Paths.WorkspaceRoot, sourcePath)]);
+        }
+
+        var source = ReadJsonObject(sourcePath, InternalAudit95PromotionSourceFileName);
+        var sourceErrors = ValidateInternalAudit95PromotionSource(source, options.Paths.WorkspaceRoot);
+        if (sourceErrors.Count > 0)
+        {
+            throw new ReadinessRegisterPromotionException(
+                "Internal audit 95 promotion source failed validation.",
+                sourceErrors);
+        }
+
+        var baselineErrors = ValidateInternalAudit95Baseline(register, source);
+        if (baselineErrors.Count > 0)
+        {
+            throw new ReadinessRegisterPromotionException(
+                "Internal audit 95 promotion source does not match the current baseline register.",
+                baselineErrors);
+        }
+
+        var generatedAt = ParseRequiredTimestamp(source, "generatedAt");
+        ApplyInternalAudit95PromotionSource(register, source, generatedAt, options.Paths.WorkspaceRoot);
+        return new InternalAudit95PromotionApplication(generatedAt);
+    }
+
+    private static bool IsInternalAudit95FinalPromotionRequest(ReadinessRegisterPromotionOptions options) =>
+        string.Equals(options.Version, InternalAudit95FinalTargetVersion, StringComparison.Ordinal) &&
+        string.Equals(options.PublicationStatus, InternalAudit95FinalTargetPublicationStatus, StringComparison.Ordinal);
+
+    private static string GetInternalAudit95PromotionSourcePath(ReadinessRegisterPromotionPaths paths) => Path.Combine(
+        paths.WorkspaceRoot,
+        "hush-documents",
+        "PrivateServer_ElectronicVoting",
+        "Internal-Audit-95-Promotion-Register",
+        "package",
+        InternalAudit95PromotionSourceFileName);
+
+    private static List<string> ValidateInternalAudit95PromotionSource(JsonObject source, string workspaceRoot)
+    {
+        var errors = new List<string>();
+        if (GetStringOrDefault(source, "schemaVersion") != "internal-audit-95-promotion-source.v1")
+        {
+            errors.Add("schemaVersion must be internal-audit-95-promotion-source.v1.");
+        }
+
+        if (GetStringOrDefault(source, "status") != "accepted")
+        {
+            errors.Add("status must be accepted.");
+        }
+
+        var target = source["targetRegister"] as JsonObject;
+        if (target is null)
+        {
+            errors.Add("targetRegister is required.");
+        }
+        else
+        {
+            AddMismatch(errors, "targetRegister.registerVersion", InternalAudit95FinalTargetVersion, GetStringOrDefault(target, "registerVersion"));
+            AddMismatch(errors, "targetRegister.registerVersionId", $"RDY-REG-{InternalAudit95FinalTargetVersion}", GetStringOrDefault(target, "registerVersionId"));
+            AddMismatch(errors, "targetRegister.status", "AcceptedInternal", GetStringOrDefault(target, "status"));
+            AddMismatch(errors, "targetRegister.totalScore", InternalAudit95ReadinessPlan.TargetScore.ToString(CultureInfo.InvariantCulture), GetIntOrDefault(target, "totalScore").ToString(CultureInfo.InvariantCulture));
+            AddMismatch(errors, "targetRegister.publicationStatus", InternalAudit95FinalTargetPublicationStatus, GetStringOrDefault(target, "publicationStatus"));
+            AddMismatch(errors, "targetRegister.strongestAllowedClaim", "friendly_organization_pilot", GetStringOrDefault(target, "strongestAllowedClaim"));
+        }
+
+        var baseline = source["baselineRegister"] as JsonObject;
+        if (baseline is null)
+        {
+            errors.Add("baselineRegister is required.");
+        }
+        else
+        {
+            AddMismatch(errors, "baselineRegister.registerVersion", InternalAudit95ReadinessPlan.TargetVersion, GetStringOrDefault(baseline, "registerVersion"));
+            AddMismatch(errors, "baselineRegister.registerVersionId", $"RDY-REG-{InternalAudit95ReadinessPlan.TargetVersion}", GetStringOrDefault(baseline, "registerVersionId"));
+            AddMismatch(errors, "baselineRegister.totalScore", "80", GetIntOrDefault(baseline, "totalScore").ToString(CultureInfo.InvariantCulture));
+        }
+
+        if (source["scoreMovements"] is not JsonArray movements)
+        {
+            errors.Add("scoreMovements is required.");
+            return errors;
+        }
+
+        if (movements.Count != InternalAudit95ReadinessPlan.Tasks.Length)
+        {
+            errors.Add($"scoreMovements must contain {InternalAudit95ReadinessPlan.Tasks.Length} items.");
+        }
+
+        var movementByDimension = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        foreach (var movement in movements.Select(node => node as JsonObject))
+        {
+            if (movement is null)
+            {
+                errors.Add("scoreMovements items must be objects.");
+                continue;
+            }
+
+            var dimensionId = GetStringOrDefault(movement, "dimensionId");
+            if (string.IsNullOrWhiteSpace(dimensionId))
+            {
+                errors.Add("scoreMovements.dimensionId is required.");
+                continue;
+            }
+
+            if (!movementByDimension.TryAdd(dimensionId, movement))
+            {
+                errors.Add($"Duplicate score movement for {dimensionId}.");
+            }
+        }
+        var acceptedDelta = 0;
+        foreach (var task in InternalAudit95ReadinessPlan.Tasks)
+        {
+            if (!movementByDimension.TryGetValue(task.DimensionId, out var movement))
+            {
+                errors.Add($"Missing score movement for {task.DimensionId}.");
+                continue;
+            }
+
+            AddMismatch(errors, $"{task.DimensionId}.featureId", task.FeatureId, GetStringOrDefault(movement, "featureId"));
+            AddMismatch(errors, $"{task.DimensionId}.targetBlockerId", task.BlockerId, GetStringOrDefault(movement, "targetBlockerId"));
+            var previousScore = GetIntOrDefault(movement, "previousScore");
+            var acceptedScore = GetIntOrDefault(movement, "acceptedScore");
+            var delta = GetIntOrDefault(movement, "delta");
+            if (previousScore != 8)
+            {
+                errors.Add($"{task.DimensionId}.previousScore must be 8.");
+            }
+
+            if (acceptedScore != task.TargetScore)
+            {
+                errors.Add($"{task.DimensionId}.acceptedScore must be {task.TargetScore}.");
+            }
+
+            if (delta != acceptedScore - previousScore)
+            {
+                errors.Add($"{task.DimensionId}.delta must equal acceptedScore - previousScore.");
+            }
+
+            acceptedDelta += delta;
+            if (movement["directRegisterMutation"]?.GetValue<bool>() != false)
+            {
+                errors.Add($"{task.DimensionId}.directRegisterMutation must be false.");
+            }
+
+            if (GetReadinessEvidenceIds(movement).Count == 0)
+            {
+                errors.Add($"{task.DimensionId}.evidenceIds must include a FEAT-130 readiness evidence id.");
+            }
+
+            ValidateInternalAudit95ArtifactRefs(movement, workspaceRoot, $"{task.DimensionId}.artifactRefs", errors);
+        }
+
+        if (acceptedDelta != InternalAudit95ReadinessPlan.TargetScore - 80)
+        {
+            errors.Add($"scoreMovements delta must sum to {InternalAudit95ReadinessPlan.TargetScore - 80}.");
+        }
+
+        return errors;
+    }
+
+    private static void ValidateInternalAudit95ArtifactRefs(
+        JsonObject movement,
+        string workspaceRoot,
+        string path,
+        List<string> errors)
+    {
+        if (movement["artifactRefs"] is not JsonArray artifactRefs || artifactRefs.Count == 0)
+        {
+            errors.Add($"{path} must contain at least one artifact ref.");
+            return;
+        }
+
+        foreach (var artifactRef in artifactRefs.Select((node, index) => (node, index)))
+        {
+            if (artifactRef.node is not JsonObject item)
+            {
+                errors.Add($"{path}[{artifactRef.index}] must be an object.");
+                continue;
+            }
+
+            var relativePath = GetStringOrDefault(item, "path");
+            if (string.IsNullOrWhiteSpace(relativePath))
+            {
+                errors.Add($"{path}[{artifactRef.index}].path is required.");
+                continue;
+            }
+
+            var fullPath = Path.GetFullPath(Path.Combine(workspaceRoot, relativePath));
+            if (!fullPath.StartsWith(Path.GetFullPath(workspaceRoot), StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add($"{path}[{artifactRef.index}].path must stay within the workspace.");
+                continue;
+            }
+
+            if (!File.Exists(fullPath))
+            {
+                errors.Add($"{path}[{artifactRef.index}] does not exist: {relativePath}.");
+                continue;
+            }
+
+            var expectedHash = NormalizeSha256(GetStringOrDefault(item, "sha256Hash"));
+            if (!HexSha256Pattern.IsMatch(expectedHash))
+            {
+                errors.Add($"{path}[{artifactRef.index}].sha256Hash must be a SHA-256 hash.");
+                continue;
+            }
+
+            var actualHash = ComputeSha256Hex(File.ReadAllBytes(fullPath));
+            if (actualHash != expectedHash)
+            {
+                errors.Add($"{path}[{artifactRef.index}] hash mismatch for {relativePath}.");
+            }
+        }
+    }
+
+    private static List<string> ValidateInternalAudit95Baseline(JsonObject register, JsonObject source)
+    {
+        var errors = new List<string>();
+        var baseline = GetRequiredObject(source, "baselineRegister");
+        var score = GetRequiredObject(register, "score");
+
+        AddMismatch(errors, "registerVersionId", GetRequiredString(baseline, "registerVersionId"), GetStringOrDefault(register, "registerVersionId"));
+        AddMismatch(errors, "registerVersion", GetRequiredString(baseline, "registerVersion"), GetStringOrDefault(register, "registerVersion"));
+        AddMismatch(errors, "status", GetStringOrDefault(baseline, "status"), GetStringOrDefault(register, "status"));
+        AddMismatch(
+            errors,
+            "score.total",
+            GetIntOrDefault(baseline, "totalScore").ToString(CultureInfo.InvariantCulture),
+            GetIntOrDefault(score, "total").ToString(CultureInfo.InvariantCulture));
+        AddMismatch(errors, "strongestAllowedClaim", GetStringOrDefault(baseline, "strongestAllowedClaim"), GetCurrentStrongestAllowedClaim(register));
+
+        return errors;
     }
 
     private static bool IsFeat156ProductionRolloutRequest(ReadinessRegisterPromotionOptions options) =>
@@ -924,6 +1262,748 @@ public sealed class ReadinessRegisterPromotionService
         return blockers;
     }
 
+    private static void ApplyInternalAudit95PromotionSource(
+        JsonObject register,
+        JsonObject source,
+        DateTimeOffset generatedAt,
+        string workspaceRoot)
+    {
+        var target = GetRequiredObject(source, "targetRegister");
+        register["registerVersion"] = GetRequiredString(target, "registerVersion");
+        register["registerVersionId"] = GetRequiredString(target, "registerVersionId");
+        register["status"] = GetRequiredString(target, "status");
+        register["promotedAt"] = generatedAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        register["sourceCommit"] = GetRequiredString(source, "sourceId");
+
+        var score = GetRequiredObject(register, "score");
+        score["total"] = GetRequiredInt(target, "totalScore");
+        score["strongerTargetScore"] = InternalAudit95ReadinessPlan.TargetScore;
+
+        var claimPolicy = GetRequiredObject(register, "claimPolicy");
+        claimPolicy["strongerTargetScore"] = InternalAudit95ReadinessPlan.TargetScore;
+        claimPolicy["strongestAllowedV1Claim"] = GetRequiredString(target, "strongestAllowedClaim");
+        AddAlwaysBlockedClaim(claimPolicy, "production_organizational_rollout");
+        AddAlwaysBlockedClaim(claimPolicy, "public_or_state_election");
+
+        GetRequiredObject(register, "generatedViews")["publicSafePublicationStatus"] =
+            GetRequiredString(target, "publicationStatus");
+
+        var movements = GetRequiredArray(source, "scoreMovements")
+            .Select(node => node!.AsObject())
+            .OrderBy(movement => Array.FindIndex(
+                InternalAudit95ReadinessPlan.Tasks,
+                task => task.DimensionId == GetRequiredString(movement, "dimensionId")))
+            .ToArray();
+        ApplyInternalAudit95DimensionMovements(register, movements);
+        ApplyInternalAudit95ClaimState(register, source);
+        EnsureInternalAudit95ClaimProfiles(register);
+        ApplyInternalAudit95BlockerResolutions(register, movements);
+        EnsureInternalAudit95EvidenceItems(register, movements, generatedAt, workspaceRoot);
+        EnsureInternalAudit95ScoreChanges(register, movements, generatedAt, baselineTotal: 80);
+    }
+
+    private static void EnsureInternalAudit95ClaimProfiles(JsonObject register)
+    {
+        register["claimProfiles"] = BuildInternalAudit95ClaimProfiles();
+    }
+
+    private static JsonArray BuildInternalAudit95ClaimProfiles() =>
+        new()
+        {
+            BuildClaimProfile(
+                "hushvoting.direct.non_binding",
+                "Non-Binding HushVoting! Direct",
+                "HushVoting! Direct",
+                "non_binding",
+                "Non-Binding",
+                true,
+                "direct",
+                "standard",
+                "green",
+                "passed",
+                "internal_non_binding_rehearsal",
+                "Product mode HushVoting! Direct, binding status Non-Binding, and isNonBindingElection true pass the internal technical machine claim profile gate.",
+                "The pass is limited to runtime/profile evidence and internal audit use. SP-10 access-control, backup/restore, and auditor-room controls are pre-production/production checklist items split into machine and human sub-checklists; no customer, production, public/state, legal, certification, independent-validation, deployment/build completeness, or web-client proof-binding claim is made.",
+                [
+                    "hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Direct-Non-Binding-20260605102141/audit-boundary-note.md",
+                    "hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Direct-Non-Binding-20260605102141/public-verification-package/artifacts/report-package/canonical-manifest.json",
+                    "hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Direct-Non-Binding-20260605102141/public-verification-package/artifacts/report-package/result-report.json",
+                    DirectNonBindingCurrentVerifierOutputRef,
+                ],
+                ["productMode == HushVoting! Direct", "bindingStatus == Non-Binding", "isNonBindingElection == true", "SP-10 operational controls deferred to pre-production/production checklists"]),
+            BuildClaimProfile(
+                "hushvoting.direct.binding",
+                "Binding HushVoting! Direct",
+                "HushVoting! Direct",
+                "binding",
+                "Binding",
+                false,
+                "direct",
+                "standard",
+                "green",
+                "passed",
+                "internal_non_binding_rehearsal",
+                "Product mode HushVoting! Direct, binding status Binding, and isNonBindingElection false pass the internal technical machine claim profile gate.",
+                "The pass is limited to runtime/profile evidence and internal audit use. SP-10 access-control, backup/restore, and auditor-room controls are pre-production/production checklist items split into machine and human sub-checklists; no customer, production, public/state, legal, certification, independent-validation, deployment/build completeness, or web-client proof-binding claim is made.",
+                [
+                    "hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Direct-Rehearsal-II-20260604215137/audit-boundary-note.md",
+                    "hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Direct-Rehearsal-II-20260604215137/public-verification-package/artifacts/report-package/canonical-manifest.json",
+                    "hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Direct-Rehearsal-II-20260604215137/public-verification-package/artifacts/report-package/result-report.json",
+                    DirectBindingCurrentVerifierOutputRef,
+                ],
+                ["productMode == HushVoting! Direct", "bindingStatus == Binding", "isNonBindingElection == false", "SP-10 operational controls deferred to pre-production/production checklists"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_3_of_5.non_binding",
+                "Non-Binding HushVoting! Veritas 3/5",
+                "HushVoting! Veritas",
+                "non_binding",
+                "Non-Binding",
+                true,
+                "3/5",
+                "standard",
+                "amber",
+                "not_observed",
+                "internal_non_binding_rehearsal",
+                "The non-binding Veritas 3/5 profile is tracked, but no accepted runtime rehearsal evidence is bound to it in RDY-REG-v0.1.8.",
+                "Requires a Veritas 3/5 threshold ceremony, trustee evidence, bindingStatus Non-Binding, and isNonBindingElection true.",
+                [],
+                ["productMode == HushVoting! Veritas", "thresholdProfile == 3/5", "bindingStatus == Non-Binding", "isNonBindingElection == true"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_3_of_5.binding",
+                "Binding HushVoting! Veritas 3/5",
+                "HushVoting! Veritas",
+                "binding",
+                "Binding",
+                false,
+                "3/5",
+                "standard",
+                "amber",
+                "future_gated",
+                "production_organizational_rollout",
+                "The binding Veritas 3/5 profile is tracked as a standard future profile, but RDY-REG-v0.1.8 does not claim it as passed.",
+                "Requires accepted Veritas 3/5 threshold ceremony evidence plus customer governance and downstream production-context gates before stronger claims.",
+                [],
+                ["productMode == HushVoting! Veritas", "thresholdProfile == 3/5", "bindingStatus == Binding", "isNonBindingElection == false"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_7_of_10.non_binding",
+                "Non-Binding HushVoting! Veritas 7/10",
+                "HushVoting! Veritas",
+                "non_binding",
+                "Non-Binding",
+                true,
+                "7/10",
+                "standard",
+                "amber",
+                "not_observed",
+                "internal_non_binding_rehearsal",
+                "The non-binding Veritas 7/10 profile is tracked, but no accepted runtime rehearsal evidence is bound to it in RDY-REG-v0.1.8.",
+                "Requires a Veritas 7/10 threshold ceremony, trustee evidence, bindingStatus Non-Binding, and isNonBindingElection true.",
+                [],
+                ["productMode == HushVoting! Veritas", "thresholdProfile == 7/10", "bindingStatus == Non-Binding", "isNonBindingElection == true"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_7_of_10.binding",
+                "Binding HushVoting! Veritas 7/10",
+                "HushVoting! Veritas",
+                "binding",
+                "Binding",
+                false,
+                "7/10",
+                "standard",
+                "amber",
+                "future_gated",
+                "production_organizational_rollout",
+                "The binding Veritas 7/10 profile is tracked as a standard future profile, but RDY-REG-v0.1.8 does not claim it as passed.",
+                "Requires accepted Veritas 7/10 threshold ceremony evidence plus customer governance and downstream production-context gates before stronger claims.",
+                [],
+                ["productMode == HushVoting! Veritas", "thresholdProfile == 7/10", "bindingStatus == Binding", "isNonBindingElection == false"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_8_of_13.non_binding",
+                "Non-Binding HushVoting! Veritas 8/13",
+                "HushVoting! Veritas",
+                "non_binding",
+                "Non-Binding",
+                true,
+                "8/13",
+                "standard",
+                "amber",
+                "not_observed",
+                "internal_non_binding_rehearsal",
+                "The non-binding Veritas 8/13 profile is tracked, but no accepted runtime rehearsal evidence is bound to it in RDY-REG-v0.1.8.",
+                "Requires a Veritas 8/13 threshold ceremony, trustee evidence, bindingStatus Non-Binding, and isNonBindingElection true.",
+                [],
+                ["productMode == HushVoting! Veritas", "thresholdProfile == 8/13", "bindingStatus == Non-Binding", "isNonBindingElection == true"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_8_of_13.binding",
+                "Binding HushVoting! Veritas 8/13",
+                "HushVoting! Veritas",
+                "binding",
+                "Binding",
+                false,
+                "8/13",
+                "standard",
+                "amber",
+                "future_gated",
+                "production_organizational_rollout",
+                "The binding Veritas 8/13 profile is tracked as a standard future profile, but RDY-REG-v0.1.8 does not claim it as passed.",
+                "Requires accepted Veritas 8/13 threshold ceremony evidence plus customer governance and downstream production-context gates before stronger claims.",
+                [],
+                ["productMode == HushVoting! Veritas", "thresholdProfile == 8/13", "bindingStatus == Binding", "isNonBindingElection == false"]),
+            BuildClaimProfile(
+                "hushvoting.enterprise_n_of_k.non_binding",
+                "Non-Binding HushVoting! Enterprise n/k",
+                "HushVoting! Enterprise",
+                "non_binding",
+                "Non-Binding",
+                true,
+                "n/k",
+                "enterprise",
+                "amber",
+                "future_gated",
+                "internal_non_binding_rehearsal",
+                "The non-binding Enterprise n/k profile is tracked for thresholds outside the standard profiles, but RDY-REG-v0.1.8 does not claim it as passed.",
+                "Requires explicit threshold rationale, accepted custom-profile evidence, bindingStatus Non-Binding, and isNonBindingElection true.",
+                [],
+                ["productMode == HushVoting! Enterprise", "thresholdProfile == n/k", "bindingStatus == Non-Binding", "isNonBindingElection == true", "custom threshold evidence accepted"]),
+            BuildClaimProfile(
+                "hushvoting.enterprise_n_of_k.binding",
+                "Binding HushVoting! Enterprise n/k",
+                "HushVoting! Enterprise",
+                "binding",
+                "Binding",
+                false,
+                "n/k",
+                "enterprise",
+                "amber",
+                "future_gated",
+                "production_organizational_rollout",
+                "The binding Enterprise n/k profile is tracked for thresholds outside the standard profiles, but RDY-REG-v0.1.8 does not claim it as passed.",
+                "Requires explicit threshold rationale, accepted custom-profile evidence, customer governance, bindingStatus Binding, isNonBindingElection false, and downstream production-context gates.",
+                [],
+                ["productMode == HushVoting! Enterprise", "thresholdProfile == n/k", "bindingStatus == Binding", "isNonBindingElection == false", "custom threshold evidence accepted"]),
+        };
+
+    private static JsonArray BuildInternalAudit95ExampleClaimProfiles() =>
+        new()
+        {
+            BuildClaimProfile(
+                "hushvoting.direct.non_binding",
+                "Non-Binding HushVoting! Direct",
+                "HushVoting! Direct",
+                "non_binding",
+                "Non-Binding",
+                true,
+                "direct",
+                "standard",
+                "green",
+                "passed",
+                "internal_non_binding_rehearsal",
+                "Example non-binding Direct profile gate pass.",
+                "The profile pass is limited by the broad claim level.",
+                ["example/non-binding-direct-audit-boundary-note.md"],
+                ["productMode == HushVoting! Direct", "bindingStatus == Non-Binding", "isNonBindingElection == true"]),
+            BuildClaimProfile(
+                "hushvoting.direct.binding",
+                "Binding HushVoting! Direct",
+                "HushVoting! Direct",
+                "binding",
+                "Binding",
+                false,
+                "direct",
+                "standard",
+                "green",
+                "passed",
+                "internal_non_binding_rehearsal",
+                "Example Direct binding profile gate pass.",
+                "The profile pass is limited by the broad claim level.",
+                ["example/audit-boundary-note.md"],
+                ["productMode == HushVoting! Direct", "bindingStatus == Binding", "isNonBindingElection == false"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_3_of_5.non_binding",
+                "Non-Binding HushVoting! Veritas 3/5",
+                "HushVoting! Veritas",
+                "non_binding",
+                "Non-Binding",
+                true,
+                "3/5",
+                "standard",
+                "amber",
+                "not_observed",
+                "internal_non_binding_rehearsal",
+                "Example Veritas 3/5 non-binding profile gate.",
+                "Requires matching threshold evidence.",
+                [],
+                ["thresholdProfile == 3/5"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_3_of_5.binding",
+                "Binding HushVoting! Veritas 3/5",
+                "HushVoting! Veritas",
+                "binding",
+                "Binding",
+                false,
+                "3/5",
+                "standard",
+                "amber",
+                "future_gated",
+                "production_organizational_rollout",
+                "Example Veritas 3/5 binding profile gate.",
+                "Requires matching threshold and governance evidence.",
+                [],
+                ["thresholdProfile == 3/5"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_7_of_10.non_binding",
+                "Non-Binding HushVoting! Veritas 7/10",
+                "HushVoting! Veritas",
+                "non_binding",
+                "Non-Binding",
+                true,
+                "7/10",
+                "standard",
+                "amber",
+                "not_observed",
+                "internal_non_binding_rehearsal",
+                "Example Veritas 7/10 non-binding profile gate.",
+                "Requires matching threshold evidence.",
+                [],
+                ["thresholdProfile == 7/10"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_7_of_10.binding",
+                "Binding HushVoting! Veritas 7/10",
+                "HushVoting! Veritas",
+                "binding",
+                "Binding",
+                false,
+                "7/10",
+                "standard",
+                "amber",
+                "future_gated",
+                "production_organizational_rollout",
+                "Example Veritas 7/10 binding profile gate.",
+                "Requires matching threshold and governance evidence.",
+                [],
+                ["thresholdProfile == 7/10"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_8_of_13.non_binding",
+                "Non-Binding HushVoting! Veritas 8/13",
+                "HushVoting! Veritas",
+                "non_binding",
+                "Non-Binding",
+                true,
+                "8/13",
+                "standard",
+                "amber",
+                "not_observed",
+                "internal_non_binding_rehearsal",
+                "Example Veritas 8/13 non-binding profile gate.",
+                "Requires matching threshold evidence.",
+                [],
+                ["thresholdProfile == 8/13"]),
+            BuildClaimProfile(
+                "hushvoting.veritas_8_of_13.binding",
+                "Binding HushVoting! Veritas 8/13",
+                "HushVoting! Veritas",
+                "binding",
+                "Binding",
+                false,
+                "8/13",
+                "standard",
+                "amber",
+                "future_gated",
+                "production_organizational_rollout",
+                "Example Veritas 8/13 binding profile gate.",
+                "Requires matching threshold and governance evidence.",
+                [],
+                ["thresholdProfile == 8/13"]),
+            BuildClaimProfile(
+                "hushvoting.enterprise_n_of_k.non_binding",
+                "Non-Binding HushVoting! Enterprise n/k",
+                "HushVoting! Enterprise",
+                "non_binding",
+                "Non-Binding",
+                true,
+                "n/k",
+                "enterprise",
+                "amber",
+                "future_gated",
+                "internal_non_binding_rehearsal",
+                "Example Enterprise n/k non-binding profile gate.",
+                "Requires custom threshold evidence.",
+                [],
+                ["thresholdProfile == n/k"]),
+            BuildClaimProfile(
+                "hushvoting.enterprise_n_of_k.binding",
+                "Binding HushVoting! Enterprise n/k",
+                "HushVoting! Enterprise",
+                "binding",
+                "Binding",
+                false,
+                "n/k",
+                "enterprise",
+                "amber",
+                "future_gated",
+                "production_organizational_rollout",
+                "Example Enterprise n/k binding profile gate.",
+                "Requires custom threshold and governance evidence.",
+                [],
+                ["thresholdProfile == n/k"]),
+        };
+
+    private static JsonObject BuildClaimProfile(
+        string profileId,
+        string label,
+        string productMode,
+        string governanceEffect,
+        string bindingStatus,
+        bool isNonBindingElection,
+        string thresholdProfile,
+        string profileClass,
+        string gateSeverity,
+        string gateStatus,
+        string claimLevel,
+        string claimWording,
+        string limitationWording,
+        IReadOnlyList<string> evidenceRefs,
+        IReadOnlyList<string> requiredEvidence,
+        IReadOnlyList<ClaimProfileVerifierWarning>? verifierWarnings = null)
+    {
+        var verifierWarningArray = ToClaimProfileVerifierWarningsArray(verifierWarnings);
+        return new()
+        {
+            ["profileId"] = profileId,
+            ["label"] = label,
+            ["productMode"] = productMode,
+            ["governanceEffect"] = governanceEffect,
+            ["bindingStatus"] = bindingStatus,
+            ["isNonBindingElection"] = isNonBindingElection,
+            ["thresholdProfile"] = thresholdProfile,
+            ["profileClass"] = profileClass,
+            ["gateSeverity"] = gateSeverity,
+            ["gateStatus"] = gateStatus,
+            ["claimLevel"] = claimLevel,
+            ["claimWording"] = claimWording,
+            ["limitationWording"] = limitationWording,
+            ["evidenceRefs"] = ToJsonArray(evidenceRefs),
+            ["requiredEvidence"] = ToJsonArray(requiredEvidence),
+            ["verifierWarningCount"] = verifierWarningArray.Count,
+            ["verifierWarnings"] = verifierWarningArray,
+        };
+    }
+
+    private static JsonArray ToClaimProfileVerifierWarningsArray(
+        IReadOnlyList<ClaimProfileVerifierWarning>? verifierWarnings)
+    {
+        var result = new JsonArray();
+        foreach (var warning in verifierWarnings ?? [])
+        {
+            result.Add(new JsonObject
+            {
+                ["checkCode"] = warning.CheckCode,
+                ["resultCode"] = warning.ResultCode,
+                ["message"] = warning.Message,
+                ["evidenceRef"] = warning.EvidenceRef,
+            });
+        }
+
+        return result;
+    }
+
+    private static void ApplyInternalAudit95DimensionMovements(JsonObject register, IReadOnlyList<JsonObject> movements)
+    {
+        foreach (var movement in movements)
+        {
+            var dimensionId = GetRequiredString(movement, "dimensionId");
+            var dimension = FindDimension(register, dimensionId)
+                ?? throw new ReadinessRegisterPromotionException(
+                    "Internal audit 95 promotion source references an unknown score dimension.",
+                    [dimensionId]);
+            var expectedPreviousScore = GetRequiredInt(movement, "previousScore");
+            var actualPreviousScore = GetRequiredInt(dimension, "currentScore");
+            if (actualPreviousScore != expectedPreviousScore)
+            {
+                throw new ReadinessRegisterPromotionException(
+                    "Internal audit 95 promotion source score movement does not match the current dimension score.",
+                    [$"{dimensionId} expected {expectedPreviousScore}; found {actualPreviousScore}."]);
+            }
+
+            dimension["currentScore"] = GetRequiredInt(movement, "acceptedScore");
+            AddUniqueStrings(GetRequiredArray(dimension, "evidenceIds"), GetReadinessEvidenceIds(movement));
+            AddUniqueStrings(GetRequiredArray(dimension, "acceptanceGateIds"), GetStringArray(movement, "acceptanceGateIds"));
+            AddUniqueStrings(GetRequiredArray(dimension, "sourceGapRows"), GetStringArray(movement, "sourceGapRows"));
+            dimension["residualRisk"] = GetRequiredString(movement, "residualRisk");
+            dimension["scoreRationale"] = $"{GetRequiredString(movement, "featureId")} accepted internal-audit-95 promotion movement: {GetRequiredString(movement, "claimEffect")}";
+        }
+    }
+
+    private static void ApplyInternalAudit95ClaimState(JsonObject register, JsonObject source)
+    {
+        var target = GetRequiredObject(source, "targetRegister");
+        var internalRehearsalClaim = FindClaimLevel(register, "internal_non_binding_rehearsal")
+            ?? throw new ReadinessRegisterPromotionException("Internal audit 95 internal rehearsal claim level is missing.", []);
+        internalRehearsalClaim["blockerSeverity"] = "amber";
+        internalRehearsalClaim["status"] = "allowed_with_limitations";
+        internalRehearsalClaim["allowedWording"] =
+            "HushVoting may use internal technical rehearsal evidence when product-mode profile limitations and stronger claim boundaries remain visible.";
+        internalRehearsalClaim["limitationWording"] =
+            "Internal rehearsal evidence is not a customer, production, public/state, legal, certification, or independent-validation claim; runtime binding status is represented by the HushVoting claim profile gates.";
+        internalRehearsalClaim["blockedWording"] = "";
+        internalRehearsalClaim["publicSafeStatus"] = "not_for_publication";
+        internalRehearsalClaim["blockerIds"] = new JsonArray();
+
+        var friendlyPilotClaim = FindClaimLevel(register, "friendly_organization_pilot")
+            ?? throw new ReadinessRegisterPromotionException("Internal audit 95 friendly pilot claim level is missing.", []);
+        friendlyPilotClaim["blockerSeverity"] = "amber";
+        friendlyPilotClaim["status"] = "allowed_with_limitations";
+        friendlyPilotClaim["allowedWording"] =
+            "HushVoting may be discussed for controlled friendly-organization pilot planning when limitations remain explicit and private readiness review is available.";
+        friendlyPilotClaim["limitationWording"] =
+            "Friendly-pilot readiness is a broad claim boundary. It does not change which product-mode profile gates have passed, and it does not claim production rollout, public/state election readiness, independent validation, or legal sufficiency.";
+        friendlyPilotClaim["blockedWording"] = "";
+        friendlyPilotClaim["publicSafeStatus"] = "pilot_only_with_limitations";
+        friendlyPilotClaim["blockerIds"] = new JsonArray();
+
+        var productionClaim = FindClaimLevel(register, "production_organizational_rollout")
+            ?? throw new ReadinessRegisterPromotionException("Internal audit 95 production claim level is missing.", []);
+        productionClaim["blockerSeverity"] = "amber";
+        productionClaim["status"] = "future_gated";
+        productionClaim["allowedWording"] = "";
+        productionClaim["limitationWording"] = GetRequiredString(target, "productionFutureGateWording");
+        productionClaim["blockedWording"] = "";
+        productionClaim["publicSafeStatus"] = "not_ready_for_public_claim";
+        productionClaim["blockerIds"] = new JsonArray();
+
+        var publicStateClaim = FindClaimLevel(register, "public_or_state_election")
+            ?? throw new ReadinessRegisterPromotionException("Internal audit 95 public/state claim level is missing.", []);
+        publicStateClaim["blockerSeverity"] = "amber";
+        publicStateClaim["status"] = "external_boundary";
+        publicStateClaim["allowedWording"] = "";
+        publicStateClaim["limitationWording"] = GetRequiredString(target, "publicStateExternalBoundaryWording");
+        publicStateClaim["blockedWording"] = "";
+        publicStateClaim["publicSafeStatus"] = "public_claim_blocked";
+        publicStateClaim["blockerIds"] = new JsonArray();
+    }
+
+    private static void ApplyInternalAudit95BlockerResolutions(JsonObject register, IReadOnlyList<JsonObject> movements)
+    {
+        foreach (var movement in movements)
+        {
+            var blockerId = GetRequiredString(movement, "targetBlockerId");
+            var blocker = FindBlocker(register, blockerId)
+                ?? throw new ReadinessRegisterPromotionException(
+                    "Internal audit 95 promotion source references an unknown blocker.",
+                    [blockerId]);
+            blocker["severity"] = "green";
+            blocker["status"] = "resolved";
+            blocker["limitationWording"] = "";
+            blocker["resolutionCriteria"] = GetRequiredString(movement, "resolutionCriteria");
+        }
+
+        var productionBlocker = FindBlocker(register, "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001");
+        if (productionBlocker is not null)
+        {
+            productionBlocker["severity"] = "green";
+            productionBlocker["status"] = "superseded";
+            productionBlocker["resolutionCriteria"] =
+                "The Hush-owned internal audit 95 target was promoted in RDY-REG-v0.1.8; production rollout remains a downstream execution gate for local rehearsal, binding-election proof validation, customer governance, and external review.";
+        }
+
+        var publicStateBlocker = FindBlocker(register, "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001");
+        if (publicStateBlocker is not null)
+        {
+            publicStateBlocker["severity"] = "green";
+            publicStateBlocker["status"] = "superseded";
+            publicStateBlocker["resolutionCriteria"] =
+                "Public/state election readiness remains outside the Hush-owned internal audit report and requires external authority, jurisdiction, certification, procurement, accessibility, transparency, and dispute-remedy prerequisites.";
+        }
+    }
+
+    private static void EnsureInternalAudit95EvidenceItems(
+        JsonObject register,
+        IReadOnlyList<JsonObject> movements,
+        DateTimeOffset generatedAt,
+        string workspaceRoot)
+    {
+        var evidenceItems = GetRequiredArray(register, "evidenceItems");
+        var existingEvidenceIds = evidenceItems
+            .Select(node => node?.AsObject())
+            .Where(node => node is not null)
+            .Select(node => GetStringOrDefault(node!, "evidenceId"))
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var movement in movements)
+        {
+            foreach (var evidenceId in GetReadinessEvidenceIds(movement))
+            {
+                if (existingEvidenceIds.Contains(evidenceId))
+                {
+                    continue;
+                }
+
+                evidenceItems.Add(BuildInternalAudit95EvidenceItem(movement, evidenceId, generatedAt, workspaceRoot));
+                existingEvidenceIds.Add(evidenceId);
+            }
+        }
+    }
+
+    private static JsonObject BuildInternalAudit95EvidenceItem(
+        JsonObject movement,
+        string evidenceId,
+        DateTimeOffset generatedAt,
+        string workspaceRoot)
+    {
+        var featureId = GetRequiredString(movement, "featureId");
+        var dimensionId = GetRequiredString(movement, "dimensionId");
+        return new JsonObject
+        {
+            ["evidenceId"] = evidenceId,
+            ["parentEpic"] = "EPIC-015",
+            ["featureId"] = featureId,
+            ["sourceGapRow"] = GetStringArray(movement, "sourceGapRows").FirstOrDefault() ?? "Internal audit 95 hardening",
+            ["acceptanceGateIds"] = CloneStringArray(GetRequiredArray(movement, "acceptanceGateIds")),
+            ["dimensionIds"] = new JsonArray(dimensionId),
+            ["electionScope"] = "not_election_specific",
+            ["releaseScope"] = "internal-audit-95-promotion-v0.1.8",
+            ["visibility"] = "restricted_reviewer",
+            ["status"] = "accepted",
+            ["producedAt"] = generatedAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
+            ["owner"] = "HushVoting readiness owner",
+            ["artifactRefs"] = BuildInternalAudit95EvidenceArtifactRefs(movement, workspaceRoot),
+            ["checkResults"] = new JsonArray(
+                new JsonObject
+                {
+                    ["checkId"] = $"CHK-RDY-IA95-{dimensionId}",
+                    ["status"] = "pass",
+                    ["summary"] = GetRequiredString(movement, "claimEffect"),
+                    ["detailsRef"] = GetRequiredString(movement, "movementId"),
+                }),
+            ["freshness"] = new JsonObject
+            {
+                ["state"] = "current",
+                ["invalidationRule"] = "Event-based invalidation when the internal-audit-95 promotion source or referenced score proposal changes.",
+                ["staleReason"] = "",
+                ["timeSensitive"] = false,
+            },
+            ["residualRisk"] = GetRequiredString(movement, "residualRisk"),
+            ["claimEffect"] = "score_increase",
+            ["signoffs"] = CreateInternalAudit95Signoffs(featureId, dimensionId, generatedAt),
+            ["relatedExceptionIds"] = new JsonArray(),
+            ["relatedBlockerIds"] = new JsonArray(GetRequiredString(movement, "targetBlockerId")),
+        };
+    }
+
+    private static JsonArray BuildInternalAudit95EvidenceArtifactRefs(JsonObject movement, string workspaceRoot)
+    {
+        var result = new JsonArray();
+        foreach (var artifactRef in GetRequiredArray(movement, "artifactRefs").Select(node => node!.AsObject()))
+        {
+            var relativePath = GetRequiredString(artifactRef, "path");
+            var fullPath = Path.Combine(workspaceRoot, relativePath);
+            result.Add(new JsonObject
+            {
+                ["artifactId"] = GetRequiredString(artifactRef, "artifactId"),
+                ["relativePath"] = relativePath,
+                ["hashAlgorithm"] = "SHA-256",
+                ["sha256Hash"] = NormalizeSha256(GetRequiredString(artifactRef, "sha256Hash")),
+                ["mediaType"] = GuessMediaType(relativePath),
+                ["sizeBytes"] = GetArtifactSizeBytes(fullPath),
+                ["visibility"] = GetStringOrDefault(artifactRef, "visibility") switch
+                {
+                    "public" or "public_safe" => "public_safe",
+                    "internal" => "internal",
+                    _ => "restricted_reviewer",
+                },
+            });
+        }
+
+        return result;
+    }
+
+    private static void EnsureInternalAudit95ScoreChanges(
+        JsonObject register,
+        IReadOnlyList<JsonObject> movements,
+        DateTimeOffset generatedAt,
+        int baselineTotal)
+    {
+        var scoreChanges = GetRequiredArray(register, "scoreChanges");
+        var existingScoreChangeIds = scoreChanges
+            .Select(node => node?.AsObject())
+            .Where(node => node is not null)
+            .Select(node => GetStringOrDefault(node!, "scoreChangeId"))
+            .ToHashSet(StringComparer.Ordinal);
+        var runningTotal = baselineTotal;
+        var index = 1;
+        var datePrefix = generatedAt.UtcDateTime.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        foreach (var movement in movements)
+        {
+            var scoreChangeId = $"RDY-SCORE-{datePrefix}-{index:000}";
+            var delta = GetRequiredInt(movement, "delta");
+            if (!existingScoreChangeIds.Contains(scoreChangeId))
+            {
+                scoreChanges.Add(BuildInternalAudit95ScoreChange(movement, scoreChangeId, generatedAt, runningTotal, runningTotal + delta));
+                existingScoreChangeIds.Add(scoreChangeId);
+            }
+
+            runningTotal += delta;
+            index++;
+        }
+    }
+
+    private static JsonObject BuildInternalAudit95ScoreChange(
+        JsonObject movement,
+        string scoreChangeId,
+        DateTimeOffset generatedAt,
+        int previousTotal,
+        int acceptedTotal)
+    {
+        var dimensionId = GetRequiredString(movement, "dimensionId");
+        var featureId = GetRequiredString(movement, "featureId");
+        var acceptedScore = GetRequiredInt(movement, "acceptedScore");
+        var blockerId = GetRequiredString(movement, "targetBlockerId");
+        return new JsonObject
+        {
+            ["scoreChangeId"] = scoreChangeId,
+            ["dimensionId"] = dimensionId,
+            ["direction"] = "increase",
+            ["previousScore"] = GetRequiredInt(movement, "previousScore"),
+            ["proposedScore"] = acceptedScore,
+            ["acceptedScore"] = acceptedScore,
+            ["evidenceIds"] = ToJsonArray(GetReadinessEvidenceIds(movement)),
+            ["sourceGapRow"] = GetStringArray(movement, "sourceGapRows").FirstOrDefault() ?? "Internal audit 95 hardening",
+            ["acceptanceGateIds"] = CloneStringArray(GetRequiredArray(movement, "acceptanceGateIds")),
+            ["blockerImpactBefore"] = new JsonArray(blockerId),
+            ["blockerImpactAfter"] = new JsonArray(),
+            ["claimImpact"] = GetRequiredString(movement, "claimEffect"),
+            ["reason"] = $"{featureId} accepted evidence is consumed by the internal-audit-95 promotion to promote RDY-REG-v0.1.8.",
+            ["generatedDiff"] = $"{dimensionId} currentScore {GetRequiredInt(movement, "previousScore")} -> {acceptedScore}; total score {previousTotal} -> {acceptedTotal}.",
+            ["signoffs"] = CreateInternalAudit95Signoffs(featureId, dimensionId, generatedAt),
+        };
+    }
+
+    private static JsonObject CreateInternalAudit95Signoffs(string featureId, string dimensionId, DateTimeOffset generatedAt)
+    {
+        var signedAt = generatedAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        var basis = $"Accepted {featureId} evidence for RDY-REG-v0.1.8 internal-audit-95 {dimensionId} promotion.";
+        return new JsonObject
+        {
+            ["engineering"] = new JsonObject
+            {
+                ["role"] = "engineering",
+                ["signerId"] = "paulo-aboim-pinto",
+                ["signerName"] = "Paulo Aboim Pinto",
+                ["signedAt"] = signedAt,
+                ["basis"] = basis,
+                ["samePersonTwoHat"] = true,
+            },
+            ["operationsProduct"] = new JsonObject
+            {
+                ["role"] = "operations_product",
+                ["signerId"] = "paulo-aboim-pinto",
+                ["signerName"] = "Paulo Aboim Pinto",
+                ["signedAt"] = signedAt,
+                ["basis"] = basis,
+                ["samePersonTwoHat"] = true,
+            },
+        };
+    }
+
     private static void ApplyInternalAudit95Targets(JsonObject register)
     {
         var blockers = GetRequiredArray(register, "blockers");
@@ -1157,6 +2237,11 @@ public sealed class ReadinessRegisterPromotionService
         if (claimLevels is not null)
         {
             ValidateClaimLevels(claimLevels, errors);
+        }
+
+        if (register["claimProfiles"] is JsonArray claimProfiles)
+        {
+            ValidateClaimProfiles(claimProfiles, errors);
         }
 
         if (blockers is not null)
@@ -1498,6 +2583,144 @@ public sealed class ReadinessRegisterPromotionService
 
             RequireArray(item, "blockerIds", errors);
             RequireNonEmpty(item, "publicSafeStatus", errors);
+        }
+    }
+
+    private static void ValidateClaimProfiles(JsonArray claimProfiles, List<string> errors)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var profile in claimProfiles.Select((node, index) => (node, index)))
+        {
+            if (profile.node is not JsonObject item)
+            {
+                errors.Add($"claimProfiles[{profile.index}] must be an object.");
+                continue;
+            }
+
+            var profileId = GetStringOrDefault(item, "profileId");
+            if (!ClaimProfileIds.Contains(profileId, StringComparer.Ordinal))
+            {
+                errors.Add($"Unsupported claim profile: {profileId}.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(profileId) && !seen.Add(profileId))
+            {
+                errors.Add($"Claim profile {profileId} is duplicated.");
+            }
+
+            RequireNonEmpty(item, "label", errors);
+            RequireEnum(
+                item,
+                "productMode",
+                new HashSet<string>(["HushVoting! Direct", "HushVoting! Veritas", "HushVoting! Enterprise"], StringComparer.Ordinal),
+                errors);
+            RequireEnum(
+                item,
+                "governanceEffect",
+                new HashSet<string>(["non_binding", "binding"], StringComparer.Ordinal),
+                errors);
+            RequireEnum(
+                item,
+                "bindingStatus",
+                new HashSet<string>(["Non-Binding", "Binding"], StringComparer.Ordinal),
+                errors);
+            RequireEnum(
+                item,
+                "thresholdProfile",
+                new HashSet<string>(["direct", "3/5", "7/10", "8/13", "n/k"], StringComparer.Ordinal),
+                errors);
+            RequireEnum(
+                item,
+                "profileClass",
+                new HashSet<string>(["standard", "enterprise"], StringComparer.Ordinal),
+                errors);
+            RequireEnum(
+                item,
+                "gateSeverity",
+                new HashSet<string>(["green", "amber", "red"], StringComparer.Ordinal),
+                errors);
+            RequireEnum(
+                item,
+                "gateStatus",
+                new HashSet<string>(["passed", "with_warnings", "not_observed", "future_gated", "blocked"], StringComparer.Ordinal),
+                errors);
+
+            var claimLevel = GetStringOrDefault(item, "claimLevel");
+            if (!ClaimLevels.Contains(claimLevel, StringComparer.Ordinal))
+            {
+                errors.Add($"{profileId}.claimLevel is invalid.");
+            }
+
+            if (item["isNonBindingElection"] is not JsonValue nonBindingValue ||
+                !nonBindingValue.TryGetValue<bool>(out var isNonBindingElection))
+            {
+                errors.Add($"{profileId}.isNonBindingElection must be boolean.");
+            }
+            else
+            {
+                var governanceEffect = GetStringOrDefault(item, "governanceEffect");
+                var bindingStatus = GetStringOrDefault(item, "bindingStatus");
+                if (governanceEffect == "binding" && (isNonBindingElection || bindingStatus != "Binding"))
+                {
+                    errors.Add($"{profileId} binding profile must use bindingStatus Binding and isNonBindingElection false.");
+                }
+
+                if (governanceEffect == "non_binding" && (!isNonBindingElection || bindingStatus != "Non-Binding"))
+                {
+                    errors.Add($"{profileId} non-binding profile must use bindingStatus Non-Binding and isNonBindingElection true.");
+                }
+            }
+
+            RequireNonEmpty(item, "claimWording", errors);
+            RequireArray(item, "evidenceRefs", errors);
+            RequireArray(item, "requiredEvidence", errors);
+            var verifierWarningCount = RequireInt(item, "verifierWarningCount", errors);
+            var verifierWarnings = RequireArray(item, "verifierWarnings", errors);
+            if (verifierWarningCount < 0)
+            {
+                errors.Add($"{profileId}.verifierWarningCount cannot be negative.");
+            }
+
+            if (verifierWarnings is not null)
+            {
+                if (verifierWarningCount != verifierWarnings.Count)
+                {
+                    errors.Add($"{profileId}.verifierWarningCount must match verifierWarnings length.");
+                }
+
+                foreach (var warning in verifierWarnings.Select((node, index) => (node, index)))
+                {
+                    if (warning.node is not JsonObject warningItem)
+                    {
+                        errors.Add($"{profileId}.verifierWarnings[{warning.index}] must be an object.");
+                        continue;
+                    }
+
+                    RequireNonEmpty(warningItem, "checkCode", errors);
+                    RequireNonEmpty(warningItem, "resultCode", errors);
+                    RequireNonEmpty(warningItem, "message", errors);
+                    RequireNonEmpty(warningItem, "evidenceRef", errors);
+                }
+            }
+
+            var gateStatus = GetStringOrDefault(item, "gateStatus");
+            var gateSeverity = GetStringOrDefault(item, "gateSeverity");
+            if (gateStatus == "with_warnings")
+            {
+                if (gateSeverity != "amber")
+                {
+                    errors.Add($"{profileId}.gateSeverity must be amber when gateStatus is with_warnings.");
+                }
+
+                if (verifierWarningCount == 0)
+                {
+                    errors.Add($"{profileId}.gateStatus with_warnings requires verifier warnings.");
+                }
+            }
+            else if (verifierWarningCount > 0)
+            {
+                errors.Add($"{profileId}.verifierWarnings must not be hidden behind gateStatus {gateStatus}.");
+            }
         }
     }
 
@@ -1854,6 +3077,9 @@ public sealed class ReadinessRegisterPromotionService
                 JoinArray(claim, "blockerIds"));
         }
 
+        AppendClaimProfilesSection(sb, register, includeEvidence: false);
+        AppendEnvironmentOperationalChecklistSection(sb);
+
         sb.AppendLine();
         sb.AppendLine("## Active Blockers");
         AppendTableHeader(sb, "Blocker ID", "Claim Level", "Severity", "Status", "Feature", "Gates", "Resolution Criteria");
@@ -2024,6 +3250,9 @@ public sealed class ReadinessRegisterPromotionService
             AppendTableRow(sb, GetRequiredString(blocker, "blockerId"), GetRequiredString(blocker, "featureId"), JoinArray(blocker, "acceptanceGateIds"), GetRequiredString(blocker, "resolutionCriteria"));
         }
 
+        AppendClaimProfilesSection(sb, register, includeEvidence: true);
+        AppendEnvironmentOperationalChecklistSection(sb);
+
         sb.AppendLine();
         sb.AppendLine("## Evidence Index");
         AppendTableHeader(sb, "Evidence ID", "Feature", "Gate", "Dimension", "Visibility", "Restricted Ref", "SHA-256", "Status", "Freshness");
@@ -2103,11 +3332,32 @@ public sealed class ReadinessRegisterPromotionService
         return NormalizeLineEndings(sb.ToString());
     }
 
+    private static void AppendEnvironmentOperationalChecklistSection(StringBuilder sb)
+    {
+        sb.AppendLine();
+        sb.AppendLine("## Environment Operational Checklists");
+        sb.AppendLine();
+        sb.AppendLine("Development Direct claim profiles use the machine checklist only. OPS-002 access-control snapshot, OPS-006 backup/restore, and OPS-008 auditor-room access-log controls move to PreProduction/Production, where they are split into machine and human sub-checklists. PreProduction is optional: if it exists, it can accept an immutable production candidate and Production only needs an activation/delta addendum; if it does not exist, Production runs the full readiness workflow directly. Human checklist entries record observations or signed attestations; claim blocking is decided by the promotion policy, not by editing the checklist.");
+        AppendTableHeader(sb, "Environment", "Sub-Checklist", "Stage Status", "Responsibility", "Evidence / Checks", "Claim Impact");
+        foreach (var row in EnvironmentOperationalChecklistRows)
+        {
+            AppendTableRow(
+                sb,
+                row.Environment,
+                row.SubChecklist,
+                row.StageStatus,
+                row.Responsibility,
+                row.EvidenceOrChecks,
+                row.ClaimImpact);
+        }
+    }
+
     private static string GetPublicSafeSummaryBody(JsonObject register)
     {
         var sb = new StringBuilder();
         var publicationStatus = GetRequiredString(GetRequiredObject(register, "generatedViews"), "publicSafePublicationStatus");
         var strongestAllowedClaim = GetCurrentStrongestAllowedClaim(register);
+        var internalAudit95Accepted = IsInternalAudit95Accepted(register);
         sb.AppendLine("## Current Public-Safe Status");
         sb.AppendLine();
         sb.AppendLine(publicationStatus);
@@ -2138,7 +3388,9 @@ public sealed class ReadinessRegisterPromotionService
         else if (strongestAllowedClaim == "friendly_organization_pilot")
         {
             sb.AppendLine("- Friendly-organization pilot use must remain controlled, bounded, and privately reviewed.");
-            sb.AppendLine("- Hush-owned 95+ hardening, rehearsal evidence, binding-election proof generation, and proof-verification evidence remain future execution gates.");
+            sb.AppendLine(internalAudit95Accepted
+                ? "- Hush-owned internal-audit-95 hardening is accepted in this register; rehearsal evidence, binding-election proof generation, proof verification, customer governance, and external review remain downstream execution gates."
+                : "- Hush-owned 95+ hardening, rehearsal evidence, binding-election proof generation, and proof-verification evidence remain future execution gates.");
         }
         else
         {
@@ -2152,7 +3404,9 @@ public sealed class ReadinessRegisterPromotionService
         }
         else
         {
-            sb.AppendLine("- Production rollout is a future execution gate after Hush-owned 95+ hardening is complete.");
+            sb.AppendLine(internalAudit95Accepted
+                ? "- Production rollout remains a downstream execution gate after internal-audit-95 promotion and still requires rehearsal, binding-election proof validation, customer governance, and external review."
+                : "- Production rollout is a future execution gate after Hush-owned 95+ hardening is complete.");
             sb.AppendLine("- Public/state election readiness is an external boundary outside this internal audit report.");
         }
         sb.AppendLine();
@@ -2175,12 +3429,15 @@ public sealed class ReadinessRegisterPromotionService
 
     private static string GetScorecardGoNoGoResult(JsonObject register)
     {
+        var internalAudit95Accepted = IsInternalAudit95Accepted(register);
         return GetCurrentStrongestAllowedClaim(register) switch
         {
             "production_organizational_rollout" =>
                 "Current go/no-go result: limited organizational rollout is allowed with limitations; public/state election readiness remains an external boundary.",
             "friendly_organization_pilot" =>
-                "Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout is future-gated by the 95+ hardening plan and public/state election readiness remains an external boundary.",
+                internalAudit95Accepted
+                    ? "Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; internal-audit-95 hardening is accepted, while production rollout remains downstream-gated and public/state election readiness remains an external boundary."
+                    : "Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout is future-gated by the 95+ hardening plan and public/state election readiness remains an external boundary.",
             "internal_non_binding_rehearsal" =>
                 "Current go/no-go result: internal non-binding rehearsal is allowed with limitations; pilot and stronger claims are blocked.",
             "internal_development" =>
@@ -2188,6 +3445,17 @@ public sealed class ReadinessRegisterPromotionService
             _ =>
                 "Current go/no-go result: no readiness claim is currently allowed.",
         };
+    }
+
+    private static bool IsInternalAudit95Accepted(JsonObject register)
+    {
+        if (register["score"] is not JsonObject score)
+        {
+            return false;
+        }
+
+        return GetIntOrDefault(score, "strongerTargetScore") >= InternalAudit95ReadinessPlan.TargetScore &&
+            GetIntOrDefault(score, "total") >= InternalAudit95ReadinessPlan.TargetScore;
     }
 
     private static void AppendGeneratedHeader(StringBuilder sb)
@@ -2231,6 +3499,81 @@ public sealed class ReadinessRegisterPromotionService
             GetRequiredString(engineering, "signedAt"));
     }
 
+    private static void AppendClaimProfilesSection(StringBuilder sb, JsonObject register, bool includeEvidence)
+    {
+        if (register["claimProfiles"] is not JsonArray claimProfiles || claimProfiles.Count == 0)
+        {
+            return;
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("## HushVoting Claim Profiles");
+        if (includeEvidence)
+        {
+            AppendTableHeader(
+                sb,
+                "Profile",
+                "Product Mode",
+                "Binding Status",
+                "Non-Binding Election",
+                "Threshold",
+                "Severity",
+                "Gate Status",
+                "Claim Level",
+                "Verifier Warnings",
+                "Evidence Refs",
+                "Required Evidence");
+            foreach (var profile in claimProfiles.Select(x => x!.AsObject()))
+            {
+                AppendTableRow(
+                    sb,
+                    GetRequiredString(profile, "label"),
+                    GetRequiredString(profile, "productMode"),
+                    GetRequiredString(profile, "bindingStatus"),
+                    GetRequiredBool(profile, "isNonBindingElection").ToString(CultureInfo.InvariantCulture).ToLowerInvariant(),
+                    GetRequiredString(profile, "thresholdProfile"),
+                    GetRequiredString(profile, "gateSeverity"),
+                    GetRequiredString(profile, "gateStatus"),
+                    GetRequiredString(profile, "claimLevel"),
+                    JoinClaimProfileWarnings(profile),
+                    JoinArray(profile, "evidenceRefs"),
+                    JoinArray(profile, "requiredEvidence"));
+            }
+
+            return;
+        }
+
+        AppendTableHeader(
+            sb,
+            "Profile",
+            "Product Mode",
+            "Binding Status",
+            "Non-Binding Election",
+            "Threshold",
+            "Severity",
+            "Gate Status",
+            "Claim Level",
+            "Verifier Warnings",
+            "Claim Wording",
+            "Limitation Wording");
+        foreach (var profile in claimProfiles.Select(x => x!.AsObject()))
+        {
+            AppendTableRow(
+                sb,
+                GetRequiredString(profile, "label"),
+                GetRequiredString(profile, "productMode"),
+                GetRequiredString(profile, "bindingStatus"),
+                GetRequiredBool(profile, "isNonBindingElection").ToString(CultureInfo.InvariantCulture).ToLowerInvariant(),
+                GetRequiredString(profile, "thresholdProfile"),
+                GetRequiredString(profile, "gateSeverity"),
+                GetRequiredString(profile, "gateStatus"),
+                GetRequiredString(profile, "claimLevel"),
+                JoinClaimProfileWarnings(profile),
+                GetRequiredString(profile, "claimWording"),
+                GetRequiredString(profile, "limitationWording"));
+        }
+    }
+
     private static string EscapeMarkdownTableValue(string value) =>
         value.Replace("\r", " ", StringComparison.Ordinal)
             .Replace("\n", " ", StringComparison.Ordinal)
@@ -2238,6 +3581,23 @@ public sealed class ReadinessRegisterPromotionService
 
     private static string JoinArray(JsonObject item, string propertyName) =>
         string.Join(", ", GetRequiredArray(item, propertyName).Select(x => x?.GetValue<string>()).Where(x => !string.IsNullOrWhiteSpace(x)));
+
+    private static string JoinClaimProfileWarnings(JsonObject profile)
+    {
+        var warningCount = GetIntOrDefault(profile, "verifierWarningCount");
+        if (warningCount == 0 || profile["verifierWarnings"] is not JsonArray warnings)
+        {
+            return "none";
+        }
+
+        return string.Join(
+            "; ",
+            warnings
+                .Select(node => node?.AsObject())
+                .Where(warning => warning is not null)
+                .Select(warning =>
+                    $"{GetStringOrDefault(warning, "checkCode")} {GetStringOrDefault(warning, "resultCode")}"));
+    }
 
     private static JsonObject? FindClaimLevel(JsonObject register, string claimLevel) =>
         GetRequiredArray(register, "claimLevels")
@@ -2648,6 +4008,7 @@ public sealed class ReadinessRegisterPromotionService
     private static JsonArray GetRequiredArray(JsonObject item, string propertyName) => item[propertyName]!.AsArray();
     private static string GetRequiredString(JsonObject item, string propertyName) => item[propertyName]!.GetValue<string>();
     private static int GetRequiredInt(JsonObject item, string propertyName) => item[propertyName]!.GetValue<int>();
+    private static bool GetRequiredBool(JsonObject item, string propertyName) => item[propertyName]!.GetValue<bool>();
 
     private static string GetStringOrDefault(JsonObject? item, string propertyName) =>
         item is not null && item[propertyName] is JsonValue value && value.TryGetValue<string>(out var result)
@@ -2663,6 +4024,19 @@ public sealed class ReadinessRegisterPromotionService
         item[propertyName] is JsonValue value && value.TryGetValue<bool>(out var result) && result;
 
     private sealed record Feat156PromotionApplication(DateTimeOffset GeneratedAt);
+    private sealed record InternalAudit95PromotionApplication(DateTimeOffset GeneratedAt);
+    private sealed record OperationalChecklistRow(
+        string Environment,
+        string SubChecklist,
+        string StageStatus,
+        string Responsibility,
+        string EvidenceOrChecks,
+        string ClaimImpact);
+    private sealed record ClaimProfileVerifierWarning(
+        string CheckCode,
+        string ResultCode,
+        string Message,
+        string EvidenceRef);
 
     private sealed record PromotedFile(
         string RelativePath,

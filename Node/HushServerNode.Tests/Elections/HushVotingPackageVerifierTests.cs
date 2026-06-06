@@ -32,25 +32,24 @@ public class HushVotingPackageVerifierTests
             VerificationProfileIds.DevelopmentCurrentV1));
 
         result.ExitCode.Should().Be(0);
-        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Pass);
+        result.Output.Results.Should().NotContain(x => x.Status == VerificationCheckStatus.Warn);
         result.Output.Results.Should().Contain(x =>
             x.ResultCode == VerificationResultCodes.EligibilityEvidenceValid &&
             x.Status == VerificationCheckStatus.Pass);
         result.Output.Results.Should().Contain(x =>
             x.CheckCode == ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode &&
-            x.ResultCode == VerificationResultCodes.ReleaseIntegrityEvidencePending &&
-            x.Status == VerificationCheckStatus.Warn);
+            x.ResultCode == VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder &&
+            x.Status == VerificationCheckStatus.Pass);
         result.Output.Results.Should().Contain(x =>
             x.CheckCode == ElectionSp09ProfileIds.ReviewStatusValidCheckCode &&
             x.ResultCode == VerificationResultCodes.ExternalReviewStatusValid &&
             x.Status == VerificationCheckStatus.Pass);
-        result.Output.Results.Should().Contain(x =>
-            x.CheckCode == ElectionSp09ProfileIds.ReviewNotCompleteCheckCode &&
-            x.ResultCode == VerificationResultCodes.ExternalReviewNotComplete &&
-            x.Status == VerificationCheckStatus.Warn);
+        result.Output.Results.Should().NotContain(x =>
+            x.CheckCode == ElectionSp09ProfileIds.ReviewNotCompleteCheckCode);
         result.Output.Results.Should().Contain(x =>
             x.CheckCode == ElectionSp10ProfileIds.ReleaseDeploymentBindingCheckCode &&
-            x.Status == VerificationCheckStatus.Warn);
+            x.Status == VerificationCheckStatus.Pass);
         result.Output.Results.Should().Contain(x =>
             x.CheckCode == ElectionSp10ProfileIds.ForbiddenMaterialScanCheckCode &&
             x.ResultCode == VerificationResultCodes.OperationalSecurityEvidenceValid &&
@@ -61,6 +60,52 @@ public class HushVotingPackageVerifierTests
         File.Exists(Path.Combine(package.PackagePath, "verifier-output", "VerifierSummary.md"))
             .Should()
             .BeTrue();
+    }
+
+    [Fact]
+    public async Task Verify_DevelopmentPackageWithLifecycleReleaseChange_ShouldFail()
+    {
+        using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
+        var releaseManifest = await ReadPackageArtifactAsync<ElectionSp08ReleaseManifestArtifactRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp08ReleaseManifest);
+        var tamperedLifecycle = releaseManifest.LifecycleBindings
+            .Select(binding => binding.LifecycleStage == ElectionSp08ProfileIds.CloseLifecycleStage
+                ? binding with { ObservedArtifactDigest = $"sha256:{new string('f', 64)}" }
+                : binding)
+            .ToArray();
+        var tamperedManifest = releaseManifest with
+        {
+            LifecycleBindings = tamperedLifecycle,
+        };
+        await WritePackageArtifactAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp08ReleaseManifest,
+            tamperedManifest);
+
+        var releaseIntegrity = await ReadPackageArtifactAsync<ElectionSp08ReleaseIntegrityArtifactRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp08ReleaseIntegrity);
+        await WritePackageArtifactAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp08ReleaseIntegrity,
+            releaseIntegrity with
+            {
+                ReleaseManifestHash = ElectionSp08ReleaseManifestHasher.ComputeReleaseManifestHash(tamperedManifest),
+                LifecycleBindings = tamperedManifest.LifecycleBindings,
+            });
+        await RefreshAuditManifestAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Fail);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp08ProfileIds.LifecycleBindingCheckCode &&
+            x.ResultCode == VerificationResultCodes.ReleaseIntegrityLifecycleMismatch &&
+            x.Status == VerificationCheckStatus.Fail);
     }
 
     [Fact]
@@ -1129,12 +1174,12 @@ public class HushVotingPackageVerifierTests
             VerificationJson.Options)!;
         verifierOutput.Results.Should().Contain(x =>
             x.CheckCode == ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode &&
-            x.ResultCode == VerificationResultCodes.ReleaseIntegrityEvidencePending &&
-            x.Status == VerificationCheckStatus.Warn);
+            x.ResultCode == VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder &&
+            x.Status == VerificationCheckStatus.Pass);
 
         var summary = await File.ReadAllTextAsync(Path.Combine(output.PackagePath, "VerifierSummary.md"));
         summary.Should().Contain(ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode);
-        summary.Should().Contain(VerificationResultCodes.ReleaseIntegrityEvidencePending);
+        summary.Should().Contain(VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder);
     }
 
     private static TemporaryPackageDirectory CreatePackage(string profileId)

@@ -1027,23 +1027,29 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
     {
         if (request.Sp10OperationalSecurityStatus is null)
         {
-            var evidenceState = ElectionSp10ProfileIds.EvidenceStateNotAvailable;
+            var evidenceState = ElectionSp10ProfileIds.EvidenceStateDevelopmentPlaceholder;
             return new OperationalSecurityProjection(
                 ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
                 ElectionSp10ProfileIds.DeploymentProfileManagedAwsContainerV1,
                 evidenceState,
                 DoesNotCompleteFeat106Readiness: true,
                 ElectionSp10OperationalSecurityRules.GetAllowedWordingForEvidenceState(evidenceState),
-                ReleaseEvidenceMode: null,
+                request.FinalizationReleaseEvidence?.ReleaseMode.ToString(),
                 ReleaseManifestHash: null,
-                ImmutableDeploymentRef: null,
-                CustodyMode: null,
-                ExecutorKeyLifecycle: null,
-                IncidentStatus: null,
-                BlocksHighAssurance: true,
-                VerificationResultCodes.OperationalSecurityEvidenceMissing,
-                "SP-10 operational security evidence is not attached to this report package.",
-                PublicEvidenceFiles: [],
+                ImmutableDeploymentRef: request.DeploymentProofBindingLedger?.PublicCatalogRef,
+                CustodyMode: ResolveSp10CustodyMode(request.Election),
+                ExecutorKeyLifecycle: ElectionSp10ProfileIds.ExecutorKeyLifecycleEphemeralMemoryV1,
+                IncidentStatus: ElectionSp10ProfileIds.IncidentStatusNoIncidentDeclared,
+                ElectionSp10OperationalSecurityRules.BlocksHighAssurance(evidenceState),
+                ElectionSp10OperationalSecurityRules.GetPrimaryResultCode(evidenceState),
+                "Development-only SP-10 operational evidence is attached for this local rehearsal. Rollout readiness, legal validation, public-election approval, and certification remain out of scope.",
+                PublicEvidenceFiles:
+                [
+                    VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+                    VerificationPackageFileNames.Sp10OperationalDeploymentEvidence,
+                    VerificationPackageFileNames.Sp10OperationalCustodyEvidence,
+                    VerificationPackageFileNames.Sp10OperationalVerifierOutput,
+                ],
                 RestrictedEvidenceFiles: []);
         }
 
@@ -1109,6 +1115,11 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             claim.PublicEvidenceFiles,
             claim.RestrictedEvidenceFiles);
     }
+
+    private static string ResolveSp10CustodyMode(ElectionRecord election) =>
+        election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold
+            ? ElectionSp10ProfileIds.CustodyModeTrusteeLocalSecureVaultV1
+            : ElectionSp10ProfileIds.CustodyModeAwsKmsPerElectionEnvelopeV1;
 
     private static WarningEvidenceProjection[] BuildWarningEvidenceProjections(ElectionReportPackageBuildRequest request)
     {

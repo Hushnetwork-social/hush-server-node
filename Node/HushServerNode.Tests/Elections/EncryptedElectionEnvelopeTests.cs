@@ -708,6 +708,60 @@ public class EncryptedElectionEnvelopeTests
     }
 
     [Fact]
+    public void ValidateAndSign_WithMalformedPreparedBallotId_ReturnsStableFailure()
+    {
+        var signedEnvelope = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                ElectionId.NewElectionId,
+                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                "node-envelope",
+                "actor-envelope",
+                "encrypted-payload"),
+            new SignatureInfo("voter-address", "signature"));
+
+        var cryptoService = new Mock<IElectionEnvelopeCryptoService>();
+        cryptoService
+            .Setup(x => x.TryDecryptSigned(It.IsAny<AbstractTransaction>()))
+            .Returns(new DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>>(
+                signedEnvelope,
+                EncryptedElectionEnvelopeActionTypes.RegisterPreparedBallotCommitment,
+                JsonSerializer.Serialize(new
+                {
+                    ActorPublicAddress = "voter-address",
+                    PreparedBallotId = "not-a-guid",
+                    PreparedBallotHash = "prepared-hash",
+                    BallotDefinitionVersion = 1,
+                    BallotDefinitionHash = "ballot-definition-hash",
+                    CeremonyProfileId = ElectionSp04ProfileIds.ChallengeSpoilV1,
+                    ProofStatementId = "sp04-prepared-ballot-proof-v1",
+                })));
+
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        credentialsProvider
+            .Setup(x => x.GetCredentials())
+            .Returns(new CredentialsProfile
+            {
+                PublicSigningAddress = "validator-address",
+                PrivateSigningKey = new DigitalSignature().PrivateKey,
+                PublicEncryptAddress = "validator-encrypt-address",
+                PrivateEncryptKey = "validator-private-encrypt-key",
+            });
+
+        var sut = CreateContentHandler(
+            cryptoService.Object,
+            Mock.Of<ICreateElectionDraftValidationService>(),
+            credentialsProvider.Object,
+            Mock.Of<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>(),
+            Mock.Of<IElectionLifecycleService>());
+
+        var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        sut.TryTakeValidationFailure(signedEnvelope.TransactionId.Value, out var failure).Should().BeTrue();
+        failure.Code.Should().Be("election_prepared_ballot_validation_failed");
+    }
+
+    [Fact]
     public void ValidateAndSign_WithPendingAcceptBallotCastSubmissionInMemPool_ReturnsNull()
     {
         var openedAt = DateTime.UtcNow.AddMinutes(-10);

@@ -288,7 +288,9 @@ public sealed partial class HushVotingPackageVerifier
             !string.Equals(status.ImmutableDeploymentRef, deployment.ImmutableDeploymentRef, StringComparison.Ordinal);
         var releaseMismatch = releaseIntegrity is not null &&
             !string.Equals(status.ReleaseManifestHash, releaseIntegrity.ReleaseManifestHash, StringComparison.OrdinalIgnoreCase);
-        var mutableDeploymentRef = !string.IsNullOrWhiteSpace(status.ImmutableDeploymentRef) &&
+        var mutableDeploymentRef =
+            !VerificationProfileIds.AcceptsDevelopmentEvidence(profileId) &&
+            !string.IsNullOrWhiteSpace(status.ImmutableDeploymentRef) &&
             ElectionSp08ReleaseIntegrityRules.IsMutableOrLocalReference(status.ImmutableDeploymentRef);
         var hasEvidence = !missingBinding && !mismatchedBinding && !releaseMismatch && !mutableDeploymentRef;
 
@@ -510,7 +512,12 @@ public sealed partial class HushVotingPackageVerifier
     {
         var checkStatus = GetOperationalEvidenceCheckStatus(profileId, status, hasEvidence);
         var resultCode = checkStatus == VerificationCheckStatus.Pass
-            ? VerificationResultCodes.OperationalSecurityEvidenceValid
+            ? string.Equals(
+                status.EvidenceState,
+                ElectionSp10ProfileIds.EvidenceStateDevelopmentPlaceholder,
+                StringComparison.Ordinal)
+                ? VerificationResultCodes.OperationalSecurityDevelopmentPlaceholder
+                : VerificationResultCodes.OperationalSecurityEvidenceValid
             : hasEvidence
                 ? ElectionSp10OperationalSecurityRules.GetPrimaryResultCode(status.EvidenceState)
                 : missingResultCode;
@@ -529,9 +536,15 @@ public sealed partial class HushVotingPackageVerifier
         ElectionSp10OperationalSecurityStatusArtifactRecord status,
         bool hasEvidence)
     {
-        var highAssurance = string.Equals(profileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal);
+        var highAssurance = VerificationProfileIds.RequiresHighAssuranceEvidence(profileId);
         var evidenceAvailable = ElectionSp10OperationalSecurityRules.IsHighAssuranceOperationalClaimAllowed(
             status.EvidenceState);
+        var developmentEvidenceAvailable =
+            VerificationProfileIds.AcceptsDevelopmentEvidence(profileId) &&
+            string.Equals(
+                status.EvidenceState,
+                ElectionSp10ProfileIds.EvidenceStateDevelopmentPlaceholder,
+                StringComparison.Ordinal);
         if (!hasEvidence)
         {
             return highAssurance || evidenceAvailable
@@ -539,7 +552,7 @@ public sealed partial class HushVotingPackageVerifier
                 : VerificationCheckStatus.Warn;
         }
 
-        if (evidenceAvailable)
+        if (evidenceAvailable || developmentEvidenceAvailable)
         {
             return VerificationCheckStatus.Pass;
         }

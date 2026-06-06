@@ -440,7 +440,7 @@ public class ElectionsGrpcServiceTests
             ReleaseManifestHash: string.Empty,
             ProtocolPackageManifestName: "ProtocolOmegaPackageManifest.json",
             ProtocolPackageManifestHash: "sha256:protocol",
-            PrimaryResultCode: VerificationResultCodes.ReleaseIntegrityEvidencePending,
+            PrimaryResultCode: VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder,
             PrimaryIssue: warning,
             ComponentCount: ElectionSp08ProfileIds.RequiredHighAssuranceComponentIds.Count,
             LifecycleBindingCount: 0,
@@ -464,7 +464,7 @@ public class ElectionsGrpcServiceTests
         response.Sp08ReleaseIntegrity.Should().NotBeNull();
         response.Sp08ReleaseIntegrity.BlocksHighAssurance.Should().BeFalse();
         response.Sp08ReleaseIntegrity.PrimaryResultCode.Should().Be(
-            VerificationResultCodes.ReleaseIntegrityEvidencePending);
+            VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder);
         response.Sp08ReleaseIntegrity.Message.Should().Be(warning);
     }
 

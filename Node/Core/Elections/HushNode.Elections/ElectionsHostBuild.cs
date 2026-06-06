@@ -23,9 +23,11 @@ public static class ElectionsHostBuild
         {
             services.AddSingleton(CreateCeremonyOptions(hostContext.Configuration));
             services.AddSingleton(CreateProtocolPackageCatalogOptions(hostContext.Configuration));
+            services.AddSingleton(CreateProtocolPackageCatalogRemoteSyncOptions(hostContext.Configuration));
             services.AddSingleton(CreateBallotPublicationOptions(hostContext.Configuration));
             services.AddSingleton(CreateEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreateDeploymentProofOptions(hostContext.Configuration));
+            services.AddSingleton(CreateDeploymentProofProviderOptions(hostContext.Configuration));
             services.AddSingleton(CreateAdminOnlyProtectedTallyEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreateCloseCountingExecutorEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreatePublicationWitnessEnvelopeOptions(hostContext.Configuration));
@@ -117,8 +119,10 @@ public static class ElectionsHostBuild
         services.AddSingleton<IElectionPublicationWitnessDeletionService, ElectionPublicationWitnessDeletionService>();
         services.AddSingleton<IElectionWebClientDeploymentProofObservationService, ElectionWebClientDeploymentProofObservationService>();
         services.AddSingleton<IElectionDeploymentProofProfilePolicy, ElectionDeploymentProofProfilePolicy>();
-        services.AddSingleton<IActiveDeploymentProofProvider, LocalDevelopmentActiveDeploymentProofProvider>();
+        services.AddSingleton<IActiveDeploymentProofProvider>(CreateActiveDeploymentProofProvider);
         services.AddSingleton<IElectionDeploymentProofBindingService, ElectionDeploymentProofBindingService>();
+        services.AddSingleton<HttpClient>();
+        services.AddSingleton<IProtocolPackageCatalogSyncService, ProtocolPackageCatalogRemoteSyncService>();
         services.AddSingleton<ElectionBallotPublicationService>();
         services.AddSingleton<IElectionBallotPublicationService>(sp => sp.GetRequiredService<ElectionBallotPublicationService>());
         services.AddSingleton<IElectionLifecycleService>(sp =>
@@ -141,7 +145,8 @@ public static class ElectionsHostBuild
                 sp08ReleaseEvidenceProvider: sp.GetRequiredService<IElectionSp08ReleaseEvidenceProvider>(),
                 adminOnlyProtectedTallyCustodyLifecycleAuthority:
                     sp.GetRequiredService<IAdminOnlyProtectedTallyCustodyLifecycleAuthority>(),
-                deploymentProofBindingService: sp.GetRequiredService<IElectionDeploymentProofBindingService>()));
+                deploymentProofBindingService: sp.GetRequiredService<IElectionDeploymentProofBindingService>(),
+                protocolPackageCatalogSyncService: sp.GetRequiredService<IProtocolPackageCatalogSyncService>()));
         services.AddHostedService<TallyExecutorBackgroundService>();
     }
 
@@ -165,6 +170,34 @@ public static class ElectionsHostBuild
             FailOnMissingCatalog: configuration.GetValue(
                 "Elections:ProtocolPackages:FailOnMissingCatalog",
                 defaultValue: false));
+
+    private static ProtocolPackageCatalogRemoteSyncOptions CreateProtocolPackageCatalogRemoteSyncOptions(
+        IConfiguration configuration)
+    {
+        var defaults = ProtocolPackageCatalogRemoteSyncOptions.Default;
+        return new ProtocolPackageCatalogRemoteSyncOptions(
+            Enabled: configuration.GetValue(
+                "Elections:ProtocolPackages:RemoteSyncEnabled",
+                defaults.Enabled),
+            ReleasesApiUrl: configuration.GetValue(
+                "Elections:ProtocolPackages:RemoteReleasesApiUrl",
+                defaults.ReleasesApiUrl)!,
+            PackageId: configuration.GetValue(
+                "Elections:ProtocolPackages:RemotePackageId",
+                defaults.PackageId)!,
+            ReleaseTagPrefix: configuration.GetValue(
+                "Elections:ProtocolPackages:RemoteReleaseTagPrefix",
+                defaults.ReleaseTagPrefix)!,
+            AssetNamePrefix: configuration.GetValue(
+                "Elections:ProtocolPackages:RemoteAssetNamePrefix",
+                defaults.AssetNamePrefix)!,
+            MaxReleasesToInspect: configuration.GetValue(
+                "Elections:ProtocolPackages:RemoteMaxReleasesToInspect",
+                defaults.MaxReleasesToInspect),
+            RequestTimeoutSeconds: configuration.GetValue(
+                "Elections:ProtocolPackages:RemoteRequestTimeoutSeconds",
+                defaults.RequestTimeoutSeconds));
+    }
 
     private static ElectionBallotPublicationOptions CreateBallotPublicationOptions(IConfiguration configuration) =>
         new(
@@ -201,6 +234,53 @@ public static class ElectionsHostBuild
                 "Elections:DeploymentProof:LocalDevelopmentProfileIds",
                 "HUSH_ELECTIONS_DEPLOYMENT_PROOF_LOCAL_DEV_PROFILES")
                 ?? defaults.LocalDevelopmentProfileIds);
+    }
+
+    internal static ElectionDeploymentProofProviderOptions CreateDeploymentProofProviderOptions(
+        IConfiguration configuration)
+    {
+        var defaults = ElectionDeploymentProofProviderOptions.Default;
+
+        return new ElectionDeploymentProofProviderOptions(
+            Provider: GetConfigValue(
+                configuration,
+                "Elections:DeploymentProof:Provider",
+                "HUSH_ELECTIONS_DEPLOYMENT_PROOF_PROVIDER")
+                ?? defaults.Provider,
+            DevelopmentRuntimeDeploymentTarget: GetConfigValue(
+                configuration,
+                "Elections:DeploymentProof:DevelopmentRuntimeDeploymentTarget",
+                "HUSH_ELECTIONS_DEPLOYMENT_PROOF_DEVELOPMENT_RUNTIME_TARGET")
+                ?? defaults.DevelopmentRuntimeDeploymentTarget,
+            DevelopmentRuntimePublicPackageRef: GetConfigValue(
+                configuration,
+                "Elections:DeploymentProof:DevelopmentRuntimePublicPackageRef",
+                "HUSH_ELECTIONS_DEPLOYMENT_PROOF_DEVELOPMENT_RUNTIME_PUBLIC_PACKAGE_REF"),
+            DevelopmentRuntimeProofIdPrefix: GetConfigValue(
+                configuration,
+                "Elections:DeploymentProof:DevelopmentRuntimeProofIdPrefix",
+                "HUSH_ELECTIONS_DEPLOYMENT_PROOF_DEVELOPMENT_RUNTIME_PROOF_ID_PREFIX")
+                ?? defaults.DevelopmentRuntimeProofIdPrefix);
+    }
+
+    internal static IActiveDeploymentProofProvider CreateActiveDeploymentProofProvider(
+        IServiceProvider serviceProvider)
+    {
+        var options = serviceProvider.GetService<ElectionDeploymentProofProviderOptions>()
+            ?? ElectionDeploymentProofProviderOptions.Default;
+
+        return options.Provider.Trim().ToLowerInvariant() switch
+        {
+            ElectionDeploymentProofProviderOptions.ProviderLocalDevelopment or
+            "local" or
+            "local_dev" =>
+                new LocalDevelopmentActiveDeploymentProofProvider(),
+            ElectionDeploymentProofProviderOptions.ProviderDevelopmentRuntime or
+            "dev_runtime" =>
+                new DevelopmentRuntimeActiveDeploymentProofProvider(options),
+            _ => throw new InvalidOperationException(
+                $"Unsupported election deployment proof provider mode: {options.Provider}"),
+        };
     }
 
     private static AdminOnlyProtectedTallyEnvelopeCryptoOptions CreateAdminOnlyProtectedTallyEnvelopeOptions(

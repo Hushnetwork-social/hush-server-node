@@ -147,6 +147,97 @@ public class ElectionVerificationPackageExportServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-143")]
+    public void Export_PublicPackageWithDeploymentProofLedgerObservations_ShouldBindSp08DevelopmentLifecycle()
+    {
+        var request = CreateRequest(VerificationPackageView.PublicAnonymous);
+        var serverExpectedHash = $"sha256:{new string('a', 64)}";
+        var serverObservedHash = $"sha256:{new string('b', 64)}";
+        var webHash = $"sha256:{new string('c', 64)}";
+        var content = $$"""
+            {
+              "schemaId": "hushvoting-deployment-proof-public-ledger-v1",
+              "ledgerPublicId": "ledger-dev-direct",
+              "activeProofSetIdAtOpen": "proof-set-open",
+              "componentObservations": [
+                {
+                  "observationId": "11111111-1111-1111-1111-111111111111",
+                  "checkpointId": "22222222-2222-2222-2222-222222222222",
+                  "componentId": "HushServerNode",
+                  "deploymentProofId": "server-proof-open",
+                  "expectedDeploymentProofId": "server-proof-open",
+                  "observedDeploymentProofId": "server-proof-close",
+                  "expectedArtifactHash": "{{serverExpectedHash}}",
+                  "observedArtifactHash": "{{serverObservedHash}}",
+                  "evidenceStatus": "Mismatch",
+                  "observationSource": "Fixture",
+                  "sourceRef": "dev://hush-server-node",
+                  "observedAtUtc": "2026-06-05T10:00:00Z"
+                },
+                {
+                  "observationId": "33333333-3333-3333-3333-333333333333",
+                  "checkpointId": "44444444-4444-4444-4444-444444444444",
+                  "componentId": "HushWebClient",
+                  "deploymentProofId": "web-proof-open",
+                  "expectedDeploymentProofId": "web-proof-open",
+                  "observedDeploymentProofId": "web-proof-open",
+                  "expectedArtifactHash": "{{webHash}}",
+                  "observedArtifactHash": "{{webHash}}",
+                  "evidenceStatus": "Accepted",
+                  "observationSource": "Fixture",
+                  "publicPackageRef": "dev://hush-web-client",
+                  "observedAtUtc": "2026-06-05T10:01:00Z"
+                }
+              ]
+            }
+            """;
+        var artifact = ElectionModelFactory.CreateReportArtifact(
+            request.ReportPackage!.Id,
+            request.Election.ElectionId,
+            ElectionReportArtifactKind.MachineDeploymentProofBindingLedger,
+            ElectionReportArtifactFormat.Json,
+            ElectionReportArtifactAccessScope.Public,
+            sortOrder: 16,
+            title: "Deployment proof binding ledger",
+            fileName: ElectionDeploymentProofConstants.PublicLedgerArtifactFileName,
+            mediaType: "application/json",
+            contentHash: SHA256.HashData(Encoding.UTF8.GetBytes(content)),
+            content: content);
+
+        var result = Export(request with
+        {
+            ReportArtifacts = [.. request.ReportArtifacts, artifact],
+        });
+
+        result.Success.Should().BeTrue();
+        var releaseManifest = ReadFile<ElectionSp08ReleaseManifestArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp08ReleaseManifest);
+        releaseManifest.Components.Should().Contain(x =>
+            x.ComponentId == ElectionSp08ProfileIds.ServerComponent &&
+            x.ArtifactDigest == serverObservedHash &&
+            x.ImmutableReference == "dev://hush-server-node");
+        releaseManifest.Components.Should().Contain(x =>
+            x.ComponentId == ElectionSp08ProfileIds.WebClientComponent &&
+            x.ArtifactDigest == webHash &&
+            x.ImmutableReference == "dev://hush-web-client");
+        releaseManifest.LifecycleBindings.Should().Contain(x =>
+            x.LifecycleStage == ElectionSp08ProfileIds.OpenLifecycleStage &&
+            x.ExpectedReleaseId == "server-proof-open" &&
+            x.ObservedReleaseId == "server-proof-close" &&
+            x.ExpectedArtifactDigest == serverExpectedHash &&
+            x.ObservedArtifactDigest == serverObservedHash &&
+            !x.MatchesSealedPolicy);
+        releaseManifest.LifecycleBindings.Should().Contain(x =>
+            x.LifecycleStage == ElectionSp08ProfileIds.ClientReleaseSetLifecycleStage &&
+            x.ExpectedReleaseId == "web-proof-open" &&
+            x.ObservedReleaseId == "web-proof-open" &&
+            x.ExpectedArtifactDigest == webHash &&
+            x.ObservedArtifactDigest == webHash &&
+            x.MatchesSealedPolicy);
+    }
+
+    [Fact]
     [Trait("Category", "FEAT-139")]
     public void Export_ReportPackageAbnormalFinalizationArtifact_ShouldDeclareNonCleanOutcome()
     {
@@ -226,10 +317,8 @@ public class ElectionVerificationPackageExportServiceTests
             x.CheckCode == ElectionSp09ProfileIds.ReviewStatusValidCheckCode &&
             x.Status == VerificationCheckStatus.Pass &&
             x.ResultCode == VerificationResultCodes.ExternalReviewStatusValid);
-        verifierOutput.Results.Should().ContainSingle(x =>
-            x.CheckCode == ElectionSp09ProfileIds.ReviewNotCompleteCheckCode &&
-            x.Status == VerificationCheckStatus.Warn &&
-            x.ResultCode == VerificationResultCodes.ExternalReviewNotComplete);
+        verifierOutput.Results.Should().NotContain(x =>
+            x.CheckCode == ElectionSp09ProfileIds.ReviewNotCompleteCheckCode);
     }
 
     [Fact]
@@ -257,6 +346,9 @@ public class ElectionVerificationPackageExportServiceTests
         summary.BlocksHighAssurance.Should().BeTrue();
         summary.PrimaryResultCode.Should().Be(VerificationResultCodes.OperationalSecurityDevelopmentPlaceholder);
         summary.RestrictedEvidenceFiles.Should().BeEmpty();
+        summary.AccessSnapshotHashOrRestrictedRef.Should().NotBeNullOrWhiteSpace();
+        summary.BackupRestoreHashOrRestrictedRef.Should().NotBeNullOrWhiteSpace();
+        summary.AuditorRoomAccessLogHashOrRestrictedRef.Should().NotBeNullOrWhiteSpace();
         ElectionSp10OperationalSecurityRules.Validate(summary).Should().BeEmpty();
 
         var deployment = ReadFile<ElectionSp10OperationalDeploymentEvidenceArtifactRecord>(
@@ -283,7 +375,7 @@ public class ElectionVerificationPackageExportServiceTests
             x.ResultCode == VerificationResultCodes.OperationalSecurityProfileDeclared);
         verifierOutput.Results.Should().Contain(x =>
             x.ResultCode == VerificationResultCodes.OperationalSecurityDevelopmentPlaceholder &&
-            x.Status == VerificationCheckStatus.Warn);
+            x.Status == VerificationCheckStatus.Pass);
 
         var publicPayload = string.Join(
             '\n',
@@ -375,7 +467,7 @@ public class ElectionVerificationPackageExportServiceTests
             result,
             VerificationPackageFileNames.Sp08ReleaseIntegrity);
         integrity.BlocksHighAssurance.Should().BeTrue();
-        integrity.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityEvidencePending);
+        integrity.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder);
         integrity.ReleaseManifestHash.Should().Be(
             ElectionSp08ReleaseManifestHasher.ComputeReleaseManifestHash(releaseManifest));
 
@@ -384,8 +476,8 @@ public class ElectionVerificationPackageExportServiceTests
             VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput);
         verifierOutput.Results.Should().ContainSingle(x =>
             x.CheckCode == ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode &&
-            x.Status == VerificationCheckStatus.Warn &&
-            x.ResultCode == VerificationResultCodes.ReleaseIntegrityEvidencePending);
+            x.Status == VerificationCheckStatus.Pass &&
+            x.ResultCode == VerificationResultCodes.ReleaseIntegrityDevelopmentPlaceholder);
     }
 
     [Fact]

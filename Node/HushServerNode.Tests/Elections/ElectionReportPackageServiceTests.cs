@@ -439,6 +439,10 @@ public class ElectionReportPackageServiceTests
         machineManifest.Content.Should().Contain("\"externalReviewClaimState\": \"program_defined\"");
         machineManifest.Content.Should().Contain(
             "\"externalReviewCustomerSafeSummary\": \"External examination program is defined; no reviewer conclusion is available.\"");
+        machineManifest.Content.Should().Contain("\"evidenceState\": \"development_placeholder\"");
+        machineManifest.Content.Should().Contain("\"primaryResultCode\": \"operational_security_development_placeholder\"");
+        machineManifest.Content.Should().Contain("\"doesNotCompleteFeat106Readiness\": true");
+        machineManifest.Content.Should().NotContain("\"primaryResultCode\": \"operational_security_evidence_missing\"");
         machineManifest.Content.Should().Contain("https://www.hushnetwork.social/protocol-omega/hushvoting-v1/spec.zip");
 
         var machineEvidenceGraph = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineEvidenceGraph);

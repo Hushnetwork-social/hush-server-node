@@ -89,6 +89,19 @@ public sealed class ProtocolPackagePromotionService
         "ChangeLog.md",
     ];
 
+    private const string BundledCircuitVersion = "omega-v1.0.0";
+    private const string BundledCircuitArtifactMode = "bundled_deployment";
+    private const string BundledCircuitDeploymentRequirement =
+        "Protocol Omega v1 circuit artifacts are bundled with the deployed HushWebClient/HushServerNode release; changing these artifacts requires a coordinated redeploy.";
+    private const string BundledReactionWasmPath = "hush-web-client/public/circuits/omega-v1.0.0/reaction.wasm";
+    private const string BundledReactionZkeyPath = "hush-web-client/public/circuits/omega-v1.0.0/reaction.zkey";
+    private const long BundledReactionWasmSizeBytes = 2_877_397;
+    private const long BundledReactionZkeySizeBytes = 27_806_424;
+    private const string BundledReactionWasmSha256 =
+        "71d1ee45d944313bb2c86a1851f3b09a481481675fa80ddfd3205d99d7613f8b";
+    private const string BundledReactionZkeySha256 =
+        "65620abc5030404403c19b22b623e115807eb2603cb5953f195959a76ba91b5c";
+
     public ProtocolPackagePromotionResult Promote(ProtocolPackagePromotionOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -150,12 +163,14 @@ public sealed class ProtocolPackagePromotionService
             RequiredProofFiles,
             writtenFiles);
 
+        var circuitBinding = CreateBundledCircuitBinding();
         var releaseHash = ComputeReleaseManifestHash(
             options,
             promotionPlan,
             specification.Manifest,
             proof.Manifest,
-            releaseFiles);
+            releaseFiles,
+            circuitBinding);
         var releaseManifest = ElectionModelFactory.CreateProtocolOmegaPackageReleaseManifest(
             options.PackageId,
             promotionPlan.PackageVersion,
@@ -168,7 +183,8 @@ public sealed class ProtocolPackagePromotionService
             proof.Manifest.AccessLocations,
             releaseFiles,
             externalReviewStatus: proof.Manifest.ExternalReviewStatus,
-            releasedAt: promotionPlan.GeneratedAt);
+            releasedAt: promotionPlan.GeneratedAt,
+            circuitBinding: circuitBinding);
         var releaseManifestPath = Path.Combine(officialVersionRoot, ReleaseManifestFileName);
         WriteJson(releaseManifestPath, releaseManifest);
         writtenFiles.Add(releaseManifestPath);
@@ -441,13 +457,17 @@ public sealed class ProtocolPackagePromotionService
         var normalizedText = relativePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
             ? Regex.Replace(
                 originalText,
-                "(\"packageVersion\"\\s*:\\s*\")([^\"]*)(\")",
+                "(\"(?:packageVersion|protocolPackageVersion)\"\\s*:\\s*\")([^\"]*)(\")",
                 match => $"{match.Groups[1].Value}{packageVersion}{match.Groups[3].Value}")
             : Regex.Replace(
                 originalText,
                 "^Version:\\s*.+$",
                 $"Version: {packageVersion}",
                 RegexOptions.Multiline);
+        normalizedText = Regex.Replace(
+            normalizedText,
+            "(/protocol-omega/hushvoting-v1/)v\\d+\\.\\d+\\.\\d+(/)",
+            match => $"{match.Groups[1].Value}{packageVersion}{match.Groups[2].Value}");
 
         if (string.Equals(originalText, normalizedText, StringComparison.Ordinal))
         {
@@ -465,7 +485,8 @@ public sealed class ProtocolPackagePromotionService
         ProtocolPackagePromotionPlan promotionPlan,
         ProtocolPackageManifestRecord specificationManifest,
         ProtocolPackageManifestRecord proofManifest,
-        IReadOnlyList<ProtocolPackageFileHashRecord> releaseFiles)
+        IReadOnlyList<ProtocolPackageFileHashRecord> releaseFiles,
+        ProtocolOmegaCircuitBindingRecord circuitBinding)
     {
         var hashPayload = new
         {
@@ -479,10 +500,29 @@ public sealed class ProtocolPackagePromotionService
             specificationAccessLocations = NormalizeAccessLocations(specificationManifest.AccessLocations),
             proofAccessLocations = NormalizeAccessLocations(proofManifest.AccessLocations),
             externalReviewStatus = proofManifest.ExternalReviewStatus.ToString(),
+            circuitBinding = NormalizeCircuitBinding(circuitBinding),
         };
 
         return ComputeSha256Hex(JsonSerializer.SerializeToUtf8Bytes(hashPayload, CanonicalJsonOptions));
     }
+
+    private static ProtocolOmegaCircuitBindingRecord CreateBundledCircuitBinding() =>
+        new(
+            BundledCircuitVersion,
+            BundledCircuitArtifactMode,
+            [
+                ElectionModelFactory.CreateProtocolPackageFileHash(
+                    BundledReactionWasmPath,
+                    BundledReactionWasmSha256,
+                    BundledReactionWasmSizeBytes,
+                    "application/wasm"),
+                ElectionModelFactory.CreateProtocolPackageFileHash(
+                    BundledReactionZkeyPath,
+                    BundledReactionZkeySha256,
+                    BundledReactionZkeySizeBytes,
+                    "application/octet-stream"),
+            ],
+            BundledCircuitDeploymentRequirement);
 
     private static IReadOnlyList<object> NormalizeAccessLocations(
         IReadOnlyList<ProtocolPackageAccessLocationRecord> accessLocations) =>
@@ -514,6 +554,15 @@ public sealed class ProtocolPackagePromotionService
             })
             .Cast<object>()
             .ToArray();
+
+    private static object NormalizeCircuitBinding(ProtocolOmegaCircuitBindingRecord circuitBinding) =>
+        new
+        {
+            circuitBinding.CircuitVersion,
+            circuitBinding.CircuitArtifactMode,
+            circuitArtifacts = NormalizeFileHashes(circuitBinding.CircuitArtifacts),
+            circuitBinding.DeploymentRequirement,
+        };
 
     private static SourcePackageState AnalyzeSourceState(ProtocolPackagePromotionOptions options)
     {
@@ -991,6 +1040,10 @@ public sealed class ProtocolPackagePromotionService
         ElectionSelectableProfileCatalog.AdminOnlyDevProfileId,
         ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
         ElectionSelectableProfileCatalog.TrusteeDevProfileId,
+        ElectionSelectableProfileCatalog.TrusteeVeritas2KProductionProfileId,
+        ElectionSelectableProfileCatalog.TrusteeVeritas2KDevProfileId,
+        ElectionSelectableProfileCatalog.TrusteeVeritas10KProductionProfileId,
+        ElectionSelectableProfileCatalog.TrusteeVeritas10KDevProfileId,
     ];
 
     private static void WriteJson<TValue>(string path, TValue value)
