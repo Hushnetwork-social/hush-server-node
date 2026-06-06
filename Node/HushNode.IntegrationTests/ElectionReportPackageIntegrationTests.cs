@@ -741,12 +741,12 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         verification.Output.PackageId.Should().Be(publicExport.PackageId);
         verification.Output.ElectionId.Should().Be(context.ElectionId);
         verification.Output.VerifierProfileId.Should().Be(VerificationProfileIds.PublicAnonymousV1);
-        verification.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        verification.Output.OverallStatus.Should().Be(VerificationOverallStatus.Pass);
         verification.Output.Results.Should().Contain(x =>
             x.ResultCode == VerificationResultCodes.PackageManifestValid &&
             x.Status == VerificationCheckStatus.Pass);
         verification.Output.Results.Should().Contain(x =>
-            x.ResultCode == VerificationResultCodes.PublicationProofEvidenceValid &&
+            x.ResultCode == VerificationResultCodes.PublicationProofNotRequiredForDevelopment &&
             x.Status == VerificationCheckStatus.Pass);
         verification.Output.Results.Should().NotContain(x =>
             x.ResultCode == VerificationResultCodes.PublicationProofExternalReviewPending);
@@ -1144,8 +1144,10 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
                 verification.Output.Results.Select(x =>
                     $"{x.ResultCode}:{x.Status}:{x.Message}:{string.Join(",", x.Evidence.Select(pair => $"{pair.Key}={pair.Value}"))}")));
         verification.Output.Results.Should().Contain(x =>
-            x.ResultCode == VerificationResultCodes.EligibilityDevOnlyVerificationBlocked &&
-            x.Status == VerificationCheckStatus.Warn);
+            x.ResultCode == VerificationResultCodes.EligibilityDevelopmentProviderValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        verification.Output.Results.Should().NotContain(x =>
+            x.ResultCode == VerificationResultCodes.EligibilityDevOnlyVerificationBlocked);
         verification.Output.Results.Should().NotContain(x =>
             x.ResultCode == VerificationResultCodes.EligibilityPublicPrivacyBoundaryViolation);
 

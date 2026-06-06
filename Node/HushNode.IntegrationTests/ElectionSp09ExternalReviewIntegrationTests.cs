@@ -15,7 +15,7 @@ namespace HushNode.IntegrationTests;
 public sealed class ElectionSp09ExternalReviewIntegrationTests
 {
     [Fact]
-    public async Task PublicPackage_WithPlannedExternalReviewStatus_ReplaysWithExpectedWarnings()
+    public async Task PublicPackage_WithPlannedExternalReviewStatus_ReplaysWithoutWarningsForDevelopmentProfile()
     {
         using var package = CreatePackage();
 
@@ -31,15 +31,14 @@ public sealed class ElectionSp09ExternalReviewIntegrationTests
         var result = await VerifyPackageAsync(package.PackagePath);
 
         result.ExitCode.Should().Be(0, DescribeFailures(result));
-        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Pass);
         result.Output.Results.Should().Contain(x =>
             x.CheckCode == ElectionSp09ProfileIds.ReviewStatusValidCheckCode &&
             x.ResultCode == VerificationResultCodes.ExternalReviewStatusValid &&
             x.Status == VerificationCheckStatus.Pass);
-        result.Output.Results.Should().Contain(x =>
+        result.Output.Results.Should().NotContain(x =>
             x.CheckCode == ElectionSp09ProfileIds.ReviewNotCompleteCheckCode &&
-            x.ResultCode == VerificationResultCodes.ExternalReviewNotComplete &&
-            x.Status == VerificationCheckStatus.Warn);
+            x.ResultCode == VerificationResultCodes.ExternalReviewNotComplete);
     }
 
     [Fact]

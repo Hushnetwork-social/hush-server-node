@@ -75,7 +75,8 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         });
 
         electionResponse.Success.Should().BeTrue();
-        electionResponse.CeremonyProfiles.Select(x => x.ProfileId).Should().Equal("dkg-prod-3of5");
+        electionResponse.CeremonyProfiles.Select(x => x.ProfileId).Should().BeEquivalentTo(
+            ["dkg-prod-3of5", "dkg-prod-7of10", "dkg-prod-8of13"]);
 
         var startSubmitResponse = await SubmitBlockchainTransactionAsync(
             TestTransactionFactory.StartElectionCeremony(
