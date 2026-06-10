@@ -1167,7 +1167,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             approval.TrusteeUserAddress,
             approval.TrusteeDisplayName,
             approval.ApprovalNote,
-            approval.ApprovedAt,
+            NormalizePostgresTimestamp(approval.ApprovedAt),
             approval.SourceTransactionId,
             approval.SourceBlockHeight,
             approval.SourceBlockId);
@@ -2762,6 +2762,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         value is { Length: > 0 }
             ? Convert.ToHexString(value).ToLowerInvariant()
             : string.Empty;
+
+    private static DateTime NormalizePostgresTimestamp(DateTime value)
+    {
+        const long ticksPerMicrosecond = TimeSpan.TicksPerMillisecond / 1000;
+        return new DateTime(value.Ticks - value.Ticks % ticksPerMicrosecond, value.Kind);
+    }
 
     private static string CreateSha256Fingerprint(byte[] value) =>
         $"sha256:{BuildHashHex(value)}";

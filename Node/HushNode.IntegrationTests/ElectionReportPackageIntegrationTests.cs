@@ -1200,12 +1200,13 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task FinalizeElection_WhenPackageGenerationFails_PersistsFailedAttemptAndRetrySealsANewAttempt()
     {
-        var client = await StartClientAsync();
+        var reportPackageService = new RetryableFailureElectionReportPackageService(failBuildAttempts: 1);
+        var client = await StartClientAsync(configureTestServices: services =>
+            services.Replace(ServiceDescriptor.Singleton<IElectionReportPackageService>(
+                reportPackageService)));
         var context = await CreateClosedElectionReadyForFinalizeAsync(
             client,
             "FEAT-102 Failed Attempt Retry");
-
-        await CorruptCloseEligibilitySnapshotBoundaryAsync(context.ElectionId);
 
         var finalizeProposalId = await StartGovernedProposalAsync(
             client,
@@ -1240,17 +1241,16 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
                 .ToListAsync();
             failedPackages.Should().ContainSingle();
             failedPackages.Single().Status.Should().Be(ElectionReportPackageStatus.GenerationFailed);
-            failedPackages.Single().FailureReason.Should().Contain("Close eligibility snapshot");
+            failedPackages.Single().FailureReason.Should().Contain("Forced report package failure");
         }
-
-        var electionAfterFailure = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
-        await RestoreCloseEligibilitySnapshotBoundaryAsync(
-            context.ElectionId,
-            Guid.Parse(electionAfterFailure.Election.CloseArtifactId));
 
         await RetryProposalExecutionAsync(client, context.ElectionId, finalizeProposalId);
 
         var finalizedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        var retriedProposal = finalizedElection.GovernedProposals.Single(x => x.Id == finalizeProposalId.ToString());
+        retriedProposal.ExecutionStatus.Should().Be(
+            ElectionGovernedProposalExecutionStatusProto.ExecutionSucceeded,
+            $"{retriedProposal.ExecutionFailureReason} Build fingerprints: {reportPackageService.DescribeBuildFingerprints()}");
         finalizedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
         finalizedElection.Election.FinalizeArtifactId.Should().NotBeNullOrWhiteSpace();
 
@@ -2404,46 +2404,6 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         return submitResponse;
     }
 
-    private async Task CorruptCloseEligibilitySnapshotBoundaryAsync(string electionId)
-    {
-        await using var scope = _node!.Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
-        var electionKey = new ElectionId(Guid.Parse(electionId));
-        var snapshot = await dbContext.Set<ElectionEligibilitySnapshotRecord>()
-            .SingleAsync(x =>
-                x.ElectionId == electionKey &&
-                x.SnapshotType == ElectionEligibilitySnapshotType.Close);
-
-        var updated = snapshot with
-        {
-            BoundaryArtifactId = Guid.NewGuid(),
-        };
-
-        dbContext.Entry(snapshot).State = EntityState.Detached;
-        dbContext.Update(updated);
-        await dbContext.SaveChangesAsync();
-    }
-
-    private async Task RestoreCloseEligibilitySnapshotBoundaryAsync(string electionId, Guid closeArtifactId)
-    {
-        await using var scope = _node!.Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
-        var electionKey = new ElectionId(Guid.Parse(electionId));
-        var snapshot = await dbContext.Set<ElectionEligibilitySnapshotRecord>()
-            .SingleAsync(x =>
-                x.ElectionId == electionKey &&
-                x.SnapshotType == ElectionEligibilitySnapshotType.Close);
-
-        var updated = snapshot with
-        {
-            BoundaryArtifactId = closeArtifactId,
-        };
-
-        dbContext.Entry(snapshot).State = EntityState.Detached;
-        dbContext.Update(updated);
-        await dbContext.SaveChangesAsync();
-    }
-
     private static string BuildEncryptedBallotPackage(
         string electionId,
         TestIdentity actor,
@@ -2681,4 +2641,48 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         string Actor,
         string ElectionId,
         string SubmissionIdempotencyKey);
+
+    private sealed class RetryableFailureElectionReportPackageService(int failBuildAttempts) : IElectionReportPackageService
+    {
+        private readonly ElectionReportPackageService _inner = new();
+        private int _remainingFailures = failBuildAttempts;
+        private readonly List<string> _buildFingerprints = [];
+
+        public string DescribeBuildFingerprints() =>
+            _buildFingerprints.Count == 0
+                ? "none"
+                : string.Join(" -> ", _buildFingerprints);
+
+        public ElectionReportPackageBuildResult Build(ElectionReportPackageBuildRequest request)
+        {
+            var successResult = _inner.Build(request);
+            _buildFingerprints.Add(successResult.Package.FrozenEvidenceFingerprint);
+            if (_remainingFailures <= 0 || !successResult.IsSuccess)
+            {
+                return successResult;
+            }
+
+            _remainingFailures--;
+            return ElectionReportPackageBuildResult.Failure(
+                ElectionModelFactory.CreateFailedReportPackageAttempt(
+                    request.Election.ElectionId,
+                    request.AttemptNumber,
+                    request.TallyReadyArtifact.Id,
+                    request.UnofficialResult.Id,
+                    successResult.Package.FrozenEvidenceHash,
+                    successResult.Package.FrozenEvidenceFingerprint,
+                    request.AttemptedByPublicAddress,
+                    "FORCED_PACKAGE_FAILURE",
+                    "Forced report package failure for test coverage.",
+                    previousAttemptId: request.PreviousAttemptId,
+                    finalizationSessionId: request.FinalizationSession?.Id,
+                    closeBoundaryArtifactId: request.CloseArtifact.Id,
+                    closeEligibilitySnapshotId: request.CloseEligibilitySnapshot?.Id,
+                    finalizationReleaseEvidenceId: request.FinalizationReleaseEvidence?.Id,
+                    attemptedAt: request.AttemptedAt));
+        }
+
+        public ElectionVoidReportPackageBuildResult BuildVoid(ElectionVoidReportPackageBuildRequest request) =>
+            _inner.BuildVoid(request);
+    }
 }

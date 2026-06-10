@@ -4406,10 +4406,11 @@ public class ElectionLifecycleServiceTests
         store.Elections[scenario.Election.ElectionId].OfficialResultArtifactId.Should().NotBeNull();
         store.ResultArtifacts.Should().HaveCount(2);
         store.ResultArtifacts.Count(x => x.ArtifactKind == ElectionResultArtifactKind.Official).Should().Be(1);
-        reportPackageService.Requests.Should().ContainSingle();
-        reportPackageService.Requests[0].FinalizationGovernedProposal.Should().NotBeNull();
-        reportPackageService.Requests[0].FinalizationGovernedProposal!.Id.Should().Be(scenario.Proposal.Id);
-        reportPackageService.Requests[0].FinalizationGovernedApprovals.Should().ContainSingle(x =>
+        reportPackageService.Requests.Should().HaveCount(2);
+        var finalPackageRequest = reportPackageService.Requests.Last();
+        finalPackageRequest.FinalizationGovernedProposal.Should().NotBeNull();
+        finalPackageRequest.FinalizationGovernedProposal!.Id.Should().Be(scenario.Proposal.Id);
+        finalPackageRequest.FinalizationGovernedApprovals.Should().ContainSingle(x =>
             x.ProposalId == scenario.Proposal.Id &&
             x.TrusteeUserAddress == "trustee-a");
         store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineManifest)
@@ -6254,8 +6255,8 @@ public class ElectionLifecycleServiceTests
             SourceBlockId: Guid.NewGuid()));
 
         result.IsSuccess.Should().BeTrue();
-        reportPackageService.Requests.Should().ContainSingle();
-        var requestBinding = reportPackageService.Requests.Single().ProtocolPackageBinding;
+        reportPackageService.Requests.Should().HaveCount(2);
+        var requestBinding = reportPackageService.Requests.Last().ProtocolPackageBinding;
         requestBinding.Should().NotBeNull();
         requestBinding!.Status.Should().Be(ProtocolPackageBindingStatus.Sealed);
         requestBinding.PackageVersion.Should().Be(sealedBinding.PackageVersion);

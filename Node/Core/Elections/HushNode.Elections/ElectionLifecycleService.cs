@@ -3881,6 +3881,26 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
     }
 
+    private async Task<ElectionDeploymentProofPublicLedgerArtifactRecord?> BuildDeploymentProofPublicLedgerSnapshotAsync(
+        IElectionsRepository repository,
+        ElectionId electionId)
+    {
+        try
+        {
+            return await _deploymentProofBindingService.BuildPublicLedgerArtifactAsync(
+                repository,
+                electionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Deployment proof public ledger snapshot failed for election {ElectionId}.",
+                electionId);
+            return null;
+        }
+    }
+
     private async Task PersistDeploymentProofPublicLedgerArtifactReferenceAsync(
         IElectionsRepository repository,
         ElectionId electionId,
@@ -6773,19 +6793,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
             OfficialResultArtifactId = officialResult.Id,
         };
 
-        await ReconcileDeploymentProofCheckpointAsync(
-            repository,
-            finalizedElection,
-            ElectionDeploymentProofCheckpointType.CloseToFinalize,
-            ElectionLifecycleState.Closed,
-            ElectionLifecycleState.Finalized,
-            officialRecordedAt,
-            finalizeArtifact.Id,
-            reportPackageId: null,
-            sourceTransactionId,
-            sourceBlockHeight,
-            sourceBlockId);
-
         var finalizationContext = await ResolveReportPackageFinalizationContextAsync(
             repository,
             election.ElectionId,
@@ -6811,41 +6818,39 @@ public class ElectionLifecycleService : IElectionLifecycleService
             repository,
             election.ElectionId);
         var reportPackageId = Guid.NewGuid();
-        var deploymentProofBindingLedger = await BuildDeploymentProofPublicLedgerForReportPackageAsync(
+        ElectionReportPackageBuildRequest CreateReportBuildRequest(
+            ElectionDeploymentProofPublicLedgerArtifactRecord? deploymentProofBindingLedger) =>
+            new(
+                finalizedElection,
+                closeArtifact,
+                tallyReadyArtifact,
+                finalizeArtifact,
+                unofficialResult,
+                officialResult,
+                closeEligibilitySnapshot,
+                sealedProtocolPackageBinding,
+                finalizationContext.Session,
+                finalizationContext.ReleaseEvidence,
+                finalizationGovernedApprovalContext.Proposal,
+                finalizationGovernedApprovalContext.Approvals,
+                finalizationShares,
+                warningAcknowledgements,
+                trusteeInvitations,
+                rosterEntries,
+                participationRecords,
+                reportAttemptNumber,
+                priorReportAttempt?.Id,
+                actorPublicAddress,
+                officialRecordedAt,
+                RestrictedAnomalyIntakeManifest: restrictedAnomalyIntakeManifest,
+                DeploymentProofBindingLedger: deploymentProofBindingLedger,
+                PreassignedPackageId: reportPackageId);
+
+        var deploymentProofBindingLedger = await BuildDeploymentProofPublicLedgerSnapshotAsync(
             repository,
-            finalizedElection,
-            ElectionLifecycleState.Finalized,
-            officialRecordedAt,
-            finalizeArtifact.Id,
-            reportPackageId,
-            sourceTransactionId,
-            sourceBlockHeight,
-            sourceBlockId);
-        var reportBuildResult = _electionReportPackageService.Build(new ElectionReportPackageBuildRequest(
-            finalizedElection,
-            closeArtifact,
-            tallyReadyArtifact,
-            finalizeArtifact,
-            unofficialResult,
-            officialResult,
-            closeEligibilitySnapshot,
-            sealedProtocolPackageBinding,
-            finalizationContext.Session,
-            finalizationContext.ReleaseEvidence,
-            finalizationGovernedApprovalContext.Proposal,
-            finalizationGovernedApprovalContext.Approvals,
-            finalizationShares,
-            warningAcknowledgements,
-            trusteeInvitations,
-            rosterEntries,
-            participationRecords,
-            reportAttemptNumber,
-            priorReportAttempt?.Id,
-            actorPublicAddress,
-            officialRecordedAt,
-            RestrictedAnomalyIntakeManifest: restrictedAnomalyIntakeManifest,
-            DeploymentProofBindingLedger: deploymentProofBindingLedger,
-            PreassignedPackageId: reportPackageId));
+            election.ElectionId);
+        var reportBuildResult = _electionReportPackageService.Build(
+            CreateReportBuildRequest(deploymentProofBindingLedger));
 
         if (priorReportAttempt is not null &&
             priorReportAttempt.Status == ElectionReportPackageStatus.GenerationFailed &&
@@ -6868,6 +6873,48 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ElectionCommandErrorCode.ValidationFailed,
                 $"Finalization package generation failed: {reportBuildResult.Package.FailureReason ?? reportBuildResult.Package.FailureCode ?? "unknown error"}",
                 shouldCommitSideEffects: true);
+        }
+
+        await ReconcileDeploymentProofCheckpointAsync(
+            repository,
+            finalizedElection,
+            ElectionDeploymentProofCheckpointType.CloseToFinalize,
+            ElectionLifecycleState.Closed,
+            ElectionLifecycleState.Finalized,
+            officialRecordedAt,
+            finalizeArtifact.Id,
+            reportPackageId: null,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+
+        deploymentProofBindingLedger = await BuildDeploymentProofPublicLedgerForReportPackageAsync(
+            repository,
+            finalizedElection,
+            ElectionLifecycleState.Finalized,
+            officialRecordedAt,
+            finalizeArtifact.Id,
+            reportPackageId,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+        reportBuildResult = _electionReportPackageService.Build(
+            CreateReportBuildRequest(deploymentProofBindingLedger));
+
+        if (priorReportAttempt is not null &&
+            priorReportAttempt.Status == ElectionReportPackageStatus.GenerationFailed &&
+            !ByteArrayEquals(priorReportAttempt.FrozenEvidenceHash, reportBuildResult.Package.FrozenEvidenceHash))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Finalization retry evidence no longer matches the frozen evidence from the last failed report-package attempt.");
+        }
+
+        if (!reportBuildResult.IsSuccess)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                $"Finalization package generation failed after deployment-proof reconciliation: {reportBuildResult.Package.FailureReason ?? reportBuildResult.Package.FailureCode ?? "unknown error"}");
         }
 
         await repository.SaveResultArtifactAsync(officialResult);
