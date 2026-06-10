@@ -75,6 +75,8 @@ public sealed class ReadinessRegisterPromotionService
     public const string ManifestFileName = "readiness-register-manifest.json";
     public const string CatalogFileName = "readiness-register-catalog.json";
     public const string ArchivePrefix = "HushVoting-Readiness-Register";
+    public const string ReadinessCheckPagesDirectory = "readiness-checks";
+    public const string ExternalAuditorEntryPointFileName = "external-auditor-entry-point.md";
 
     private const string Feat156TargetVersion = "v0.1.6";
     private const string Feat156TargetPublicationStatus = "production_rollout_with_limitations";
@@ -82,6 +84,9 @@ public sealed class ReadinessRegisterPromotionService
     private const string InternalAudit95FinalTargetVersion = "v0.1.8";
     private const string InternalAudit95FinalTargetPublicationStatus = "pilot_only_with_limitations";
     private const string InternalAudit95PromotionSourceFileName = "internal-audit-95-promotion-source.json";
+    private const string DevelopmentProfileClarificationTargetVersion = "v0.1.9";
+    private const string DevelopmentProfileClarificationPublicationStatus = "pilot_only_with_limitations";
+    private const string DevelopmentProfileClarificationSourceId = "RDY-REG-v0.1.9-development-profile-clarification";
 
     private static readonly Regex VersionPattern = new("^v[0-9]+\\.[0-9]+\\.[0-9]+$", RegexOptions.Compiled);
     private static readonly Regex RegisterVersionIdPattern = new("^RDY-REG-v[0-9]+\\.[0-9]+\\.[0-9]+$", RegexOptions.Compiled);
@@ -217,6 +222,264 @@ public sealed class ReadinessRegisterPromotionService
             "Feeds the promotion policy; the editable checklist itself does not directly block a claim."),
     ];
 
+    private static readonly ProfileEvidenceProcedureRow[] ProfileEvidenceProcedureRows =
+    [
+        new(
+            "RDY-CHECK-DIRECT-PROFILE-GATE",
+            "direct-profile-gate.md",
+            "Direct profile gate",
+            "Check productMode, selectedProfileId, SelectedProfileDevOnly, bindingStatus, isNonBindingElection, governanceMode, circuitClassification, and ContactCodeProviderReadiness in the canonical manifest and result report.",
+            "ElectionRecord, ElectionBoundaryArtifactRecord, ElectionReportPackageRecord, ElectionReportArtifactRecord",
+            "canonical-manifest.json; result-report.json; audit-boundary-note.md",
+            "Direct Non-Binding passes only when bindingStatus is Non-Binding, isNonBindingElection is true, and any DevOnly provider/profile flags are explicitly scoped to development/rehearsal. Direct Binding passes only when bindingStatus is Binding, isNonBindingElection is false, and production/profile readiness flags are not hidden.",
+            "Required",
+            "Verify the Direct profile tuple from canonical-manifest.json, result-report.json, and audit-boundary-note.md for both binding and non-binding runs. Treat DevOnly as the persisted development/rehearsal provider/profile flag, not as a production readiness claim.",
+            "Required for any candidate profile promoted from Development.",
+            "Required for every production election profile before stronger claims.",
+            "Non-binding checked at report package attempt 2026-06-05T10:21:41.7215447Z; binding checked at report package attempt 2026-06-04T21:32:52.7016107Z.",
+            "Passed for RDY-REG-v0.1.8 Direct: NonBinding/isNonBindingElection=true/admin-dev-1of1 and Binding/isNonBindingElection=false/admin-prod-1of1. RDY-REG-v0.1.9 clarifies that DevOnly contact/profile flags are accepted only inside the development/rehearsal boundary.",
+            "Use the report package attemptedAt timestamp and verifier verifiedAt timestamp for the election being promoted."),
+        new(
+            "RDY-CHECK-PROTOCOL-OMEGA-BINDING",
+            "protocol-omega-binding.md",
+            "Protocol Omega binding",
+            "Check the sealed Protocol Omega package id, version, spec hash, proof hash, release-manifest hash, approval status, external-review status, draft revision, source transaction, block height, and access-location content hashes.",
+            "ProtocolPackageBindingRecord; ApprovedProtocolPackageCatalogEntryRecord; ElectionRecord",
+            "ElectionRecord.json; canonical-manifest.json protocolPackageBinding; evidence-graph.json protocolPackageBinding",
+            "The binding must be status Sealed, source SealedAtOpen, and the hashes must match the election record and public package locations. NotReviewed external-review status is acceptable only for development/rehearsal verifier profiles; production or external-review claims require imported reviewer evidence and an updated SP-09/catalog status.",
+            "Required",
+            "Verify the sealed Protocol Omega binding at open, including source transaction/block refs and hash equality across ElectionRecord.json, canonical-manifest.json, and evidence-graph.json. Verify that NotReviewed is presented as a development/rehearsal non-claim, not as completed external review.",
+            "Required with the production candidate's approved package and immutable access-location hashes.",
+            "Required with the exact package id/version/hash used for creation, open, close/count, and finalize, plus reviewed SP-09 evidence when making production or external-review claims.",
+            "Non-binding sealed at 2026-06-05T10:19:23.846873Z; binding sealed at 2026-06-04T21:27:55.828125Z.",
+            "Passed for development/rehearsal protocol binding: both Direct runs use omega-hushvoting-v1/v1.2.1 with matching spec, proof, and release-manifest hashes. External reviewer conclusion remains a separate SP-09 non-claim until reviewer evidence is imported.",
+            "Use protocolPackageBinding.boundAt/sealedAt plus the source transaction/block fields for the promoted election."),
+        new(
+            "RDY-CHECK-CIRCUIT-BALLOT-TALLY-BINDING",
+            "circuit-ballot-tally-binding.md",
+            "Circuit, ballot encryption, and tally binding",
+            "Check release-manifest circuitAndKeys, publication-proof transcript proofConstruction, statementId, ballotEncryptionSchemeVersion, electionPublicKeyId, accepted ballot set hash, published ballot stream hash, final encrypted tally hash, and verifier SP-07/REL results.",
+            "ProtocolPackageBindingRecord; ElectionBoundaryArtifactRecord; ElectionReportPackageRecord; ElectionReportArtifactRecord",
+            "ApprovedProtocolPackageCatalog.json; release-manifest.json; publication-proof-transcript.json; tally-replay.json; VerifierOutput.json",
+            "The circuit id/hash, proving-key hash, verifying-key hash, protocol package manifest hash, ballot encryption scheme, proof transcript, and tally replay hashes must match the approved Protocol Omega binding and pass verifier checks.",
+            "Required",
+            "Verify circuitAndKeys, ballotEncryptionSchemeVersion, publication proof transcript, tally replay binding, and VFY-SP07-000/REL-000 for the Direct evidence packages.",
+            "Required for candidate rehearsal and any production activation candidate.",
+            "Required for every production election before result publication or external review handoff.",
+            "Current corpus validation observed good-profile replay evidence generated at 2026-06-02T12:00:00Z and sample verifier outputs generated on 2026-06-01.",
+            "Accepted for RDY-REG-v0.1.8 through FEAT-160: RDY-DIM-004 is 10/10, circuitAndKeys names protocol-omega-publication-proof-v1, and the transcript uses babyjubjub-elgamal-vector-ballot-v1 with SP-07 tally replay binding.",
+            "Use release-manifest generatedAt, publication-proof transcript generatedAt, tally-ready/finalize artifact timestamps, and verifier verifiedAt for the promoted election."),
+        new(
+            "RDY-CHECK-KMS-CUSTODY-KEY-LIFECYCLE",
+            "kms-custody-key-lifecycle.md",
+            "AWS KMS custody key lifecycle",
+            "Check open-time per-election KMS custody creation or verified reuse, custody mode, provider family, selected profile, encryption context, decrypt-authority proof, finalization cleanup, key disablement/deletion scheduling or retry state, and reconciliation output.",
+            "ElectionAdminOnlyProtectedTallyRecord; custody provider profile; custody reconciliation output; ElectionReportArtifactRecord",
+            "FEAT-131-Custody-Evidence-Handoff.md; operational-custody-evidence.json; kms-custody-rehearsal validation summaries; restricted evidence index",
+            "Public report output must show only provider family, custody mode, lifecycle state, tally public-key fingerprint, and safe reference hashes. Restricted reviewer evidence must carry the private custody row plus KmsKeyId/KmsKeyArn/KmsAlias/region/account boundary when admin-only AWS KMS custody applies.",
+            "Required when AdminOnly uses aws_kms_per_election_envelope_v1",
+            "Verify custodyMode aws_kms_per_election_envelope_v1, OPS-003 pass, executor key lifecycle, public secret-scan boundary, and restricted-only custody-key references. Default CI may use deterministic provider evidence; live AWS smoke remains restricted-only.",
+            "Required with candidate restricted reviewer evidence and no public KMS identifier leakage.",
+            "Required for every protected AdminOnly production election before open and again at finalize/reconciliation.",
+            "FEAT-131 accepted custody evidence was produced on 2026-05-19; FEAT-161 KMS rehearsal score proposal was generated at 2026-06-02T12:00:00Z.",
+            "Accepted for RDY-REG-v0.1.8 through FEAT-161: RDY-DIM-005 is 9/9, productionCustodyMode is aws_kms_per_election_envelope_v1, providerFamily is aws-kms, and raw KMS key identifiers are restricted-only.",
+            "Use custody row created/destroyed/last-updated timestamps, key deletion scheduled-at timestamp, reconciliation run time, and verifier/package export time for the promoted election."),
+        new(
+            "RDY-CHECK-DEPLOYMENT-SOFTWARE-PROOF-BINDING",
+            "deployment-software-proof-binding.md",
+            "Deployment and software proof binding",
+            "Check deployment proof ledger status, active proof set at open, checkpoints for DraftToOpen, OpenToClose, CloseToFinalize, FinalPackageExport, component observations, proof-family bindings, and claim limitations.",
+            "ElectionDeploymentProofLedgerRecord; ElectionDeploymentProofCheckpointRecord; ElectionDeploymentProofComponentObservationRecord; ElectionDeploymentProofEventRecord; ElectionProofFamilyBindingStatusRecord; ElectionWebClientDeploymentProofObservationRecord",
+            "deployment-proof-binding-ledger.json; canonical-manifest.json deploymentProofBinding; evidence-graph.json deploymentProofBinding",
+            "A development/rehearsal profile may accept development-runtime deployment evidence inside the Development evidence boundary. The same evidence must remain visible as non-production evidence and cannot become a deployment/build completeness claim for Production.",
+            "Development/rehearsal accepted; production deployment proof not required",
+            "Do not require production deployment proof, access-control snapshot, backup/restore, or auditor-room logs. Verify development runtime self-attestation, active proof set at open, lifecycle checkpoint linkage, server component proof hash, and visible WebClient non-production boundary.",
+            "Required when a PreProduction candidate exists; must verify immutable release/deployment refs, migration/config deltas, and required operational evidence.",
+            "Required unless activating an unchanged accepted PreProduction candidate; direct production must run the full deployment and operations proof workflow.",
+            "Non-binding ledger observed across 2026-06-05T10:19:23.846873Z to 2026-06-05T10:21:41.7215447Z; binding ledger observed across 2026-06-04T21:27:55.828125Z to 2026-06-04T21:32:52.7016107Z.",
+            "Accepted for Development/rehearsal scope: server development proof matched, the WebClient production proof remains explicitly outside this scope, and no production deployment/build completeness claim is made.",
+            "Use ledger created/opened/closed/finalized timestamps, checkpoint observedAtUtc values, activeProofSetIdAtOpen, component observations, and proof-family records."),
+        new(
+            "RDY-CHECK-LIFECYCLE-BALLOT-PUBLICATION-TALLY-COUNT",
+            "lifecycle-ballot-publication-tally-count.md",
+            "Lifecycle, ballot, publication, tally, and count",
+            "Check finalized lifecycle, open/close/tally-ready/finalize artifact ids, accepted ballot set hash, published ballot stream hash, final encrypted tally hash, tally replay result, official/unofficial result artifact ids, and count totals.",
+            "ElectionBoundaryArtifactRecord; ElectionAcceptedBallotRecord; ElectionPublishedBallotRecord; ElectionFinalizationSessionRecord; ElectionFinalizationReleaseEvidenceRecord; ElectionResultArtifactRecord; ElectionReportPackageRecord",
+            "ElectionRecord.json; evidence-graph.json; tally-replay.json; result-binding.json; result-report.json",
+            "Hashes and artifact ids must be consistent across the election record, evidence graph, tally replay, result binding, final manifest, and result report.",
+            "Required",
+            "Verify finalized lifecycle, accepted/published/tally hashes, close/tally-ready/finalize/result artifact ids, and visible count totals in the exported report package.",
+            "Required for candidate rehearsal and any production activation candidate.",
+            "Required for every production election before result publication.",
+            "Non-binding finalized at 2026-06-05T10:21:41.7215447Z; binding finalized at 2026-06-04T21:32:52.7016107Z.",
+            "Passed: both Direct runs finalized cleanly with two eligible voters, two counted votes, zero blanks, and consistent accepted/published/tally/result hashes.",
+            "Use close, tally-ready, finalize, result artifact timestamps plus the verifier verifiedAt timestamp for the exported package."),
+        new(
+            "RDY-CHECK-VERIFIER-PACKAGE-INTEGRITY",
+            "verifier-package-integrity.md",
+            "Verifier package integrity",
+            "Check that the verifier input manifest references the same package, election id, audit package hash, profile id, required root files, and artifact directories, then check verifier output results.",
+            "Exported verification package over persisted election/report records",
+            "VerifierInputManifest.json; VerifierProfile.json; AuditPackageManifest.json; VerifierOutput.json",
+            "Manifest, election, accepted-ballot, published-ballot, SP-04, privacy, release, external-review, and applicable operational checks must pass or carry explicit non-claim warnings.",
+            "Required",
+            "Verify package manifest hashes, verifier profile binding, election consistency, accepted/published ballot checks, SP-04, privacy, development release binding, and explicit operational warnings.",
+            "Required with candidate package, candidate verifier profile, and operational evidence expected for that environment.",
+            "Required with production verifier profile and all production-claim evidence enabled.",
+            "Non-binding verifier output checked at 2026-06-05T13:21:30.060513Z; binding verifier output checked at 2026-06-05T13:21:21.0565757Z.",
+            "Passed with development warnings: exitCode=0, package/election/ballot/publication/privacy/release checks pass, OPS-002/006/008 remain out of Development scope.",
+            "Use VerifierOutput.verifiedAt, exitCode, overallStatus, and per-check result timestamps where the verifier exports them."),
+        new(
+            "RDY-CHECK-PRIVACY-PUBLIC-RESTRICTED-BOUNDARY",
+            "privacy-public-restricted-boundary.md",
+            "Privacy and public/restricted boundary",
+            "Check that the public package excludes restricted evidence, that reviewer-only material stays in the restricted package, and that the audit boundary note states the claim limitations.",
+            "ElectionReportArtifactRecord access scopes; verification package public/restricted views",
+            "audit-boundary-note.md; public-verification-package; restricted-owner-auditor-package; VFY-PRIVACY-000 result",
+            "A public/restricted leakage or hidden high-assurance claim fails the profile gate even when the numeric readiness score is high.",
+            "Required",
+            "Verify VFY-PRIVACY-000, public package boundaries, restricted owner/auditor package separation, and audit-boundary wording.",
+            "Required for candidate package handoff and reviewer access control.",
+            "Required before any production publication or external reviewer handoff.",
+            "Non-binding privacy verifier check ran at 2026-06-05T13:21:30.060513Z; binding privacy verifier check ran at 2026-06-05T13:21:21.0565757Z.",
+            "Passed: VFY-PRIVACY-000 passes for both Direct public packages and the audit boundary notes preserve claim limits.",
+            "Use the public verifier run time plus package export time and restricted package access-grant timestamp where available."),
+        new(
+            "RDY-CHECK-AUDITOR-RESTRICTED-ACCESS-KEYS",
+            "auditor-restricted-access-keys.md",
+            "Auditor restricted access and reader keys",
+            "Check auditor grant role, restricted package scope, report access grant, envelope access record, auditor-room access-log hash, access-control snapshot, and the reader-access package key wrapping evidence for the intended auditor.",
+            "ElectionReportAccessGrantRecord; ElectionEnvelopeAccessRecord; ElectionReportPackageRecord; ElectionReportArtifactRecord; operational access-control snapshot; auditor-room access log",
+            "restricted-owner-auditor-package; artifacts/restricted/operational-access-control-snapshot.json; artifacts/restricted/auditor-room-access-log.json; audit-boundary-note.md; VerifierOutput OPS-002/OPS-008",
+            "Auditor access must use a reader-access package key wrapped to the intended auditor or authorized reviewer. It must not reuse the election tally key, trustee ceremony transport keys, trustee shares, or executor private key.",
+            "Not required for Direct development unless restricted reviewer access is exercised",
+            "Verify any development restricted reviewer access by grant id, actor public address, package id, wrapped reader key reference, and OPS-002/OPS-008 warnings or passes.",
+            "Required when a PreProduction candidate gives auditors access to restricted evidence.",
+            "Required for every production auditor handoff and every Veritas restricted owner/auditor package.",
+            "Direct development evidence currently keeps auditor-room/access-control as PreProduction/Production controls; no production auditor access claim is made in RDY-REG-v0.1.8.",
+            "Not claimed as completed for Direct development; the row defines the required Veritas and production auditor evidence boundary.",
+            "Use grant created/revoked timestamps, package sealed/exported time, access-log timestamp, and verifier verifiedAt."),
+        new(
+            "RDY-CHECK-VERITAS-TRUSTEE-CEREMONY-ACCEPTANCE",
+            "veritas-trustee-ceremony-acceptance.md",
+            "Veritas trustee ceremony and acceptance",
+            "For Veritas profiles, check trustee invitations, acceptance/revocation state, active ceremony version, transcript events, trustee states, trustee transport-key fingerprints, tally public-key fingerprint, share custody declarations, bound threshold profile, active trustees, required approvals, and invalid role combinations.",
+            "ElectionTrusteeInvitationRecord; ElectionCeremonyProfileRecord; ElectionCeremonyVersionRecord; ElectionCeremonyTranscriptEventRecord; ElectionCeremonyTrusteeStateRecord; ElectionCeremonyShareCustodyRecord; ElectionTrusteeControlDomainRecord; ElectionBoundaryArtifactRecord",
+            "trustee-control-profile.json; trustee-control-summary.json; trustee-control-domains.json; trustee-release-evidence.json; trustee-verifier-output.json; future ceremony transcript and acceptance evidence",
+            "Veritas remains not_observed or future_gated until trustee ceremony evidence proves the exact threshold, exact accepted trustee set, election-scoped trustee keys, tally public key, and custody declarations for that election.",
+            "Disabled for Direct development; future-gated for Veritas",
+            "Do not require trustee ceremonies for Direct runs. Verify the exclusion instead: acceptedTrusteeCount=0, finalizationShareCount=0, governedApprovalCount=0, and trustees=[] are visible.",
+            "Required for any Veritas candidate; all trustee invitation, acceptance, transcript, trustee-key fingerprint, tally-public-key, state, and share-custody evidence must be present.",
+            "Required for every Veritas production election before open/finalization claims.",
+            "Not tested as Veritas in RDY-REG-v0.1.8; Direct exclusion checked in report packages generated at 2026-06-05T10:21:41.7215447Z and 2026-06-04T21:32:52.7016107Z.",
+            "Correctly disabled/not observed for Direct: the Direct packages explicitly show zero trustees, zero finalization shares, and no Veritas ceremony claim.",
+            "Use trustee invitation sent/accepted/revoked timestamps, ceremony version activation time, transcript event order, share-custody timestamps, and trustee verifier verifiedAt."),
+        new(
+            "RDY-CHECK-VERITAS-GOVERNED-ACTION-CLOSE-COUNTING",
+            "veritas-governed-action-close-counting.md",
+            "Veritas governed action and close-counting linkage",
+            "For Veritas profiles, check governed proposals for Open, Close, and Finalize, approval records, approval signer keys, signed target hashes, source transaction/block refs, executed boundary artifacts, finalization session, close-counting job, trustee shares, accepted share count, and release evidence.",
+            "ElectionGovernedProposalRecord; ElectionGovernedProposalApprovalRecord; ElectionFinalizationSessionRecord; ElectionCloseCountingJobRecord; ElectionFinalizationShareRecord; ElectionFinalizationReleaseEvidenceRecord",
+            "governed action records; close-counting evidence; trustee share evidence; evidence-graph.json trustees and finalization fields; final report package",
+            "Open, Close, and Finalize approvals must be signed by eligible owner/trustee keys for the exact action target. The tally protocol/version/profile used at close-counting and finalize must match the Protocol Omega binding sealed at open, and every trustee share must be bound to the exact close artifact and accepted-ballot-set hash.",
+            "Disabled for Direct development; future-gated for Veritas",
+            "Do not require governed trustee approvals for Direct runs. Verify the exclusion and the Direct clean-finalization result binding instead.",
+            "Required for any Veritas candidate close/count/finalize rehearsal.",
+            "Required for every Veritas production close/count/finalize workflow.",
+            "Not tested as Veritas in RDY-REG-v0.1.8; Direct result binding checked at finalization/export times 2026-06-05T10:21:41.7215447Z and 2026-06-04T21:32:52.7016107Z.",
+            "Correctly disabled/not observed for Direct: governedApprovalCount=0 and finalizationShareCount=0 are visible, while Direct clean finalization and result binding pass.",
+            "Use governed proposal created/approved/executed timestamps, close-counting job timestamps, finalization session timestamps, trustee share release times, and final verifier verifiedAt."),
+        new(
+            "RDY-CHECK-NO-KEY-MATERIAL-PERSISTENCE",
+            "no-key-material-persistence.md",
+            "No persisted private key, trustee share, or witness material",
+            "Check that no public, restricted, database, log, support, backup, report, verifier-output, or package artifact contains reusable tally private keys, trustee raw shares, executor private keys, vote secrets, encryption randomness, raw proof witnesses, or per-ballot decrypt material.",
+            "ElectionCeremonyShareCustodyRecord; ElectionFinalizationShareRecord; ElectionFinalizationReleaseEvidenceRecord; ElectionReportPackageRecord; ElectionReportArtifactRecord; operational/support/log/backup evidence surfaces",
+            "public-verification-package; restricted-owner-auditor-package; support-export-privacy-proof.json; operational log/privacy scans; backup/restore evidence; no-secret-scan-result.json; VerifierOutput VFY-PRIVACY/OPS checks",
+            "The report must state where the scan looked. A pass requires explicit negative findings for public package, restricted package, database export surfaces, support exports, logs, backups, and verifier outputs; any raw trustee share, private key, executor private key, proof witness, or vote-secret finding blocks the claim.",
+            "Required",
+            "Verify development packages include no raw trustee shares, no executor private key, no proof witness, no vote secret, and no plaintext vote in public/restricted exports.",
+            "Required with candidate package scans and restricted operational evidence scans.",
+            "Required for every production election package, backup/restore proof, support export, and auditor handoff.",
+            "Direct development privacy and operational boundary checks ran at the public verifier timestamps; Veritas-specific raw-share persistence is future-gated until a Veritas run exists.",
+            "Partially applicable for RDY-REG-v0.1.8 Direct evidence: public/restricted package privacy boundaries pass, while Veritas trustee raw-share persistence remains a required future Veritas check.",
+            "Use package export time, no-secret scan time, verifier verifiedAt, support-export scan time, log-scan time, and backup/restore evidence timestamp."),
+    ];
+
+    private static readonly ExternalAuditorEntryPointRow[] ExternalAuditorEntryPointRows =
+    [
+        new(
+            "Protocol Omega package",
+            "Which Protocol Omega package, spec, proof set, and release package was used for this election?",
+            "ProtocolPackageBindingRecord; ApprovedProtocolPackageCatalogEntryRecord; ElectionRecord",
+            "ApprovedProtocolPackageCatalog.json; release-manifest.json; canonical-manifest.json; evidence-graph.json",
+            "RDY-CHECK-PROTOCOL-OMEGA-BINDING; REL-000; SP-08",
+            "A stale or unapproved package, hash mismatch, wrong profile, mutable reference, or open-time binding mismatch blocks the claim."),
+        new(
+            "Circuit and proof binding",
+            "Was the correct circuit, proving key, verifying key, ballot encryption scheme, publication proof, tally replay, and result binding used?",
+            "ProtocolPackageBindingRecord; ElectionBoundaryArtifactRecord; ElectionReportPackageRecord; ElectionReportArtifactRecord",
+            "release-manifest.json circuitAndKeys; publication-proof-transcript.json; tally-replay.json; result-binding.json; VerifierOutput.json",
+            "RDY-CHECK-CIRCUIT-BALLOT-TALLY-BINDING; VFY-SP07-000; REL-000",
+            "A circuit id/hash mismatch, key hash mismatch, ballot encryption scheme mismatch, statement mismatch, or tally replay mismatch blocks the claim."),
+        new(
+            "Invitations and access grants",
+            "Were trustees, auditors, and restricted reviewers invited or granted access only through the intended election-scoped records?",
+            "ElectionTrusteeInvitationRecord; ElectionReportAccessGrantRecord; ElectionEnvelopeAccessRecord; ElectionReportPackageRecord",
+            "Invitation transaction refs; restricted-owner-auditor-package; operational-access-control-snapshot.json; auditor-room-access-log.json",
+            "RDY-CHECK-AUDITOR-RESTRICTED-ACCESS-KEYS; OPS-002; OPS-008; VFY-PRIVACY-000",
+            "An unauthorized grant, missing or revoked actor, reader key bound to the wrong recipient, or restricted package leak blocks the claim."),
+        new(
+            "AWS KMS custody key lifecycle",
+            "Was the per-election AWS KMS custody key created or verified for the election, constrained to the right context, and cleaned up without public leakage?",
+            "ElectionAdminOnlyProtectedTallyRecord; custody provider profile; custody reconciliation output; ElectionReportArtifactRecord",
+            "operational-custody-evidence.json; kms-custody-rehearsal validation summaries; restricted evidence index",
+            "RDY-CHECK-KMS-CUSTODY-KEY-LIFECYCLE; RDY-DIM-005; OPS-003; VFY-PRIVACY-000",
+            "A missing restricted KMS reference, wrong election/profile/encryption context, undeleted or unscheduled key, public KMS id leak, or decrypt-authority mismatch blocks the claim."),
+        new(
+            "Trustee key ceremony",
+            "For Veritas profiles, did the exact trustee set participate in the key ceremony with the expected threshold, transport-key fingerprints, tally public key, and share custody declarations?",
+            "ElectionCeremonyProfileRecord; ElectionCeremonyVersionRecord; ElectionCeremonyTranscriptEventRecord; ElectionCeremonyTrusteeStateRecord; ElectionCeremonyShareCustodyRecord; ElectionTrusteeControlDomainRecord",
+            "trustee-control-profile.json; trustee-control-summary.json; trustee-control-domains.json; trustee-release-evidence.json; trustee-verifier-output.json",
+            "RDY-CHECK-VERITAS-TRUSTEE-CEREMONY-ACCEPTANCE; CTRL-*; SP-06",
+            "A wrong threshold, missing trustee, duplicate account/person/custody domain, wrong trustee key fingerprint, tally public-key mismatch, or raw share leakage blocks the claim."),
+        new(
+            "Open approval",
+            "Was Open approved by eligible owner or trustee keys for the exact election action target and sealed Protocol Omega binding?",
+            "ElectionGovernedProposalRecord; ElectionGovernedProposalApprovalRecord; ElectionBoundaryArtifactRecord; ProtocolPackageBindingRecord",
+            "governed action records; open boundary artifact; canonical-manifest.json; evidence-graph.json",
+            "RDY-CHECK-VERITAS-GOVERNED-ACTION-CLOSE-COUNTING; approval signer key checks; signed target hash checks",
+            "A missing eligible approval, signed wrong action target, wrong signer key, missing tx/block ref, or unsealed Protocol Omega package at open blocks the claim."),
+        new(
+            "Ballots and publication",
+            "Do accepted ballots, published ballots, receipt commitments, and publication proof bind to the same election and approved circuit package?",
+            "ElectionAcceptedBallotRecord; ElectionPublishedBallotRecord; ElectionBoundaryArtifactRecord; ElectionReportArtifactRecord",
+            "accepted-ballot-set; published-ballot-stream; receipt commitments; publication-proof-transcript.json; VerifierOutput.json",
+            "RDY-CHECK-LIFECYCLE-BALLOT-PUBLICATION-TALLY-COUNT; RDY-CHECK-CIRCUIT-BALLOT-TALLY-BINDING; VFY-ACCEPTED; VFY-PUBLISHED; SP-04; SP-07",
+            "A hash mismatch, duplicate nullifier, missing receipt commitment, unexpected plaintext, vote secret, or proof transcript mismatch blocks the claim."),
+        new(
+            "Close, count, and tally",
+            "Were Close and Count approved for the exact close artifact, accepted ballot set, final encrypted tally, trustee shares, and tally replay target?",
+            "ElectionGovernedProposalRecord; ElectionGovernedProposalApprovalRecord; ElectionCloseCountingJobRecord; ElectionFinalizationSessionRecord; ElectionFinalizationShareRecord; ElectionFinalizationReleaseEvidenceRecord",
+            "close-counting evidence; tally-replay.json; result-binding.json; final encrypted tally hash; trustee-release-evidence.json",
+            "RDY-CHECK-VERITAS-GOVERNED-ACTION-CLOSE-COUNTING; SP-07; CTRL-008; CTRL-009; CTRL-011",
+            "A missing Close/Count approval, tally replay mismatch, trustee share target mismatch, insufficient accepted shares, or final encrypted tally mismatch blocks the claim."),
+        new(
+            "Finalize and results",
+            "Was Finalize approved, and do result artifacts, report packages, verifier output, and restricted auditor package all bind to the same finalized election state?",
+            "ElectionFinalizationSessionRecord; ElectionResultArtifactRecord; ElectionReportPackageRecord; ElectionReportArtifactRecord; ElectionReportAccessGrantRecord",
+            "result-report.json; AuditPackageManifest.json; VerifierInputManifest.json; VerifierOutput.json; restricted-owner-auditor-package",
+            "RDY-CHECK-LIFECYCLE-BALLOT-PUBLICATION-TALLY-COUNT; RDY-CHECK-VERIFIER-PACKAGE-INTEGRITY; RDY-CHECK-PRIVACY-PUBLIC-RESTRICTED-BOUNDARY",
+            "A result/report mismatch, stale package, verifier failure, restricted leak, missing auditor boundary, or finalize approval mismatch blocks the claim."),
+        new(
+            "No key material persisted",
+            "Where did the evidence scan look, and did it confirm that no reusable private key, trustee raw share, proof witness, vote secret, or decrypt material was recorded?",
+            "ElectionCeremonyShareCustodyRecord; ElectionFinalizationShareRecord; ElectionFinalizationReleaseEvidenceRecord; ElectionReportPackageRecord; ElectionReportArtifactRecord; operational/support/log/backup evidence surfaces",
+            "public-verification-package; restricted-owner-auditor-package; support-export-privacy-proof.json; operational log/privacy scans; backup/restore evidence; no-secret-scan-result.json",
+            "RDY-CHECK-NO-KEY-MATERIAL-PERSISTENCE; VFY-PRIVACY-000; OPS privacy scans",
+            "Any raw trustee share, private key, executor private key, proof witness, vote secret, encryption randomness, or per-ballot decrypt material finding blocks the claim."),
+    ];
+
     private static readonly HashSet<string> EvidenceStates = new(StringComparer.Ordinal)
     {
         "missing",
@@ -287,6 +550,7 @@ public sealed class ReadinessRegisterPromotionService
         var example = ReadJsonObject(options.Paths.ExamplePath, ExampleFileName);
         var feat156Promotion = TryApplyFeat156ProductionRolloutPromotion(register, options);
         var internalAudit95Promotion = TryApplyInternalAudit95FinalPromotion(register, options);
+        var developmentProfileClarification = TryApplyDevelopmentProfileClarificationRelease(register, options);
 
         ApplyCommandOverrides(register, options);
         if (internalAudit95Promotion is not null || IsInternalAudit95Accepted(register))
@@ -306,7 +570,12 @@ public sealed class ReadinessRegisterPromotionService
                 validationErrors);
         }
 
-        var generatedAt = options.GeneratedAt ?? internalAudit95Promotion?.GeneratedAt ?? feat156Promotion?.GeneratedAt ?? DateTimeOffset.UtcNow;
+        var generatedAt =
+            options.GeneratedAt ??
+            developmentProfileClarification?.GeneratedAt ??
+            internalAudit95Promotion?.GeneratedAt ??
+            feat156Promotion?.GeneratedAt ??
+            DateTimeOffset.UtcNow;
         var registerVersion = GetRequiredString(register, "registerVersion");
         var registerVersionId = GetRequiredString(register, "registerVersionId");
         var status = GetRequiredString(register, "status");
@@ -315,6 +584,8 @@ public sealed class ReadinessRegisterPromotionService
         var publicationStatus = GetRequiredString(GetRequiredObject(register, "generatedViews"), "publicSafePublicationStatus");
 
         var promotedFiles = BuildPromotedFiles(schema, register, example);
+        promotedFiles.AddRange(BuildProfileEvidenceProcedurePageFiles(register));
+        promotedFiles.Add(BuildExternalAuditorEntryPointPageFile(register));
         promotedFiles.Add(new PromotedFile(
             ScorecardFileName,
             "restricted",
@@ -613,6 +884,60 @@ public sealed class ReadinessRegisterPromotionService
     private static bool IsInternalAudit95FinalPromotionRequest(ReadinessRegisterPromotionOptions options) =>
         string.Equals(options.Version, InternalAudit95FinalTargetVersion, StringComparison.Ordinal) &&
         string.Equals(options.PublicationStatus, InternalAudit95FinalTargetPublicationStatus, StringComparison.Ordinal);
+
+    private static DevelopmentProfileClarificationApplication? TryApplyDevelopmentProfileClarificationRelease(
+        JsonObject register,
+        ReadinessRegisterPromotionOptions options)
+    {
+        if (!IsDevelopmentProfileClarificationReleaseRequest(options))
+        {
+            return null;
+        }
+
+        var validationErrors = ValidateDevelopmentProfileClarificationBaseline(register);
+        if (validationErrors.Count > 0)
+        {
+            throw new ReadinessRegisterPromotionException(
+                "Development profile clarification release source does not match the required v0.1.8 baseline.",
+                validationErrors);
+        }
+
+        var generatedAt = options.GeneratedAt ?? DateTimeOffset.UtcNow;
+        register["registerVersion"] = DevelopmentProfileClarificationTargetVersion;
+        register["registerVersionId"] = $"RDY-REG-{DevelopmentProfileClarificationTargetVersion}";
+        register["status"] = "AcceptedInternal";
+        register["promotedAt"] = generatedAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        register["sourceCommit"] = DevelopmentProfileClarificationSourceId;
+        GetRequiredObject(register, "generatedViews")["publicSafePublicationStatus"] =
+            DevelopmentProfileClarificationPublicationStatus;
+
+        return new DevelopmentProfileClarificationApplication(generatedAt);
+    }
+
+    private static bool IsDevelopmentProfileClarificationReleaseRequest(ReadinessRegisterPromotionOptions options) =>
+        string.Equals(options.Version, DevelopmentProfileClarificationTargetVersion, StringComparison.Ordinal) &&
+        string.Equals(options.PublicationStatus, DevelopmentProfileClarificationPublicationStatus, StringComparison.Ordinal);
+
+    private static List<string> ValidateDevelopmentProfileClarificationBaseline(JsonObject register)
+    {
+        var errors = new List<string>();
+        var score = GetRequiredObject(register, "score");
+        AddMismatch(errors, "registerVersion", InternalAudit95FinalTargetVersion, GetStringOrDefault(register, "registerVersion"));
+        AddMismatch(errors, "registerVersionId", $"RDY-REG-{InternalAudit95FinalTargetVersion}", GetStringOrDefault(register, "registerVersionId"));
+        AddMismatch(errors, "status", "AcceptedInternal", GetStringOrDefault(register, "status"));
+        AddMismatch(
+            errors,
+            "score.total",
+            InternalAudit95ReadinessPlan.TargetScore.ToString(CultureInfo.InvariantCulture),
+            GetIntOrDefault(score, "total").ToString(CultureInfo.InvariantCulture));
+        AddMismatch(errors, "strongestAllowedClaim", "friendly_organization_pilot", GetCurrentStrongestAllowedClaim(register));
+        AddMismatch(
+            errors,
+            "publicationStatus",
+            DevelopmentProfileClarificationPublicationStatus,
+            GetStringOrDefault(GetRequiredObject(register, "generatedViews"), "publicSafePublicationStatus"));
+        return errors;
+    }
 
     private static string GetInternalAudit95PromotionSourcePath(ReadinessRegisterPromotionPaths paths) => Path.Combine(
         paths.WorkspaceRoot,
@@ -1364,7 +1689,7 @@ public sealed class ReadinessRegisterPromotionService
                 "amber",
                 "not_observed",
                 "internal_non_binding_rehearsal",
-                "The non-binding Veritas 3/5 profile is tracked, but no accepted runtime rehearsal evidence is bound to it in RDY-REG-v0.1.8.",
+                "The non-binding Veritas 3/5 profile is tracked, but no accepted runtime rehearsal evidence is bound to it in the current accepted evidence baseline.",
                 "Requires a Veritas 3/5 threshold ceremony, trustee evidence, bindingStatus Non-Binding, and isNonBindingElection true.",
                 [],
                 ["productMode == HushVoting! Veritas", "thresholdProfile == 3/5", "bindingStatus == Non-Binding", "isNonBindingElection == true"]),
@@ -1380,7 +1705,7 @@ public sealed class ReadinessRegisterPromotionService
                 "amber",
                 "future_gated",
                 "production_organizational_rollout",
-                "The binding Veritas 3/5 profile is tracked as a standard future profile, but RDY-REG-v0.1.8 does not claim it as passed.",
+                "The binding Veritas 3/5 profile is tracked as a standard future profile, but the current accepted evidence baseline does not claim it as passed.",
                 "Requires accepted Veritas 3/5 threshold ceremony evidence plus customer governance and downstream production-context gates before stronger claims.",
                 [],
                 ["productMode == HushVoting! Veritas", "thresholdProfile == 3/5", "bindingStatus == Binding", "isNonBindingElection == false"]),
@@ -1396,7 +1721,7 @@ public sealed class ReadinessRegisterPromotionService
                 "amber",
                 "not_observed",
                 "internal_non_binding_rehearsal",
-                "The non-binding Veritas 7/10 profile is tracked, but no accepted runtime rehearsal evidence is bound to it in RDY-REG-v0.1.8.",
+                "The non-binding Veritas 7/10 profile is tracked, but no accepted runtime rehearsal evidence is bound to it in the current accepted evidence baseline.",
                 "Requires a Veritas 7/10 threshold ceremony, trustee evidence, bindingStatus Non-Binding, and isNonBindingElection true.",
                 [],
                 ["productMode == HushVoting! Veritas", "thresholdProfile == 7/10", "bindingStatus == Non-Binding", "isNonBindingElection == true"]),
@@ -1412,7 +1737,7 @@ public sealed class ReadinessRegisterPromotionService
                 "amber",
                 "future_gated",
                 "production_organizational_rollout",
-                "The binding Veritas 7/10 profile is tracked as a standard future profile, but RDY-REG-v0.1.8 does not claim it as passed.",
+                "The binding Veritas 7/10 profile is tracked as a standard future profile, but the current accepted evidence baseline does not claim it as passed.",
                 "Requires accepted Veritas 7/10 threshold ceremony evidence plus customer governance and downstream production-context gates before stronger claims.",
                 [],
                 ["productMode == HushVoting! Veritas", "thresholdProfile == 7/10", "bindingStatus == Binding", "isNonBindingElection == false"]),
@@ -1428,7 +1753,7 @@ public sealed class ReadinessRegisterPromotionService
                 "amber",
                 "not_observed",
                 "internal_non_binding_rehearsal",
-                "The non-binding Veritas 8/13 profile is tracked, but no accepted runtime rehearsal evidence is bound to it in RDY-REG-v0.1.8.",
+                "The non-binding Veritas 8/13 profile is tracked, but no accepted runtime rehearsal evidence is bound to it in the current accepted evidence baseline.",
                 "Requires a Veritas 8/13 threshold ceremony, trustee evidence, bindingStatus Non-Binding, and isNonBindingElection true.",
                 [],
                 ["productMode == HushVoting! Veritas", "thresholdProfile == 8/13", "bindingStatus == Non-Binding", "isNonBindingElection == true"]),
@@ -1444,7 +1769,7 @@ public sealed class ReadinessRegisterPromotionService
                 "amber",
                 "future_gated",
                 "production_organizational_rollout",
-                "The binding Veritas 8/13 profile is tracked as a standard future profile, but RDY-REG-v0.1.8 does not claim it as passed.",
+                "The binding Veritas 8/13 profile is tracked as a standard future profile, but the current accepted evidence baseline does not claim it as passed.",
                 "Requires accepted Veritas 8/13 threshold ceremony evidence plus customer governance and downstream production-context gates before stronger claims.",
                 [],
                 ["productMode == HushVoting! Veritas", "thresholdProfile == 8/13", "bindingStatus == Binding", "isNonBindingElection == false"]),
@@ -1460,7 +1785,7 @@ public sealed class ReadinessRegisterPromotionService
                 "amber",
                 "future_gated",
                 "internal_non_binding_rehearsal",
-                "The non-binding Enterprise n/k profile is tracked for thresholds outside the standard profiles, but RDY-REG-v0.1.8 does not claim it as passed.",
+                "The non-binding Enterprise n/k profile is tracked for thresholds outside the standard profiles, but the current accepted evidence baseline does not claim it as passed.",
                 "Requires explicit threshold rationale, accepted custom-profile evidence, bindingStatus Non-Binding, and isNonBindingElection true.",
                 [],
                 ["productMode == HushVoting! Enterprise", "thresholdProfile == n/k", "bindingStatus == Non-Binding", "isNonBindingElection == true", "custom threshold evidence accepted"]),
@@ -1476,7 +1801,7 @@ public sealed class ReadinessRegisterPromotionService
                 "amber",
                 "future_gated",
                 "production_organizational_rollout",
-                "The binding Enterprise n/k profile is tracked for thresholds outside the standard profiles, but RDY-REG-v0.1.8 does not claim it as passed.",
+                "The binding Enterprise n/k profile is tracked for thresholds outside the standard profiles, but the current accepted evidence baseline does not claim it as passed.",
                 "Requires explicit threshold rationale, accepted custom-profile evidence, customer governance, bindingStatus Binding, isNonBindingElection false, and downstream production-context gates.",
                 [],
                 ["productMode == HushVoting! Enterprise", "thresholdProfile == n/k", "bindingStatus == Binding", "isNonBindingElection == false", "custom threshold evidence accepted"]),
@@ -3013,6 +3338,105 @@ public sealed class ReadinessRegisterPromotionService
         ];
     }
 
+    private static IReadOnlyList<PromotedFile> BuildProfileEvidenceProcedurePageFiles(JsonObject register) =>
+        ProfileEvidenceProcedureRows
+            .Select(row => new PromotedFile(
+                GetProfileEvidenceProcedurePageRelativePath(row),
+                "restricted",
+                EncodingWithoutBom(GetProfileEvidenceProcedurePageMarkdown(register, row)),
+                "text/markdown"))
+            .ToArray();
+
+    private static PromotedFile BuildExternalAuditorEntryPointPageFile(JsonObject register) =>
+        new(
+            GetExternalAuditorEntryPointPageRelativePath(),
+            "restricted",
+            EncodingWithoutBom(GetExternalAuditorEntryPointMarkdown(register)),
+            "text/markdown");
+
+    private static string GetProfileEvidenceProcedurePageRelativePath(ProfileEvidenceProcedureRow row) =>
+        $"{ReadinessCheckPagesDirectory}/{row.PageFileName}";
+
+    private static string GetExternalAuditorEntryPointPageRelativePath() =>
+        $"{ReadinessCheckPagesDirectory}/{ExternalAuditorEntryPointFileName}";
+
+    private static string GetProfileEvidenceProcedurePageMarkdown(JsonObject register, ProfileEvidenceProcedureRow row)
+    {
+        var sb = new StringBuilder();
+        AppendGeneratedHeader(sb);
+        sb.AppendLine($"# Readiness Check: {row.Scope}");
+        sb.AppendLine();
+        AppendMetadataTable(
+            sb,
+            ("Register Version", GetRequiredString(register, "registerVersionId")),
+            ("Check ID", row.CheckId),
+            ("Scope", row.Scope),
+            ("Visibility", "restricted reviewer"),
+            ("Back To Scorecard", "../readiness-scorecard.md"));
+
+        sb.AppendLine("## What Was Tested");
+        sb.AppendLine();
+        sb.AppendLine(row.CheckPerformed);
+        sb.AppendLine();
+
+        sb.AppendLine("## Environment Applicability");
+        sb.AppendLine();
+        sb.AppendLine("Disabled or developer-adjusted Development checks are not failures. They mean the check is outside the Development claim boundary and must be replaced by the Development row below while remaining required for stronger environments.");
+        AppendTableHeader(sb, "Environment", "Applicability", "Required Check");
+        AppendTableRow(sb, "Development", row.DevelopmentApplicability, row.DevelopmentCheck);
+        AppendTableRow(sb, "PreProduction", row.PreProductionApplicability, row.CheckPerformed);
+        AppendTableRow(sb, "Production", row.ProductionApplicability, row.CheckPerformed);
+        sb.AppendLine();
+
+        sb.AppendLine("## When Was Tested");
+        AppendTableHeader(sb, "Evidence Set", "Timestamp Rule / Observed Time");
+        AppendTableRow(sb, "Current accepted evidence baseline", row.V018Timing);
+        AppendTableRow(sb, "Future readiness reports", row.FutureEvidenceTiming);
+        sb.AppendLine();
+
+        sb.AppendLine("## Evidence And Proof Sources");
+        AppendTableHeader(sb, "Source Type", "Value");
+        AppendTableRow(sb, "Database / Record Surface", row.DatabaseRecordSurface);
+        AppendTableRow(sb, "Exported Evidence / Proof Artifacts", row.EvidenceOrProofArtifacts);
+        sb.AppendLine();
+
+        sb.AppendLine("## Check Rule");
+        sb.AppendLine();
+        sb.AppendLine(row.PassRule);
+        sb.AppendLine();
+
+        sb.AppendLine("## Current Evidence Result");
+        sb.AppendLine();
+        sb.AppendLine(row.V018EvidenceResult);
+        sb.AppendLine();
+
+        return NormalizeLineEndings(sb.ToString());
+    }
+
+    private static string GetExternalAuditorEntryPointMarkdown(JsonObject register)
+    {
+        var sb = new StringBuilder();
+        AppendGeneratedHeader(sb);
+        sb.AppendLine("# External Auditor Entry Point");
+        sb.AppendLine();
+        AppendMetadataTable(
+            sb,
+            ("Register Version", GetRequiredString(register, "registerVersionId")),
+            ("Visibility", "restricted reviewer"),
+            ("Back To Scorecard", "../readiness-scorecard.md"));
+
+        sb.AppendLine("## How To Use This Page");
+        sb.AppendLine();
+        sb.AppendLine("This is the reviewer navigation map. It does not replace evidence; it tells the auditor where to start, which records and artifacts bind each workflow step, which verifier checks to run, and which mismatch blocks the claim.");
+        sb.AppendLine();
+        sb.AppendLine("Start with the package manifest and register version/hash, then follow the stages in election order: Protocol Omega package, circuit/proof binding, invitations/access, KMS custody, trustee ceremony, Open approval, ballots/publication, Close/Count/Tally, Finalize/Results, and no-key persistence scans. Do not accept a numeric score without matching row-level evidence.");
+        sb.AppendLine();
+        sb.AppendLine("Exact KMS key identifiers, auditor reader-key wrapping details, trustee raw shares, executor private keys, proof witnesses, vote secrets, and decrypt material remain restricted-only. Public-safe output may show safe references, fingerprints, hashes, and lifecycle status only.");
+        sb.AppendLine();
+        AppendExternalAuditorEntryPointTable(sb);
+        return NormalizeLineEndings(sb.ToString());
+    }
+
     private static string GetScorecardMarkdown(JsonObject register, IReadOnlyList<PromotedFile> currentFiles)
     {
         var score = GetRequiredObject(register, "score");
@@ -3078,6 +3502,9 @@ public sealed class ReadinessRegisterPromotionService
         }
 
         AppendClaimProfilesSection(sb, register, includeEvidence: false);
+        AppendDevelopmentProfileClarificationSection(sb, register);
+        AppendExternalAuditorEntryPointSection(sb);
+        AppendProfileEvidenceProcedureSection(sb);
         AppendEnvironmentOperationalChecklistSection(sb);
 
         sb.AppendLine();
@@ -3251,6 +3678,9 @@ public sealed class ReadinessRegisterPromotionService
         }
 
         AppendClaimProfilesSection(sb, register, includeEvidence: true);
+        AppendDevelopmentProfileClarificationSection(sb, register);
+        AppendExternalAuditorEntryPointSection(sb);
+        AppendProfileEvidenceProcedureSection(sb);
         AppendEnvironmentOperationalChecklistSection(sb);
 
         sb.AppendLine();
@@ -3352,12 +3782,98 @@ public sealed class ReadinessRegisterPromotionService
         }
     }
 
+    private static void AppendExternalAuditorEntryPointSection(StringBuilder sb)
+    {
+        sb.AppendLine();
+        sb.AppendLine("## External Auditor Entry Point");
+        sb.AppendLine();
+        sb.AppendLine($"Use [{ExternalAuditorEntryPointFileName}]({GetExternalAuditorEntryPointPageRelativePath()}) as the restricted reviewer navigation map. It identifies the records, artifacts, verifier checks, and blocking mismatches that let an external auditor walk the election with their own evidence review.");
+        sb.AppendLine();
+        AppendExternalAuditorEntryPointTable(sb);
+    }
+
+    private static void AppendExternalAuditorEntryPointTable(StringBuilder sb)
+    {
+        AppendTableHeader(sb, "Audit Stage", "Question", "Primary Records", "Artifacts / Proofs", "Verifier Checks", "Blocking Condition");
+        foreach (var row in ExternalAuditorEntryPointRows)
+        {
+            AppendTableRow(
+                sb,
+                row.Stage,
+                row.Question,
+                row.PrimaryRecords,
+                row.ArtifactsOrProofs,
+                row.VerifierChecks,
+                row.BlockingCondition);
+        }
+    }
+
+    private static void AppendProfileEvidenceProcedureSection(StringBuilder sb)
+    {
+        sb.AppendLine();
+        sb.AppendLine("## Profile Evidence Verification Procedure");
+        sb.AppendLine();
+        sb.AppendLine("A claim profile gate is not a standalone checkmark. A passed profile must be backed by field-level evidence checks against the database-backed records and exported proof artifacts below. Profiles marked not_observed or future_gated use the same rows as unmet requirements before they can pass.");
+        AppendTableHeader(sb, "Page", "Scope", "Development Mode", "Check Performed", "Database / Record Surface", "Evidence / Proof Artifacts", "Pass Rule");
+        foreach (var row in ProfileEvidenceProcedureRows)
+        {
+            AppendTableRow(
+                sb,
+                $"[{row.CheckId}]({GetProfileEvidenceProcedurePageRelativePath(row)})",
+                row.Scope,
+                row.DevelopmentApplicability,
+                row.CheckPerformed,
+                row.DatabaseRecordSurface,
+                row.EvidenceOrProofArtifacts,
+                row.PassRule);
+        }
+    }
+
+    private static void AppendDevelopmentProfileClarificationSection(StringBuilder sb, JsonObject register)
+    {
+        if (!string.Equals(GetRequiredString(register, "registerVersion"), DevelopmentProfileClarificationTargetVersion, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("## v0.1.9 Development And Production Boundary Clarification");
+        sb.AppendLine();
+        sb.AppendLine("RDY-REG-v0.1.9 is a clarification and reviewer-hardening publication over the accepted RDY-REG-v0.1.8 score. It does not raise the numeric score or silently promote Veritas profile gates without a signed exported verifier package.");
+        sb.AppendLine();
+        AppendTableHeader(sb, "Topic", "Development / Non-Binding Rehearsal", "Binding / Production Expectation");
+        AppendTableRow(
+            sb,
+            "SelectedProfileDevOnly",
+            "Expected for non-binding readable rehearsal profiles such as dkg-dev-3of5. The flag means the selected profile is a development/rehearsal profile.",
+            "Must be false for binding Veritas 500. Binding trustee elections resolve to dkg-prod-3of5, not dkg-dev-3of5.");
+        AppendTableRow(
+            sb,
+            "ContactCodeProviderReadiness",
+            "The persisted enum value is DevOnly, but the claim meaning is development/rehearsal provider accepted inside a non-high-assurance verifier profile.",
+            "Production/high-assurance claims require Ready. DevOnly becomes a blocker outside the development/rehearsal boundary.");
+        AppendTableRow(
+            sb,
+            "ProtocolPackageExternalReviewStatus",
+            "NotReviewed means no independent external reviewer conclusion has been imported. Development verifier profiles accept this as a non-claim when SP-09 shape is valid.",
+            "Production or external-review claims require SP-09 reviewer evidence and a catalog/binding status that reflects the reviewed conclusion.");
+        AppendTableRow(
+            sb,
+            "Deployment proof family",
+            "Development-runtime self-attestation is accepted for local rehearsal scope and must remain visibly scoped to that environment.",
+            "Production deployment/build completeness requires production deployment proof, release identity, operational evidence, and repeatable activation/rollback evidence.");
+    }
+
     private static string GetPublicSafeSummaryBody(JsonObject register)
     {
         var sb = new StringBuilder();
         var publicationStatus = GetRequiredString(GetRequiredObject(register, "generatedViews"), "publicSafePublicationStatus");
         var strongestAllowedClaim = GetCurrentStrongestAllowedClaim(register);
         var internalAudit95Accepted = IsInternalAudit95Accepted(register);
+        var isDevelopmentProfileClarification = string.Equals(
+            GetRequiredString(register, "registerVersion"),
+            DevelopmentProfileClarificationTargetVersion,
+            StringComparison.Ordinal);
         sb.AppendLine("## Current Public-Safe Status");
         sb.AppendLine();
         sb.AppendLine(publicationStatus);
@@ -3391,6 +3907,10 @@ public sealed class ReadinessRegisterPromotionService
             sb.AppendLine(internalAudit95Accepted
                 ? "- Hush-owned internal-audit-95 hardening is accepted in this register; rehearsal evidence, binding-election proof generation, proof verification, customer governance, and external review remain downstream execution gates."
                 : "- Hush-owned 95+ hardening, rehearsal evidence, binding-election proof generation, and proof-verification evidence remain future execution gates.");
+            if (isDevelopmentProfileClarification)
+            {
+                sb.AppendLine("- RDY-REG-v0.1.9 clarifies that development/rehearsal flags are accepted only inside the development evidence boundary; production and external-review claims still require their production evidence.");
+            }
         }
         else
         {
@@ -4025,6 +4545,7 @@ public sealed class ReadinessRegisterPromotionService
 
     private sealed record Feat156PromotionApplication(DateTimeOffset GeneratedAt);
     private sealed record InternalAudit95PromotionApplication(DateTimeOffset GeneratedAt);
+    private sealed record DevelopmentProfileClarificationApplication(DateTimeOffset GeneratedAt);
     private sealed record OperationalChecklistRow(
         string Environment,
         string SubChecklist,
@@ -4032,6 +4553,31 @@ public sealed class ReadinessRegisterPromotionService
         string Responsibility,
         string EvidenceOrChecks,
         string ClaimImpact);
+
+    private sealed record ProfileEvidenceProcedureRow(
+        string CheckId,
+        string PageFileName,
+        string Scope,
+        string CheckPerformed,
+        string DatabaseRecordSurface,
+        string EvidenceOrProofArtifacts,
+        string PassRule,
+        string DevelopmentApplicability,
+        string DevelopmentCheck,
+        string PreProductionApplicability,
+        string ProductionApplicability,
+        string V018Timing,
+        string V018EvidenceResult,
+        string FutureEvidenceTiming);
+
+    private sealed record ExternalAuditorEntryPointRow(
+        string Stage,
+        string Question,
+        string PrimaryRecords,
+        string ArtifactsOrProofs,
+        string VerifierChecks,
+        string BlockingCondition);
+
     private sealed record ClaimProfileVerifierWarning(
         string CheckCode,
         string ResultCode,

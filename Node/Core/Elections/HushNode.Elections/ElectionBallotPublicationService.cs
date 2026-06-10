@@ -675,6 +675,16 @@ public sealed class ElectionBallotPublicationService(
             return;
         }
 
+        if (!await TrySatisfySp07PublicationProofGateAsync(
+                repository,
+                election,
+                acceptedBallots,
+                publishedBallots,
+                DateTime.UtcNow))
+        {
+            return;
+        }
+
         var activeSession = await repository.GetActiveFinalizationSessionAsync(election.ElectionId);
         if (activeSession is not null)
         {
@@ -789,7 +799,7 @@ public sealed class ElectionBallotPublicationService(
                     });
 
                     _logger.LogWarning(
-                        "[ElectionBallotPublicationService] Admin-only high-assurance election {ElectionId} cannot reach tally_ready because the sealed Protocol Omega package binding is missing.",
+                        "[ElectionBallotPublicationService] High-assurance election {ElectionId} cannot continue close/counting because the sealed Protocol Omega package binding is missing.",
                         election.ElectionId);
                     return false;
                 }
@@ -816,7 +826,7 @@ public sealed class ElectionBallotPublicationService(
                     });
 
                     _logger.LogWarning(
-                        "[ElectionBallotPublicationService] Admin-only high-assurance election {ElectionId} failed SP-07 publication-proof generation before tally_ready: {FailureReason}",
+                        "[ElectionBallotPublicationService] High-assurance election {ElectionId} failed SP-07 publication-proof generation before close/counting: {FailureReason}",
                         election.ElectionId,
                         runResult.FailureReason ?? runResult.FailureCode ?? "unknown failure");
                     return false;
@@ -851,7 +861,7 @@ public sealed class ElectionBallotPublicationService(
         });
 
         _logger.LogWarning(
-            "[ElectionBallotPublicationService] Admin-only high-assurance election {ElectionId} cannot reach tally_ready because SP-07 evidence is not satisfied: {FailureMessage}",
+            "[ElectionBallotPublicationService] High-assurance election {ElectionId} cannot continue close/counting because SP-07 evidence is not satisfied: {FailureMessage}",
             election.ElectionId,
             sp07Gate.FailureMessage ?? sp07Gate.FailureCode ?? "unknown SP-07 gate failure");
         return false;

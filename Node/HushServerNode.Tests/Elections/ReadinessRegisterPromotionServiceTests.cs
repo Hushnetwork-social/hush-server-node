@@ -434,6 +434,7 @@ public sealed class ReadinessRegisterPromotionServiceTests
             result.VersionOutputRoot,
             ReadinessRegisterPromotionService.RegisterFileName)))!.AsObject();
         var scorecard = File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.ScorecardFileName));
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.ManifestFileName)))!.AsObject();
         var publicSummary = File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.PublicSafeSummaryFileName));
         var catalog = JsonNode.Parse(File.ReadAllText(finalPaths.CatalogPath))!.AsObject();
 
@@ -486,6 +487,34 @@ public sealed class ReadinessRegisterPromotionServiceTests
         scorecard.Should().Contain("internal-audit-95 hardening is accepted");
         scorecard.Should().Contain("## HushVoting Claim Profiles");
         scorecard.Should().Contain("Non-Binding HushVoting! Direct");
+        scorecard.Should().Contain("## Profile Evidence Verification Procedure");
+        scorecard.Should().Contain("## External Auditor Entry Point");
+        scorecard.Should().Contain("external-auditor-entry-point.md");
+        scorecard.Should().Contain("Protocol Omega package");
+        scorecard.Should().Contain("Circuit and proof binding");
+        scorecard.Should().Contain("AWS KMS custody key lifecycle");
+        scorecard.Should().Contain("Trustee key ceremony");
+        scorecard.Should().Contain("Open approval");
+        scorecard.Should().Contain("Close, count, and tally");
+        scorecard.Should().Contain("No key material persisted");
+        scorecard.Should().Contain("Protocol Omega binding");
+        scorecard.Should().Contain("ProtocolPackageBindingRecord");
+        scorecard.Should().Contain("Circuit, ballot encryption, and tally binding");
+        scorecard.Should().Contain("AWS KMS custody key lifecycle");
+        scorecard.Should().Contain("aws_kms_per_election_envelope_v1");
+        scorecard.Should().Contain("Auditor restricted access and reader keys");
+        scorecard.Should().Contain("reader-access package key");
+        scorecard.Should().Contain("Veritas trustee ceremony and acceptance");
+        scorecard.Should().Contain("trustee transport-key fingerprints");
+        scorecard.Should().Contain("ElectionGovernedProposalApprovalRecord");
+        scorecard.Should().Contain("No persisted private key, trustee share, or witness material");
+        scorecard.Should().Contain("no-secret-scan-result.json");
+        scorecard.Should().Contain("readiness-checks/circuit-ballot-tally-binding.md");
+        scorecard.Should().Contain("readiness-checks/kms-custody-key-lifecycle.md");
+        scorecard.Should().Contain("readiness-checks/auditor-restricted-access-keys.md");
+        scorecard.Should().Contain("readiness-checks/no-key-material-persistence.md");
+        scorecard.Should().Contain("readiness-checks/deployment-software-proof-binding.md");
+        scorecard.Should().Contain("Development/rehearsal accepted; production deployment proof not required");
         scorecard.Should().Contain("## Environment Operational Checklists");
         scorecard.Should().Contain("PreProduction is optional");
         scorecard.Should().Contain("Production runs the full readiness workflow directly");
@@ -495,10 +524,120 @@ public sealed class ReadinessRegisterPromotionServiceTests
         scorecard.Should().Contain("Binding HushVoting! Direct");
         scorecard.Should().Contain("passed");
         scorecard.Should().NotContain("production rollout is future-gated by the 95+ hardening plan");
+        var deploymentCheckPagePath = Path.Combine(
+            result.VersionOutputRoot,
+            ReadinessRegisterPromotionService.ReadinessCheckPagesDirectory,
+            "deployment-software-proof-binding.md");
+        var circuitCheckPagePath = Path.Combine(
+            result.VersionOutputRoot,
+            ReadinessRegisterPromotionService.ReadinessCheckPagesDirectory,
+            "circuit-ballot-tally-binding.md");
+        var kmsCheckPagePath = Path.Combine(
+            result.VersionOutputRoot,
+            ReadinessRegisterPromotionService.ReadinessCheckPagesDirectory,
+            "kms-custody-key-lifecycle.md");
+        var auditorAccessCheckPagePath = Path.Combine(
+            result.VersionOutputRoot,
+            ReadinessRegisterPromotionService.ReadinessCheckPagesDirectory,
+            "auditor-restricted-access-keys.md");
+        var externalAuditorEntryPointPath = Path.Combine(
+            result.VersionOutputRoot,
+            ReadinessRegisterPromotionService.ReadinessCheckPagesDirectory,
+            ReadinessRegisterPromotionService.ExternalAuditorEntryPointFileName);
+        var veritasTrusteeCheckPagePath = Path.Combine(
+            result.VersionOutputRoot,
+            ReadinessRegisterPromotionService.ReadinessCheckPagesDirectory,
+            "veritas-trustee-ceremony-acceptance.md");
+        var noKeyPersistenceCheckPagePath = Path.Combine(
+            result.VersionOutputRoot,
+            ReadinessRegisterPromotionService.ReadinessCheckPagesDirectory,
+            "no-key-material-persistence.md");
+        File.Exists(deploymentCheckPagePath).Should().BeTrue();
+        File.Exists(circuitCheckPagePath).Should().BeTrue();
+        File.Exists(kmsCheckPagePath).Should().BeTrue();
+        File.Exists(auditorAccessCheckPagePath).Should().BeTrue();
+        File.Exists(externalAuditorEntryPointPath).Should().BeTrue();
+        File.Exists(veritasTrusteeCheckPagePath).Should().BeTrue();
+        File.Exists(noKeyPersistenceCheckPagePath).Should().BeTrue();
+        var deploymentCheckPage = File.ReadAllText(deploymentCheckPagePath);
+        deploymentCheckPage.Should().Contain("## What Was Tested");
+        deploymentCheckPage.Should().Contain("## When Was Tested");
+        deploymentCheckPage.Should().Contain("Development/rehearsal accepted; production deployment proof not required");
+        deploymentCheckPage.Should().Contain("Do not require production deployment proof");
+        deploymentCheckPage.Should().Contain("Accepted for Development/rehearsal scope");
+        var circuitCheckPage = File.ReadAllText(circuitCheckPagePath);
+        circuitCheckPage.Should().Contain("circuitAndKeys");
+        circuitCheckPage.Should().Contain("protocol-omega-publication-proof-v1");
+        circuitCheckPage.Should().Contain("ballotEncryptionSchemeVersion");
+        circuitCheckPage.Should().Contain("SP-07 tally replay binding");
+        var kmsCheckPage = File.ReadAllText(kmsCheckPagePath);
+        kmsCheckPage.Should().Contain("KmsKeyId/KmsKeyArn/KmsAlias");
+        kmsCheckPage.Should().Contain("raw KMS key identifiers are restricted-only");
+        var auditorAccessCheckPage = File.ReadAllText(auditorAccessCheckPagePath);
+        auditorAccessCheckPage.Should().Contain("ElectionReportAccessGrantRecord");
+        auditorAccessCheckPage.Should().Contain("must not reuse the election tally key");
+        var externalAuditorEntryPoint = File.ReadAllText(externalAuditorEntryPointPath);
+        externalAuditorEntryPoint.Should().Contain("reviewer navigation map");
+        externalAuditorEntryPoint.Should().Contain("Do not accept a numeric score");
+        externalAuditorEntryPoint.Should().Contain("ElectionGovernedProposalApprovalRecord");
+        externalAuditorEntryPoint.Should().Contain("trustee-control-profile.json");
+        externalAuditorEntryPoint.Should().Contain("no-secret-scan-result.json");
+        externalAuditorEntryPoint.Should().Contain("Exact KMS key identifiers");
+        var veritasTrusteeCheckPage = File.ReadAllText(veritasTrusteeCheckPagePath);
+        veritasTrusteeCheckPage.Should().Contain("trustee transport-key fingerprints");
+        veritasTrusteeCheckPage.Should().Contain("tally public-key fingerprint");
+        veritasTrusteeCheckPage.Should().Contain("Disabled for Direct development; future-gated for Veritas");
+        veritasTrusteeCheckPage.Should().Contain("acceptedTrusteeCount=0");
+        var noKeyPersistenceCheckPage = File.ReadAllText(noKeyPersistenceCheckPagePath);
+        noKeyPersistenceCheckPage.Should().Contain("where the scan looked");
+        noKeyPersistenceCheckPage.Should().Contain("support exports, logs, backups, and verifier outputs");
+        manifest["files"]!.AsArray()
+            .Select(node => node!.AsObject()["relativePath"]!.GetValue<string>())
+            .Should()
+            .Contain("readiness-checks/external-auditor-entry-point.md")
+            .And
+            .Contain("readiness-checks/circuit-ballot-tally-binding.md")
+            .And
+            .Contain("readiness-checks/kms-custody-key-lifecycle.md")
+            .And
+            .Contain("readiness-checks/auditor-restricted-access-keys.md")
+            .And
+            .Contain("readiness-checks/no-key-material-persistence.md")
+            .And
+            .Contain("readiness-checks/deployment-software-proof-binding.md")
+            .And
+            .Contain("readiness-checks/veritas-trustee-ceremony-acceptance.md");
         publicSummary.Should().Contain("Hush-owned internal-audit-95 hardening is accepted");
         publicSummary.ToLowerInvariant().Should().NotContain("total score");
 
         service.Promote(options with { CheckOnly = true }).RegisterVersionId.Should().Be("RDY-REG-v0.1.8");
+
+        var v019Paths = finalPaths with { SourceRoot = result.VersionOutputRoot };
+        var v019Options = new ReadinessRegisterPromotionOptions(
+            v019Paths,
+            "hushvoting-readiness-register",
+            "v0.1.9",
+            "pilot_only_with_limitations",
+            ValidateOnly: false,
+            Scaffold: false,
+            GeneratedAt: new DateTimeOffset(2026, 6, 10, 8, 30, 0, TimeSpan.Zero));
+        var v019Result = service.Promote(v019Options);
+        var v019Scorecard = File.ReadAllText(Path.Combine(v019Result.VersionOutputRoot, ReadinessRegisterPromotionService.ScorecardFileName));
+        var v019PublicSummary = File.ReadAllText(Path.Combine(v019Result.VersionOutputRoot, ReadinessRegisterPromotionService.PublicSafeSummaryFileName));
+        var v019PromotedRegister = JsonNode.Parse(File.ReadAllText(Path.Combine(
+            v019Result.VersionOutputRoot,
+            ReadinessRegisterPromotionService.RegisterFileName)))!.AsObject();
+
+        v019Result.RegisterVersionId.Should().Be("RDY-REG-v0.1.9");
+        v019Result.TotalScore.Should().Be(95);
+        v019PromotedRegister["sourceCommit"]!.GetValue<string>().Should()
+            .Be("RDY-REG-v0.1.9-development-profile-clarification");
+        v019Scorecard.Should().Contain("v0.1.9 Development And Production Boundary Clarification");
+        v019Scorecard.Should().Contain("Binding trustee elections resolve to dkg-prod-3of5");
+        v019Scorecard.Should().Contain("DevOnly becomes a blocker outside the development/rehearsal boundary");
+        v019Scorecard.Should().Contain("Production or external-review claims require SP-09 reviewer evidence");
+        v019PublicSummary.Should().Contain("RDY-REG-v0.1.9 clarifies that development/rehearsal flags are accepted only inside the development evidence boundary");
+        service.Promote(v019Options with { CheckOnly = true }).RegisterVersionId.Should().Be("RDY-REG-v0.1.9");
     }
 
     [Fact]

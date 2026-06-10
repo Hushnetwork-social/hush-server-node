@@ -675,12 +675,32 @@ public class ElectionBallotPublicationServiceTests
         var store = new PublicationStore();
         var election = CreateClosedTrusteeElection(store);
         SeedAcceptedBallots(store, election, 3);
+        SeedSealedProtocolPackageBinding(store, election);
         var expectedTallyHash = new byte[] { 9, 8, 7, 6 };
         var crypto = new FakePublicationCryptoService
         {
+            PrepareBehavior = (encryptedBallotPackage, proofBundle, _) =>
+            {
+                var publishedBallotPackage = $"{encryptedBallotPackage}|published";
+                var publishedProofBundle = $"{proofBundle}|proof-published";
+                return ElectionBallotPublicationPreparationResult.Success(
+                    publishedBallotPackage,
+                    publishedProofBundle,
+                    CreatePublicationWitnessMaterial(
+                        encryptedBallotPackage,
+                        publishedBallotPackage,
+                        proofBundle,
+                        publishedProofBundle));
+            },
             ReplayBehavior = packages => ElectionBallotReplayResult.Success(expectedTallyHash),
         };
-        var service = CreateService(store, crypto, new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10));
+        var proofSessionRunner = new FakeAdminOnlySp07PublicationProofSessionRunner(store);
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10),
+            publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(store),
+            publicationProofSessionRunner: proofSessionRunner);
 
         await service.ProcessPendingPublicationAsync(new BlockIndex(27));
 
@@ -711,8 +731,52 @@ public class ElectionBallotPublicationServiceTests
         store.BoundaryArtifacts.Should().OnlyContain(x =>
             x.ArtifactType == ElectionBoundaryArtifactType.Open ||
             x.ArtifactType == ElectionBoundaryArtifactType.Close);
+        store.PublicationWitnesses.Should().HaveCount(3);
+        proofSessionRunner.RunCount.Should().Be(1);
+        proofSessionRunner.LastProtocolPackageBinding.Should().NotBeNull();
+        proofSessionRunner.LastProtocolPackageBinding!.SelectedProfileId.Should().Be(election.SelectedProfileId);
+        store.PublicationProofSessions.Should().ContainSingle(x =>
+            x.ElectionId == election.ElectionId &&
+            x.Status == ElectionPublicationProofSessionStatus.WitnessDeleted);
+        store.PublicationProofTranscripts.Should().ContainSingle(x => x.ElectionId == election.ElectionId);
+        store.PublicationWitnessDeletionReceipts.Should().ContainSingle(x => x.ElectionId == election.ElectionId);
         store.Elections[election.ElectionId].TallyReadyAt.Should().BeNull();
         store.Elections[election.ElectionId].ClosedProgressStatus.Should().Be(ElectionClosedProgressStatus.WaitingForTrusteeShares);
+    }
+
+    [Fact]
+    public async Task ProcessPendingPublicationAsync_ClosedTrusteeElectionWithoutSp07Binding_BlocksCloseCountingSession()
+    {
+        var store = new PublicationStore();
+        var election = CreateClosedTrusteeElection(store);
+        SeedAcceptedBallots(store, election, 3);
+        var expectedTallyHash = new byte[] { 9, 8, 7, 6 };
+        var crypto = new FakePublicationCryptoService
+        {
+            ReplayBehavior = packages => ElectionBallotReplayResult.Success(expectedTallyHash),
+        };
+        var proofSessionRunner = new FakeAdminOnlySp07PublicationProofSessionRunner(store);
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10),
+            publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(store),
+            publicationProofSessionRunner: proofSessionRunner);
+
+        await service.ProcessPendingPublicationAsync(new BlockIndex(27));
+
+        store.BallotMemPoolEntries.Should().BeEmpty();
+        store.PublishedBallots.Should().HaveCount(3);
+        store.FinalizationSessions.Should().BeEmpty();
+        store.CloseCountingJobs.Should().BeEmpty();
+        store.ExecutorSessionKeyEnvelopes.Should().BeEmpty();
+        proofSessionRunner.RunCount.Should().Be(0);
+        store.PublicationProofSessions.Should().BeEmpty();
+        store.PublicationProofTranscripts.Should().BeEmpty();
+        store.PublicationWitnessDeletionReceipts.Should().BeEmpty();
+        store.Elections[election.ElectionId].TallyReadyAt.Should().BeNull();
+        store.Elections[election.ElectionId].ClosedProgressStatus.Should()
+            .Be(ElectionClosedProgressStatus.PublicationProofPending);
     }
 
     [Fact]
@@ -1441,7 +1505,7 @@ public class ElectionBallotPublicationServiceTests
             election.ElectionId,
             "omega-hushvoting-v1",
             "v1.1.8",
-            VerificationProfileIds.HighAssuranceV1,
+            election.SelectedProfileId,
             new string('1', 64),
             new string('2', 64),
             new string('3', 64),
@@ -1475,6 +1539,15 @@ public class ElectionBallotPublicationServiceTests
         store.ProtocolPackageBindings.Add(binding);
         return binding;
     }
+
+    private static string CreatePublicationWitnessMaterial(
+        string acceptedBallotPackage,
+        string publishedBallotPackage,
+        string sourceProofBundle,
+        string publishedProofBundle) =>
+        $$"""
+        {"version":"sp07-publication-rerandomization-witness-v1","acceptedEncryptedBallotHash":"{{ComputeSha256Upper(acceptedBallotPackage)}}","publishedEncryptedBallotHash":"{{ComputeSha256Upper(publishedBallotPackage)}}","sourceProofBundleHash":"{{ComputeSha256Upper(sourceProofBundle)}}","publishedProofBundleHash":"{{ComputeSha256Upper(publishedProofBundle)}}","selectionCount":2,"rerandomizationNonces":["nonce-a","nonce-b"]}
+        """;
 
     private static string ComputeSha256Upper(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));

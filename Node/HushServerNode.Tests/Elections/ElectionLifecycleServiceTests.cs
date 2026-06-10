@@ -88,6 +88,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-105")]
     public async Task CreateDraftAsync_WithApprovedCompatiblePackage_BindsLatestProtocolPackage()
     {
         var store = new ElectionStore();
@@ -106,6 +107,55 @@ public class ElectionLifecycleServiceTests
         result.ProtocolPackageBinding.Status.Should().Be(ProtocolPackageBindingStatus.Latest);
         result.ProtocolPackageBinding.Source.Should().Be(ProtocolPackageBindingSource.CatalogSelection);
         store.ProtocolPackageBindings.Should().ContainSingle();
+    }
+
+    [Theory]
+    [Trait("Category", "FEAT-105")]
+    [InlineData(ElectionGovernanceMode.AdminOnly, ElectionBindingStatus.NonBinding, "admin-dev-1of1", true)]
+    [InlineData(ElectionGovernanceMode.AdminOnly, ElectionBindingStatus.Binding, "admin-prod-1of1", false)]
+    [InlineData(ElectionGovernanceMode.TrusteeThreshold, ElectionBindingStatus.NonBinding, "dkg-dev-3of5", true)]
+    [InlineData(ElectionGovernanceMode.TrusteeThreshold, ElectionBindingStatus.Binding, "dkg-prod-3of5", false)]
+    public async Task CreateDraftAsync_BindingModeProfileMatrix_BindsExpectedCircuitProfileAndProtocolPackage(
+        ElectionGovernanceMode governanceMode,
+        ElectionBindingStatus bindingStatus,
+        string expectedProfileId,
+        bool expectedDevOnly)
+    {
+        var store = new ElectionStore();
+        SeedStandardCeremonyProfiles(store);
+        var catalogEntry = SeedApprovedProtocolPackage(
+            store,
+            expectedProfileId,
+            packageVersion: "v1.2.0");
+        var service = CreateService(store);
+        var draft = governanceMode == ElectionGovernanceMode.AdminOnly
+            ? CreateAdminDraftSpecification(bindingStatus: bindingStatus)
+            : CreateTrusteeDraftSpecification(
+                requiredApprovalCount: 3,
+                bindingStatus: bindingStatus);
+
+        var result = await service.CreateDraftAsync(new CreateElectionDraftRequest(
+            OwnerPublicAddress: "owner-address",
+            ActorPublicAddress: "owner-address",
+            SnapshotReason: "initial draft",
+            Draft: draft));
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        result.Election.Should().NotBeNull();
+        result.Election!.BindingStatus.Should().Be(bindingStatus);
+        result.Election.SelectedProfileId.Should().Be(expectedProfileId);
+        result.Election.SelectedProfileDevOnly.Should().Be(expectedDevOnly);
+        result.Election.ProtocolOmegaVersion.Should().Be("omega-v1.0.0");
+        result.ProtocolPackageBinding.Should().NotBeNull();
+        result.ProtocolPackageBinding!.SelectedProfileId.Should().Be(expectedProfileId);
+        result.ProtocolPackageBinding.PackageVersion.Should().Be(catalogEntry.PackageVersion);
+        result.ProtocolPackageBinding.ReleaseManifestHash.Should().Be(catalogEntry.ReleaseManifestHash);
+        result.ProtocolPackageBinding.Status.Should().Be(ProtocolPackageBindingStatus.Latest);
+        result.ProtocolPackageBinding.Source.Should().Be(ProtocolPackageBindingSource.CatalogSelection);
+        store.ProtocolPackageBindings.Should().ContainSingle(x =>
+            x.ElectionId == result.Election.ElectionId &&
+            x.SelectedProfileId == expectedProfileId &&
+            x.PackageVersion == catalogEntry.PackageVersion);
     }
 
     [Fact]
@@ -1172,6 +1222,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-105")]
     public async Task AcceptBallotCastAsync_OnBindingElection_RejectsDevModeBallotArtifacts()
     {
         var store = new ElectionStore();
@@ -1192,6 +1243,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-105")]
     public async Task AcceptBallotCastAsync_OnNonBindingElection_AllowsDevModeBallotArtifacts()
     {
         var store = new ElectionStore();
@@ -1934,6 +1986,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-105")]
     public async Task StartElectionCeremonyAsync_WithBindingElectionAndDevProfile_ReturnsValidationFailed()
     {
         var store = new ElectionStore();
@@ -1960,6 +2013,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-105")]
     public async Task StartElectionCeremonyAsync_WithNonBindingElectionAndProductionProfile_StartsCeremony()
     {
         var store = new ElectionStore();
@@ -4694,6 +4748,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Theory]
+    [Trait("Category", "FEAT-105")]
     [Trait("Category", "FEAT-117")]
     [InlineData("dkg-dev-1of1", false)]
     [InlineData("dkg-prod-3of5", true)]
@@ -4761,6 +4816,17 @@ public class ElectionLifecycleServiceTests
             x.ArtifactKind == ElectionResultArtifactKind.Unofficial);
         store.CloseCountingJobs[scenario.CloseCountingJob.Id].Status.Should().Be(ElectionCloseCountingJobStatus.Completed);
         proofSessionRunner.RunCount.Should().Be(expectsSp07 ? 1 : 0);
+        if (expectsSp07)
+        {
+            proofSessionRunner.LastProtocolPackageBinding.Should().NotBeNull();
+            proofSessionRunner.LastProtocolPackageBinding!.SelectedProfileId.Should().Be(expectedProfileId);
+            proofSessionRunner.LastProtocolPackageBinding.Status.Should().Be(ProtocolPackageBindingStatus.Sealed);
+        }
+        else
+        {
+            proofSessionRunner.LastProtocolPackageBinding.Should().BeNull();
+        }
+
         store.PublicationProofSessions.Should().HaveCount(expectsSp07 ? 1 : 0);
         store.PublicationProofTranscripts.Should().HaveCount(expectsSp07 ? 1 : 0);
         store.PublicationWitnessDeletionReceipts.Should().HaveCount(expectsSp07 ? 1 : 0);
@@ -5080,6 +5146,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-105")]
     public async Task ExecuteCloseCountingJobAsync_WhenThresholdReachedWithDevModePublishedBallots_UsesDevModeFallback()
     {
         var store = new ElectionStore();
@@ -5174,6 +5241,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-105")]
     public async Task ExecuteCloseCountingJobAsync_WhenBindingElectionHasDevModePublishedBallots_FailsWithoutDevModeFallback()
     {
         var store = new ElectionStore();
