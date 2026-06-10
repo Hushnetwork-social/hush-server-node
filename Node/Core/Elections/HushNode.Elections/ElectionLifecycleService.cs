@@ -2516,7 +2516,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 request.ActorPublicAddress,
                 request.SourceTransactionId,
                 request.SourceBlockHeight,
-                request.SourceBlockId);
+                request.SourceBlockId,
+                currentApprovals.Append(approval).ToArray());
 
             await unitOfWork.CommitAsync();
 
@@ -2589,7 +2590,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             request.ActorPublicAddress,
             request.SourceTransactionId,
             request.SourceBlockHeight,
-            request.SourceBlockId);
+            request.SourceBlockId,
+            approvals);
 
         await unitOfWork.CommitAsync();
 
@@ -4232,7 +4234,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         string executionTriggeredByPublicAddress,
         Guid? sourceTransactionId = null,
         long? sourceBlockHeight = null,
-        Guid? sourceBlockId = null)
+        Guid? sourceBlockId = null,
+        IReadOnlyList<ElectionGovernedProposalApprovalRecord>? governedApprovalSnapshot = null)
     {
         try
         {
@@ -4242,7 +4245,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 proposal,
                 sourceTransactionId,
                 sourceBlockHeight,
-                sourceBlockId);
+                sourceBlockId,
+                governedApprovalSnapshot);
             if (!executionResult.IsSuccess || executionResult.Election is null)
             {
                 var failedProposal = proposal.RecordExecutionFailure(
@@ -4297,7 +4301,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionGovernedProposalRecord proposal,
         Guid? sourceTransactionId = null,
         long? sourceBlockHeight = null,
-        Guid? sourceBlockId = null) =>
+        Guid? sourceBlockId = null,
+        IReadOnlyList<ElectionGovernedProposalApprovalRecord>? governedApprovalSnapshot = null) =>
         proposal.ActionType switch
         {
             ElectionGovernedActionType.Open => OpenElectionInternalAsync(
@@ -4332,7 +4337,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 allowTrusteeThresholdExecution: true,
                 sourceTransactionId: sourceTransactionId,
                 sourceBlockHeight: sourceBlockHeight,
-                sourceBlockId: sourceBlockId),
+                sourceBlockId: sourceBlockId,
+                governedProposalId: proposal.Id,
+                governedApprovalSnapshot: governedApprovalSnapshot),
             _ => throw new ArgumentOutOfRangeException(nameof(proposal), proposal.ActionType, "Unsupported governed action type."),
         };
 
@@ -6596,7 +6603,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
         bool allowTrusteeThresholdExecution,
         Guid? sourceTransactionId = null,
         long? sourceBlockHeight = null,
-        Guid? sourceBlockId = null)
+        Guid? sourceBlockId = null,
+        Guid? governedProposalId = null,
+        IReadOnlyList<ElectionGovernedProposalApprovalRecord>? governedApprovalSnapshot = null)
     {
         if (!string.Equals(election.OwnerPublicAddress, actorPublicAddress, StringComparison.Ordinal))
         {
@@ -6781,20 +6790,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
             repository,
             election.ElectionId,
             tallyReadyArtifact);
-        ElectionGovernedProposalRecord? finalizationGovernedProposal = null;
-        IReadOnlyList<ElectionGovernedProposalApprovalRecord> finalizationGovernedApprovals = Array.Empty<ElectionGovernedProposalApprovalRecord>();
         IReadOnlyList<ElectionFinalizationShareRecord> finalizationShares = Array.Empty<ElectionFinalizationShareRecord>();
         if (finalizationContext.Session is not null)
         {
             finalizationShares = await repository.GetFinalizationSharesAsync(finalizationContext.Session.Id);
-            if (finalizationContext.Session.GovernedProposalId.HasValue)
-            {
-                finalizationGovernedProposal = await repository.GetGovernedProposalAsync(finalizationContext.Session.GovernedProposalId.Value);
-                finalizationGovernedApprovals = finalizationGovernedProposal is null
-                    ? Array.Empty<ElectionGovernedProposalApprovalRecord>()
-                    : await repository.GetGovernedProposalApprovalsAsync(finalizationGovernedProposal.Id);
-            }
         }
+        var finalizationGovernedApprovalContext = await ResolveReportPackageGovernedApprovalContextAsync(
+            repository,
+            election.ElectionId,
+            finalizationContext.Session,
+            governedProposalId,
+            governedApprovalSnapshot);
 
         var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(election.ElectionId);
         var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(election.ElectionId);
@@ -6826,8 +6832,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             sealedProtocolPackageBinding,
             finalizationContext.Session,
             finalizationContext.ReleaseEvidence,
-            finalizationGovernedProposal,
-            finalizationGovernedApprovals,
+            finalizationGovernedApprovalContext.Proposal,
+            finalizationGovernedApprovalContext.Approvals,
             finalizationShares,
             warningAcknowledgements,
             trusteeInvitations,
@@ -7177,20 +7183,16 @@ public class ElectionLifecycleService : IElectionLifecycleService
             repository,
             election.ElectionId,
             tallyReadyArtifact);
-        ElectionGovernedProposalRecord? finalizationGovernedProposal = null;
-        IReadOnlyList<ElectionGovernedProposalApprovalRecord> finalizationGovernedApprovals = Array.Empty<ElectionGovernedProposalApprovalRecord>();
         IReadOnlyList<ElectionFinalizationShareRecord> finalizationShares = Array.Empty<ElectionFinalizationShareRecord>();
         if (finalizationContext.Session is not null)
         {
             finalizationShares = await repository.GetFinalizationSharesAsync(finalizationContext.Session.Id);
-            if (finalizationContext.Session.GovernedProposalId.HasValue)
-            {
-                finalizationGovernedProposal = await repository.GetGovernedProposalAsync(finalizationContext.Session.GovernedProposalId.Value);
-                finalizationGovernedApprovals = finalizationGovernedProposal is null
-                    ? Array.Empty<ElectionGovernedProposalApprovalRecord>()
-                    : await repository.GetGovernedProposalApprovalsAsync(finalizationGovernedProposal.Id);
-            }
         }
+        var finalizationGovernedApprovalContext = await ResolveReportPackageGovernedApprovalContextAsync(
+            repository,
+            election.ElectionId,
+            finalizationContext.Session,
+            governedProposalId: null);
 
         var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(election.ElectionId);
         var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(election.ElectionId);
@@ -7223,8 +7225,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             sealedProtocolPackageBinding,
             finalizationContext.Session,
             finalizationContext.ReleaseEvidence,
-            finalizationGovernedProposal,
-            finalizationGovernedApprovals,
+            finalizationGovernedApprovalContext.Proposal,
+            finalizationGovernedApprovalContext.Approvals,
             finalizationShares,
             warningAcknowledgements,
             trusteeInvitations,
@@ -8205,6 +8207,77 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return new ReportPackageFinalizationContext(session, releaseEvidence);
     }
 
+    private async Task<ReportPackageGovernedApprovalContext> ResolveReportPackageGovernedApprovalContextAsync(
+        IElectionsRepository repository,
+        ElectionId electionId,
+        ElectionFinalizationSessionRecord? finalizationSession,
+        Guid? governedProposalId,
+        IReadOnlyList<ElectionGovernedProposalApprovalRecord>? governedApprovalSnapshot = null)
+    {
+        var proposal = await ResolveReportPackageGovernedProposalAsync(
+            repository,
+            electionId,
+            finalizationSession,
+            governedProposalId);
+        if (proposal is null)
+        {
+            return new ReportPackageGovernedApprovalContext(
+                null,
+                Array.Empty<ElectionGovernedProposalApprovalRecord>());
+        }
+
+        var approvals = governedApprovalSnapshot is null
+            ? await repository.GetGovernedProposalApprovalsAsync(proposal.Id)
+            : governedApprovalSnapshot
+                .Where(x => x.ProposalId == proposal.Id)
+                .ToArray();
+        return new ReportPackageGovernedApprovalContext(proposal, approvals);
+    }
+
+    private async Task<ElectionGovernedProposalRecord?> ResolveReportPackageGovernedProposalAsync(
+        IElectionsRepository repository,
+        ElectionId electionId,
+        ElectionFinalizationSessionRecord? finalizationSession,
+        Guid? governedProposalId)
+    {
+        if (governedProposalId.HasValue)
+        {
+            return await TryGetReportPackageGovernedProposalAsync(
+                repository,
+                electionId,
+                governedProposalId.Value);
+        }
+
+        if (finalizationSession?.GovernedProposalId is Guid sessionGovernedProposalId)
+        {
+            return await TryGetReportPackageGovernedProposalAsync(
+                repository,
+                electionId,
+                sessionGovernedProposalId);
+        }
+
+        var proposals = await repository.GetGovernedProposalsAsync(electionId);
+        return proposals
+            .Where(x =>
+                x.ActionType == ElectionGovernedActionType.Finalize &&
+                x.ExecutionStatus == ElectionGovernedProposalExecutionStatus.ExecutionSucceeded)
+            .OrderByDescending(x => x.ExecutedAt ?? x.LastExecutionAttemptedAt ?? x.CreatedAt)
+            .FirstOrDefault();
+    }
+
+    private static async Task<ElectionGovernedProposalRecord?> TryGetReportPackageGovernedProposalAsync(
+        IElectionsRepository repository,
+        ElectionId electionId,
+        Guid governedProposalId)
+    {
+        var proposal = await repository.GetGovernedProposalAsync(governedProposalId);
+        return proposal is not null &&
+               proposal.ElectionId == electionId &&
+               proposal.ActionType == ElectionGovernedActionType.Finalize
+            ? proposal
+            : null;
+    }
+
     private async Task ScrubStoredFinalizationSharesAsync(
         IElectionsRepository repository,
         IReadOnlyList<ElectionFinalizationShareRecord> finalizationShares)
@@ -9043,6 +9116,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private sealed record ReportPackageFinalizationContext(
         ElectionFinalizationSessionRecord? Session,
         ElectionFinalizationReleaseEvidenceRecord? ReleaseEvidence);
+
+    private sealed record ReportPackageGovernedApprovalContext(
+        ElectionGovernedProposalRecord? Proposal,
+        IReadOnlyList<ElectionGovernedProposalApprovalRecord> Approvals);
 
     private sealed record FinalizationShareValidationOutcome(
         bool IsAccepted,

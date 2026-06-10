@@ -62,6 +62,19 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
     private Task TryRepairClosedElectionResultsAsync(ElectionId electionId) =>
         _electionBallotPublicationService?.RepairClosedElectionResultsAsync(electionId) ?? Task.CompletedTask;
 
+    private async Task TryRepairClosedElectionResultsForReadAsync(ElectionId electionId)
+    {
+        try
+        {
+            await TryRepairClosedElectionResultsAsync(electionId);
+        }
+        catch (Exception ex) when (IsPostgresSerializationFailure(ex))
+        {
+            // Query-time repair is opportunistic. A concurrent lifecycle write can safely win;
+            // the caller still receives the latest readable election state below.
+        }
+    }
+
     private static bool ShouldAttemptClosedResultRepair(ElectionRecord election) =>
         election.LifecycleState == ElectionLifecycleState.Closed &&
         !election.UnofficialResultArtifactId.HasValue;
@@ -125,16 +138,7 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
 
         if (await ShouldAttemptClosedResultRepairAsync(repository, election))
         {
-            try
-            {
-                await TryRepairClosedElectionResultsAsync(electionId);
-            }
-            catch (Exception ex) when (IsPostgresSerializationFailure(ex))
-            {
-                // Query-time repair is opportunistic. A concurrent lifecycle write can safely win;
-                // the caller still receives the latest readable election state below.
-            }
-
+            await TryRepairClosedElectionResultsForReadAsync(electionId);
             election = await repository.GetElectionAsync(electionId);
             if (election is null)
             {
@@ -498,7 +502,7 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
         {
             foreach (var repairId in distinctRepairIds)
             {
-                await TryRepairClosedElectionResultsAsync(repairId);
+                await TryRepairClosedElectionResultsForReadAsync(repairId);
             }
 
             elections = await repository.GetElectionsByIdsAsync(electionIds);
@@ -1147,7 +1151,7 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
 
         if (await ShouldAttemptClosedResultRepairAsync(repository, election))
         {
-            await TryRepairClosedElectionResultsAsync(electionId);
+            await TryRepairClosedElectionResultsForReadAsync(electionId);
             election = await repository.GetElectionAsync(electionId);
             if (election is null)
             {

@@ -438,6 +438,14 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
             TestIdentities.Alice,
             "feat103-post-close-cast");
         castSubmitResponse.Successfull.Should().BeTrue(castSubmitResponse.Message);
+        await ClaimRosterEntryAsync(electionId, TestIdentities.Charlie, "voter-charlie");
+        await RegisterVotingCommitmentAsync(client, electionId, TestIdentities.Charlie, "feat103-post-close-charlie-commitment");
+        var charlieCastSubmitResponse = await SubmitAcceptedBallotCastViaBlockchainAsync(
+            client,
+            electionId,
+            TestIdentities.Charlie,
+            "feat103-post-close-charlie-cast");
+        charlieCastSubmitResponse.Successfull.Should().BeTrue(charlieCastSubmitResponse.Message);
 
         var closeProposalId = await StartGovernedProposalAsync(
             client,
@@ -494,6 +502,14 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
             TestIdentities.Alice,
             "feat104-executor-metadata-cast");
         castSubmitResponse.Successfull.Should().BeTrue(castSubmitResponse.Message);
+        await ClaimRosterEntryAsync(electionId, TestIdentities.Charlie, "voter-charlie");
+        await RegisterVotingCommitmentAsync(client, electionId, TestIdentities.Charlie, "feat104-executor-metadata-charlie-commitment");
+        var charlieCastSubmitResponse = await SubmitAcceptedBallotCastViaBlockchainAsync(
+            client,
+            electionId,
+            TestIdentities.Charlie,
+            "feat104-executor-metadata-charlie-cast");
+        charlieCastSubmitResponse.Successfull.Should().BeTrue(charlieCastSubmitResponse.Message);
 
         var closeProposalId = await StartGovernedProposalAsync(
             client,

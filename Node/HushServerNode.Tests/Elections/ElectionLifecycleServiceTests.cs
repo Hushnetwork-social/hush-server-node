@@ -4373,9 +4373,11 @@ public class ElectionLifecycleServiceTests
     {
         var store = new ElectionStore();
         var scenario = SeedClosedTrusteeElectionForFinalization(store, requiredApprovalCount: 1);
+        var reportPackageService = new FakeElectionReportPackageService();
         var service = CreateService(
             store,
-            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
+            electionReportPackageService: reportPackageService);
         var approvalTransactionId = Guid.NewGuid();
 
         var result = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
@@ -4404,6 +4406,16 @@ public class ElectionLifecycleServiceTests
         store.Elections[scenario.Election.ElectionId].OfficialResultArtifactId.Should().NotBeNull();
         store.ResultArtifacts.Should().HaveCount(2);
         store.ResultArtifacts.Count(x => x.ArtifactKind == ElectionResultArtifactKind.Official).Should().Be(1);
+        reportPackageService.Requests.Should().ContainSingle();
+        reportPackageService.Requests[0].FinalizationGovernedProposal.Should().NotBeNull();
+        reportPackageService.Requests[0].FinalizationGovernedProposal!.Id.Should().Be(scenario.Proposal.Id);
+        reportPackageService.Requests[0].FinalizationGovernedApprovals.Should().ContainSingle(x =>
+            x.ProposalId == scenario.Proposal.Id &&
+            x.TrusteeUserAddress == "trustee-a");
+        store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineManifest)
+            .Content.Should().Contain("\"governedApprovalCount\": 1");
+        store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineAuditProvenanceReportProjection)
+            .Content.Should().Contain("\"finalizationApprovals\"");
     }
 
     [Fact]

@@ -204,6 +204,28 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         artifacts.Should().Contain(x => x.ArtifactKind == ElectionReportArtifactKind.MachineEvidenceGraph);
         artifacts.Should().Contain(x => x.ArtifactKind == ElectionReportArtifactKind.MachineDeploymentProofBindingLedger);
         artifacts.Should().Contain(x => x.ArtifactKind == ElectionReportArtifactKind.HumanNamedParticipationRoster);
+
+        using var machineManifest = JsonDocument.Parse(artifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.MachineManifest).Content);
+        machineManifest.RootElement.GetProperty("governedApprovalCount").GetInt32().Should().Be(3);
+
+        using var auditProvenance = JsonDocument.Parse(artifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.MachineAuditProvenanceReportProjection).Content);
+        auditProvenance.RootElement
+            .GetProperty("finalizationGovernedProposal")
+            .GetProperty("actionType")
+            .GetString()
+            .Should()
+            .Be(ElectionGovernedActionType.Finalize.ToString());
+        var finalizationApprovals = auditProvenance.RootElement.GetProperty("finalizationApprovals");
+        finalizationApprovals.GetArrayLength().Should().Be(3);
+        finalizationApprovals.EnumerateArray()
+            .Select(x => x.GetProperty("trusteeUserAddress").GetString())
+            .Should()
+            .BeEquivalentTo(
+                TestIdentities.Bob.PublicSigningAddress,
+                TestIdentities.Charlie.PublicSigningAddress,
+                Delta.PublicSigningAddress);
     }
 
     [Fact]
