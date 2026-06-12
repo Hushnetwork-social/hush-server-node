@@ -802,6 +802,364 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "FEAT-142")]
+    [Trait("Category", "HV-INT-READINESS")]
+    [Trait("Category", "TwinTest")]
+    [Trait("Category", "NON_E2E")]
+    public async Task Veritas500NonBindingFinalization_ExportsAcceptedReadinessEvidencePackageForAuditors()
+    {
+        var client = await StartClientAsync(
+            configurationOverrides: CreateFeat143DeploymentProofConfiguration(),
+            configureTestServices: services =>
+                services.Replace(ServiceDescriptor.Singleton<IActiveDeploymentProofProvider>(
+                    _ => CreateFeat143DeploymentProofProvider())));
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "Veritas 500 Non-Binding Evidence TwinTest",
+            castSubmissionIdempotencyKey: "veritas500-readiness-cast-001",
+            selectedProfileId: ElectionSelectableProfileCatalog.TrusteeDevProfileId,
+            bindingStatus: ElectionBindingStatus.NonBinding,
+            officialResultVisibilityPolicy: OfficialResultVisibilityPolicy.ParticipantEncryptedOnly,
+            rosterEntries: BuildTwoVoterRosterEntries(),
+            includeGuestNonVoter: false,
+            acknowledgedWarningCodes: Array.Empty<ElectionWarningCode>());
+
+        var finalizeProposalId = await StartGovernedProposalAsync(
+            client,
+            context.ElectionId,
+            ElectionGovernedActionType.Finalize);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, Delta);
+
+        var finalizedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        finalizedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
+
+        var ownerResult = await GetElectionResultViewAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            waitForOfficialResult: true);
+        ownerResult.LatestReportPackage.Should().NotBeNull();
+        var reportPackage = ownerResult.LatestReportPackage!;
+        reportPackage.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageSealed);
+        reportPackage.ArtifactCount.Should().Be(14);
+
+        var ownerStatus = await GetElectionVerificationPackageStatusAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice);
+        ownerStatus.Success.Should().BeTrue(ownerStatus.ErrorMessage);
+        ownerStatus.Status.Should().NotBeNull();
+        ownerStatus.Status!.Status.Should().Be(ElectionVerificationPackageStatusProto.VerificationPackageReady);
+        ownerStatus.Status.PublicPackage.IsAvailable.Should().BeTrue();
+        ownerStatus.Status.PublicPackage.PackageHash.Should().NotBeNullOrWhiteSpace();
+
+        var publicExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
+        publicExport.PackageHash.Should().Be(ownerStatus.Status.PublicPackage.PackageHash);
+        publicExport.Files.Should().NotContain(x =>
+            x.RelativePath.StartsWith("artifacts/restricted/", StringComparison.OrdinalIgnoreCase) ||
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+        publicExport.Files.Select(x => x.RelativePath).Should().Contain(
+        [
+            VerificationPackageFileNames.AuditPackageManifest,
+            VerificationPackageFileNames.ElectionRecord,
+            VerificationPackageFileNames.TallyReplay,
+            VerificationPackageFileNames.TrusteeReleaseEvidence,
+            VerificationPackageFileNames.Sp06TrusteeControlSummary,
+            VerificationPackageFileNames.Sp06TrusteeVerifierOutput,
+            VerificationPackageFileNames.ResultBinding,
+            VerificationPackageFileNames.ReportPackageEvidenceGraph,
+            VerificationPackageFileNames.ReportPackageDirectory + "/canonical-manifest.json",
+            VerificationPackageFileNames.ReportPackageDirectory + "/result-report.json",
+        ]);
+
+        using var canonicalManifest = ParsePackageJson(
+            publicExport,
+            VerificationPackageFileNames.ReportPackageDirectory + "/canonical-manifest.json");
+        var manifestRoot = canonicalManifest.RootElement;
+        manifestRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        manifestRoot.GetProperty("bindingStatus").GetString().Should().Be("NonBinding");
+        manifestRoot.GetProperty("isNonBindingElection").GetBoolean().Should().BeTrue();
+        manifestRoot.GetProperty("governanceMode").GetString().Should().Be("TrusteeThreshold");
+        manifestRoot.GetProperty("selectedProfileId").GetString().Should().Be(ElectionSelectableProfileCatalog.TrusteeDevProfileId);
+        manifestRoot.GetProperty("circuitClassification").GetString().Should().Be("Development");
+        manifestRoot.GetProperty("boundCeremonyProfileId").GetString().Should().Be(ElectionSelectableProfileCatalog.TrusteeDevProfileId);
+        manifestRoot.GetProperty("officialVisibility").GetString().Should().Be("ParticipantEncryptedOnly");
+        manifestRoot.GetProperty("acceptedTrusteeCount").GetInt32().Should().Be(5);
+        manifestRoot.GetProperty("rosterEntryCount").GetInt32().Should().Be(2);
+        manifestRoot.GetProperty("governedApprovalCount").GetInt32().Should().Be(3);
+        manifestRoot.GetProperty("finalizationShareCount").GetInt32().Should().Be(3);
+        manifestRoot.GetProperty("warningCount").GetInt32().Should().Be(0);
+        manifestRoot.GetProperty("protocolPackageBinding").GetProperty("status").GetString().Should().Be("Sealed");
+        manifestRoot.GetProperty("deploymentProofBinding").GetProperty("status").GetString()
+            .Should().Be("AcceptedWithLimitations");
+
+        using var resultReport = ParsePackageJson(
+            publicExport,
+            VerificationPackageFileNames.ReportPackageDirectory + "/result-report.json");
+        var resultRoot = resultReport.RootElement;
+        resultRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        resultRoot.GetProperty("bindingStatus").GetString().Should().Be("NonBinding");
+        resultRoot.GetProperty("isNonBindingElection").GetBoolean().Should().BeTrue();
+        resultRoot.GetProperty("selectedProfileId").GetString().Should().Be(ElectionSelectableProfileCatalog.TrusteeDevProfileId);
+        resultRoot.GetProperty("visibility").GetString().Should().Be("ParticipantEncrypted");
+        resultRoot.GetProperty("totalVotedCount").GetInt32().Should().Be(2);
+        resultRoot.GetProperty("eligibleToVoteCount").GetInt32().Should().Be(2);
+        resultRoot.GetProperty("didNotVoteCount").GetInt32().Should().Be(0);
+        resultRoot.GetProperty("blankCount").GetInt32().Should().Be(0);
+
+        using var trusteeRelease = ParsePackageJson(publicExport, VerificationPackageFileNames.TrusteeReleaseEvidence);
+        var releaseRoot = trusteeRelease.RootElement;
+        releaseRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        releaseRoot.GetProperty("finalizationSessionCount").GetInt32().Should().BeGreaterThanOrEqualTo(1);
+        releaseRoot.GetProperty("acceptedShareCount").GetInt32().Should().Be(3);
+        var acceptedShares = releaseRoot.GetProperty("acceptedShares").EnumerateArray().ToArray();
+        acceptedShares.Should().HaveCount(3);
+        acceptedShares.Select(x => x.GetProperty("status").GetString()).Should().OnlyContain(x => x == "Accepted");
+        acceptedShares.Select(x => x.GetProperty("shareMaterialHash").GetString()).Should().OnlyContain(x => !string.IsNullOrWhiteSpace(x));
+
+        using var trusteeSummary = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp06TrusteeControlSummary);
+        var trusteeSummaryRoot = trusteeSummary.RootElement;
+        trusteeSummaryRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        trusteeSummaryRoot.GetProperty("thresholdProfileId").GetString().Should().Be(ElectionSelectableProfileCatalog.TrusteeDevProfileId);
+        trusteeSummaryRoot.GetProperty("trusteeCount").GetInt32().Should().Be(5);
+        trusteeSummaryRoot.GetProperty("trusteeThreshold").GetInt32().Should().Be(3);
+        trusteeSummaryRoot.GetProperty("acceptedReleaseArtifactCount").GetInt32().Should().Be(3);
+        trusteeSummaryRoot.GetProperty("missingReleaseArtifactCount").GetInt32().Should().Be(2);
+        trusteeSummaryRoot.GetProperty("readinessBlockers").EnumerateArray().Should().BeEmpty();
+        trusteeSummaryRoot.GetProperty("finalEncryptedTallyHash").GetString().Should().NotBeNullOrWhiteSpace();
+
+        using var trusteeVerifierOutput = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp06TrusteeVerifierOutput);
+        trusteeVerifierOutput.RootElement.GetProperty("results").EnumerateArray()
+            .Should()
+            .Contain(x =>
+                x.GetProperty("resultCode").GetString() == VerificationResultCodes.TrusteeControlDomainEvidenceValid &&
+                x.GetProperty("status").GetString() == "pass");
+
+        using var tallyReplay = ParsePackageJson(publicExport, VerificationPackageFileNames.TallyReplay);
+        var tallyRoot = tallyReplay.RootElement;
+        tallyRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        tallyRoot.GetProperty("acceptedBallotSetHash").GetString().Should().NotBeNullOrWhiteSpace();
+        tallyRoot.GetProperty("publishedBallotStreamHash").GetString().Should().NotBeNullOrWhiteSpace();
+        tallyRoot.GetProperty("finalEncryptedTallyHash").GetString().Should().NotBeNullOrWhiteSpace();
+
+        using var resultBinding = ParsePackageJson(publicExport, VerificationPackageFileNames.ResultBinding);
+        var resultBindingRoot = resultBinding.RootElement;
+        resultBindingRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        resultBindingRoot.GetProperty("reportPackageId").GetString().Should().Be(reportPackage.Id);
+        resultBindingRoot.GetProperty("reportPackageHash").GetString().Should().NotBeNullOrWhiteSpace();
+        resultBindingRoot.GetProperty("outcomeStatus").GetString().Should().Be("clean_finalized");
+        resultBindingRoot.GetProperty("cleanFinalization").GetBoolean().Should().BeTrue();
+        resultBindingRoot.GetProperty("finalizationMode").GetString().Should().Be("clean_finalization");
+
+        using var packageDirectory = new TemporaryPackageDirectory();
+        WriteVerificationPackageToDirectory(publicExport, packageDirectory.PackagePath);
+        var verification = await new HushVotingPackageVerifier().VerifyAsync(new(
+            packageDirectory.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1));
+        verification.ExitCode.Should().Be(VerificationExitCodes.Pass);
+        verification.Output.OverallStatus.Should().Be(VerificationOverallStatus.Pass);
+        verification.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.PackageManifestValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        verification.Output.Results.Should().Contain(x =>
+            x.CheckCode == "CTRL-000" &&
+            x.Status == VerificationCheckStatus.NotApplicable);
+        verification.Output.Results.Should().NotContain(x => x.Status == VerificationCheckStatus.Warn);
+        verification.Output.Results.Should().NotContain(x => x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-142")]
+    [Trait("Category", "HV-INT-READINESS")]
+    [Trait("Category", "TwinTest")]
+    [Trait("Category", "NON_E2E")]
+    public async Task Veritas500BindingFinalization_ExportsProductionReadinessEvidencePackageForAuditors()
+    {
+        var client = await StartClientAsync(
+            configurationOverrides: CreateFeat143DeploymentProofConfiguration(),
+            configureTestServices: services =>
+                services.Replace(ServiceDescriptor.Singleton<IActiveDeploymentProofProvider>(
+                    _ => CreateFeat143DeploymentProofProvider())));
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "Veritas 500 Binding Evidence TwinTest",
+            castSubmissionIdempotencyKey: "veritas500-binding-readiness-cast-001",
+            selectedProfileId: ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            bindingStatus: ElectionBindingStatus.Binding,
+            officialResultVisibilityPolicy: OfficialResultVisibilityPolicy.PublicPlaintext,
+            contactCodeProviderReadiness: ElectionContactCodeProviderReadiness.Ready,
+            rosterEntries: BuildTwoVoterRosterEntries(),
+            includeGuestNonVoter: false,
+            acknowledgedWarningCodes: Array.Empty<ElectionWarningCode>());
+
+        var finalizeProposalId = await StartGovernedProposalAsync(
+            client,
+            context.ElectionId,
+            ElectionGovernedActionType.Finalize);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, Delta);
+
+        var finalizedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        finalizedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
+        finalizedElection.LatestDraftSnapshot.Should().NotBeNull();
+        finalizedElection.LatestDraftSnapshot!.Policy.SelectedProfileDevOnly.Should().BeFalse();
+        finalizedElection.LatestDraftSnapshot.Policy.ContactCodeProviderReadiness
+            .Should().Be(ElectionContactCodeProviderReadinessProto.ContactCodeProviderReady);
+
+        var ownerResult = await GetElectionResultViewAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            waitForOfficialResult: true);
+        ownerResult.LatestReportPackage.Should().NotBeNull();
+        var reportPackage = ownerResult.LatestReportPackage!;
+        reportPackage.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageSealed);
+        reportPackage.ArtifactCount.Should().Be(14);
+
+        var ownerStatus = await GetElectionVerificationPackageStatusAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice);
+        ownerStatus.Success.Should().BeTrue(ownerStatus.ErrorMessage);
+        ownerStatus.Status.Should().NotBeNull();
+        ownerStatus.Status!.Status.Should().Be(ElectionVerificationPackageStatusProto.VerificationPackageReady);
+        ownerStatus.Status.PublicPackage.IsAvailable.Should().BeTrue();
+        ownerStatus.Status.PublicPackage.PackageHash.Should().NotBeNullOrWhiteSpace();
+
+        var publicExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
+        publicExport.PackageHash.Should().Be(ownerStatus.Status.PublicPackage.PackageHash);
+        publicExport.Files.Should().NotContain(x =>
+            x.RelativePath.StartsWith("artifacts/restricted/", StringComparison.OrdinalIgnoreCase) ||
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+        publicExport.Files.Select(x => x.RelativePath).Should().Contain(
+        [
+            VerificationPackageFileNames.AuditPackageManifest,
+            VerificationPackageFileNames.ElectionRecord,
+            VerificationPackageFileNames.Sp05EligibilityPolicy,
+            VerificationPackageFileNames.Sp05EligibilitySummary,
+            VerificationPackageFileNames.TallyReplay,
+            VerificationPackageFileNames.TrusteeReleaseEvidence,
+            VerificationPackageFileNames.Sp06TrusteeControlSummary,
+            VerificationPackageFileNames.Sp06TrusteeVerifierOutput,
+            VerificationPackageFileNames.ResultBinding,
+            VerificationPackageFileNames.ReportPackageEvidenceGraph,
+            VerificationPackageFileNames.ReportPackageDirectory + "/canonical-manifest.json",
+            VerificationPackageFileNames.ReportPackageDirectory + "/result-report.json",
+        ]);
+
+        using var canonicalManifest = ParsePackageJson(
+            publicExport,
+            VerificationPackageFileNames.ReportPackageDirectory + "/canonical-manifest.json");
+        var manifestRoot = canonicalManifest.RootElement;
+        manifestRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        manifestRoot.GetProperty("bindingStatus").GetString().Should().Be("Binding");
+        manifestRoot.GetProperty("isNonBindingElection").GetBoolean().Should().BeFalse();
+        manifestRoot.GetProperty("governanceMode").GetString().Should().Be("TrusteeThreshold");
+        manifestRoot.GetProperty("selectedProfileId").GetString().Should().Be(ElectionSelectableProfileCatalog.TrusteeProductionProfileId);
+        manifestRoot.GetProperty("circuitClassification").GetString().Should().Be("Production");
+        manifestRoot.GetProperty("boundCeremonyProfileId").GetString().Should().Be(ElectionSelectableProfileCatalog.TrusteeProductionProfileId);
+        manifestRoot.GetProperty("officialVisibility").GetString().Should().Be("PublicPlaintext");
+        manifestRoot.GetProperty("acceptedTrusteeCount").GetInt32().Should().Be(5);
+        manifestRoot.GetProperty("rosterEntryCount").GetInt32().Should().Be(2);
+        manifestRoot.GetProperty("governedApprovalCount").GetInt32().Should().Be(3);
+        manifestRoot.GetProperty("finalizationShareCount").GetInt32().Should().Be(3);
+        manifestRoot.GetProperty("warningCount").GetInt32().Should().Be(0);
+        manifestRoot.GetProperty("protocolPackageBinding").GetProperty("status").GetString().Should().Be("Sealed");
+        manifestRoot.GetProperty("deploymentProofBinding").GetProperty("status").GetString()
+            .Should().Be("AcceptedWithLimitations");
+
+        using var resultReport = ParsePackageJson(
+            publicExport,
+            VerificationPackageFileNames.ReportPackageDirectory + "/result-report.json");
+        var resultRoot = resultReport.RootElement;
+        resultRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        resultRoot.GetProperty("bindingStatus").GetString().Should().Be("Binding");
+        resultRoot.GetProperty("isNonBindingElection").GetBoolean().Should().BeFalse();
+        resultRoot.GetProperty("selectedProfileId").GetString().Should().Be(ElectionSelectableProfileCatalog.TrusteeProductionProfileId);
+        resultRoot.GetProperty("visibility").GetString().Should().Be("PublicPlaintext");
+        resultRoot.GetProperty("totalVotedCount").GetInt32().Should().Be(2);
+        resultRoot.GetProperty("eligibleToVoteCount").GetInt32().Should().Be(2);
+        resultRoot.GetProperty("didNotVoteCount").GetInt32().Should().Be(0);
+        resultRoot.GetProperty("blankCount").GetInt32().Should().Be(0);
+
+        using var eligibilityPolicy = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp05EligibilityPolicy);
+        var eligibilityPolicyRoot = eligibilityPolicy.RootElement;
+        eligibilityPolicyRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        eligibilityPolicyRoot.GetProperty("contactCodeProviderReadiness").GetString()
+            .Should().Be("ready");
+
+        using var eligibilitySummary = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp05EligibilitySummary);
+        var eligibilityRoot = eligibilitySummary.RootElement;
+        eligibilityRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        eligibilityRoot.GetProperty("activeDenominatorCount").GetInt32().Should().Be(2);
+        eligibilityRoot.GetProperty("countedParticipationCount").GetInt32().Should().Be(2);
+        eligibilityRoot.GetProperty("didNotVoteCount").GetInt32().Should().Be(0);
+
+        using var trusteeRelease = ParsePackageJson(publicExport, VerificationPackageFileNames.TrusteeReleaseEvidence);
+        var releaseRoot = trusteeRelease.RootElement;
+        releaseRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        releaseRoot.GetProperty("finalizationSessionCount").GetInt32().Should().BeGreaterThanOrEqualTo(1);
+        releaseRoot.GetProperty("acceptedShareCount").GetInt32().Should().Be(3);
+        releaseRoot.GetProperty("acceptedShares").EnumerateArray().Should().HaveCount(3);
+
+        using var trusteeSummary = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp06TrusteeControlSummary);
+        var trusteeSummaryRoot = trusteeSummary.RootElement;
+        trusteeSummaryRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        trusteeSummaryRoot.GetProperty("thresholdProfileId").GetString().Should().Be(ElectionSelectableProfileCatalog.TrusteeProductionProfileId);
+        trusteeSummaryRoot.GetProperty("trusteeCount").GetInt32().Should().Be(5);
+        trusteeSummaryRoot.GetProperty("trusteeThreshold").GetInt32().Should().Be(3);
+        trusteeSummaryRoot.GetProperty("acceptedReleaseArtifactCount").GetInt32().Should().Be(3);
+        trusteeSummaryRoot.GetProperty("missingReleaseArtifactCount").GetInt32().Should().Be(2);
+        trusteeSummaryRoot.GetProperty("readinessBlockers").EnumerateArray().Should().BeEmpty();
+        trusteeSummaryRoot.GetProperty("finalEncryptedTallyHash").GetString().Should().NotBeNullOrWhiteSpace();
+
+        using var trusteeVerifierOutput = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp06TrusteeVerifierOutput);
+        trusteeVerifierOutput.RootElement.GetProperty("results").EnumerateArray()
+            .Should()
+            .Contain(x =>
+                x.GetProperty("resultCode").GetString() == VerificationResultCodes.TrusteeControlDomainEvidenceValid &&
+                x.GetProperty("status").GetString() == "pass");
+
+        using var resultBinding = ParsePackageJson(publicExport, VerificationPackageFileNames.ResultBinding);
+        var resultBindingRoot = resultBinding.RootElement;
+        resultBindingRoot.GetProperty("electionId").GetString().Should().Be(context.ElectionId);
+        resultBindingRoot.GetProperty("reportPackageId").GetString().Should().Be(reportPackage.Id);
+        resultBindingRoot.GetProperty("reportPackageHash").GetString().Should().NotBeNullOrWhiteSpace();
+        resultBindingRoot.GetProperty("outcomeStatus").GetString().Should().Be("clean_finalized");
+        resultBindingRoot.GetProperty("cleanFinalization").GetBoolean().Should().BeTrue();
+        resultBindingRoot.GetProperty("finalizationMode").GetString().Should().Be("clean_finalization");
+
+        using var packageDirectory = new TemporaryPackageDirectory();
+        WriteVerificationPackageToDirectory(publicExport, packageDirectory.PackagePath);
+        var verification = await new HushVotingPackageVerifier().VerifyAsync(new(
+            packageDirectory.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1));
+        verification.ExitCode.Should().Be(VerificationExitCodes.Pass);
+        verification.Output.OverallStatus.Should().Be(VerificationOverallStatus.Pass);
+        verification.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.PackageManifestValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        verification.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.EligibilityEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        verification.Output.Results.Should().NotContain(x => x.Status == VerificationCheckStatus.Warn);
+        verification.Output.Results.Should().NotContain(x => x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
     [Trait("Category", "FEAT-146")]
     [Trait("Category", "HV-INT-FEAT-146")]
     [Trait("Category", "TwinTest")]
@@ -1447,13 +1805,28 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
     private async Task<ClosedElectionReadyContext> CreateClosedElectionReadyForFinalizeAsync(
         HushElections.HushElectionsClient client,
         string title,
-        string castSubmissionIdempotencyKey = "feat102-cast-001")
+        string castSubmissionIdempotencyKey = "feat102-cast-001",
+        string selectedProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+        ElectionBindingStatus bindingStatus = ElectionBindingStatus.Binding,
+        OfficialResultVisibilityPolicy officialResultVisibilityPolicy = OfficialResultVisibilityPolicy.PublicPlaintext,
+        ElectionContactCodeProviderReadiness contactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly,
+        IReadOnlyList<ElectionRosterImportItem>? rosterEntries = null,
+        bool includeGuestNonVoter = true,
+        IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null)
     {
-        var createResponse = await CreateTrusteeThresholdDraftAsync(client, title);
+        var createResponse = await CreateTrusteeThresholdDraftAsync(
+            client,
+            title,
+            selectedProfileId,
+            bindingStatus,
+            officialResultVisibilityPolicy,
+            contactCodeProviderReadiness,
+            rosterEntries,
+            acknowledgedWarningCodes);
         var electionId = createResponse.Election.ElectionId;
 
         await InviteAndAcceptRolloutTrusteesAsync(electionId);
-        var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
+        var ceremonyVersionId = await StartCeremonyAsync(client, electionId, selectedProfileId);
         await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: RolloutTrustees.Count);
 
         var readiness = await client.GetElectionOpenReadinessAsync(new GetElectionOpenReadinessRequest
@@ -1474,7 +1847,10 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         openElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Open);
 
         await ClaimRosterEntryAsync(electionId, TestIdentities.Alice, "voter-alice");
-        await ClaimRosterEntryAsync(electionId, Guest, "voter-guest");
+        if (includeGuestNonVoter)
+        {
+            await ClaimRosterEntryAsync(electionId, Guest, "voter-guest");
+        }
         await RegisterVotingCommitmentAsync(client, electionId, TestIdentities.Alice, "feat102-commitment-001");
         var castSubmitResponse = await SubmitAcceptedBallotCastViaBlockchainAsync(
             client,
@@ -1554,12 +1930,24 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
 
     private async Task<ElectionCommandResponse> CreateTrusteeThresholdDraftAsync(
         HushElections.HushElectionsClient client,
-        string title)
+        string title,
+        string selectedProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+        ElectionBindingStatus bindingStatus = ElectionBindingStatus.Binding,
+        OfficialResultVisibilityPolicy officialResultVisibilityPolicy = OfficialResultVisibilityPolicy.PublicPlaintext,
+        ElectionContactCodeProviderReadiness contactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly,
+        IReadOnlyList<ElectionRosterImportItem>? rosterEntries = null,
+        IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null)
     {
         var (signedTransaction, electionId) = TestTransactionFactory.CreateElectionDraft(
             TestIdentities.Alice,
             "feat-102 integration draft",
-            BuildTrusteeThresholdDraftSpecification(title));
+            BuildTrusteeThresholdDraftSpecification(
+                title,
+                selectedProfileId,
+                bindingStatus,
+                officialResultVisibilityPolicy,
+                contactCodeProviderReadiness,
+                acknowledgedWarningCodes));
         var submitResponse = await SubmitBlockchainTransactionAsync(signedTransaction);
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
 
@@ -1567,7 +1955,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             TestTransactionFactory.ImportElectionRoster(
                 TestIdentities.Alice,
                 electionId,
-                BuildOpenReadyRosterEntries()));
+                rosterEntries ?? BuildOpenReadyRosterEntries()));
         importRosterResponse.Successfull.Should().BeTrue(importRosterResponse.Message);
 
         var response = await ReloadElectionAsync(client, electionId.ToString(), TestIdentities.Alice);
@@ -2524,6 +2912,12 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         new ElectionRosterImportItem("voter-guest", ElectionRosterContactType.Email, "guest.eligibility@hush.test"),
     ];
 
+    private static IReadOnlyList<ElectionRosterImportItem> BuildTwoVoterRosterEntries() =>
+    [
+        new ElectionRosterImportItem("voter-alice", ElectionRosterContactType.Email, "alice.eligibility@hush.test"),
+        new ElectionRosterImportItem("voter-charlie", ElectionRosterContactType.Email, "charlie.eligibility@hush.test"),
+    ];
+
     private sealed class TemporaryPackageDirectory : IDisposable
     {
         public string PackagePath { get; } = Path.Combine(
@@ -2544,14 +2938,20 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         }
     }
 
-    private static ElectionDraftSpecification BuildTrusteeThresholdDraftSpecification(string title) =>
+    private static ElectionDraftSpecification BuildTrusteeThresholdDraftSpecification(
+        string title,
+        string selectedProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+        ElectionBindingStatus bindingStatus = ElectionBindingStatus.Binding,
+        OfficialResultVisibilityPolicy officialResultVisibilityPolicy = OfficialResultVisibilityPolicy.PublicPlaintext,
+        ElectionContactCodeProviderReadiness contactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly,
+        IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null) =>
         new(
             Title: title,
             ShortDescription: "Governed report package vote",
             ExternalReferenceCode: "REF-2026-102",
             ElectionClass: ElectionClass.OrganizationalRemoteVoting,
-            BindingStatus: ElectionBindingStatus.Binding,
-            SelectedProfileId: "dkg-prod-3of5",
+            BindingStatus: bindingStatus,
+            SelectedProfileId: selectedProfileId,
             GovernanceMode: ElectionGovernanceMode.TrusteeThreshold,
             DisclosureMode: ElectionDisclosureMode.FinalResultsOnly,
             ParticipationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
@@ -2579,12 +2979,10 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
                 new ElectionOptionDefinition("yes", "Yes", "Approve the proposal", 1, false),
                 new ElectionOptionDefinition("no", "No", "Reject the proposal", 2, false),
             ],
-            AcknowledgedWarningCodes:
-            [
-                ElectionWarningCode.AllTrusteesRequiredFragility,
-            ],
+            AcknowledgedWarningCodes: acknowledgedWarningCodes ?? [ElectionWarningCode.AllTrusteesRequiredFragility],
             RequiredApprovalCount: 3,
-            OfficialResultVisibilityPolicy: OfficialResultVisibilityPolicy.PublicPlaintext);
+            OfficialResultVisibilityPolicy: officialResultVisibilityPolicy,
+            ContactCodeProviderReadiness: contactCodeProviderReadiness);
 
     private sealed record ClosedElectionReadyContext(string ElectionId);
 

@@ -41,7 +41,8 @@ public sealed record ReadinessRegisterPromotionOptions(
     bool ValidateOnly,
     bool Scaffold,
     DateTimeOffset? GeneratedAt,
-    bool CheckOnly = false);
+    bool CheckOnly = false,
+    bool ReplaceExisting = false);
 
 public sealed record ReadinessRegisterPromotionResult(
     string RegisterVersion,
@@ -161,6 +162,28 @@ public sealed class ReadinessRegisterPromotionService
 
     private const string DirectBindingCurrentVerifierOutputRef =
         "hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Direct-Rehearsal-II-20260604215137/public-verifier-output-current-public-20260605c/VerifierOutput.json";
+
+    private const string Veritas500NonBindingEvidenceRoot =
+        "hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Veritas-500-Non-Binding-IV-20260611081304";
+
+    private static readonly string[] Veritas500NonBindingEvidenceRefs =
+    [
+        Veritas500NonBindingEvidenceRoot + "/audit-boundary-note.md",
+        Veritas500NonBindingEvidenceRoot + "/evidence-summary.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/AuditPackageManifest.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/ElectionRecord.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/VerifierInputManifest.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/artifacts/report-package/canonical-manifest.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/artifacts/report-package/evidence-graph.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/artifacts/report-package/result-report.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/artifacts/election-record/trustee-control-profile.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/artifacts/election-record/trustee-control-summary.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/artifacts/election-record/trustee-release-evidence.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/artifacts/election-record/trustee-verifier-output.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/artifacts/election-record/tally-replay.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verification-package/artifacts/election-record/result-binding.json",
+        Veritas500NonBindingEvidenceRoot + "/public-verifier-output/VerifierOutput.json",
+    ];
 
     private static readonly OperationalChecklistRow[] EnvironmentOperationalChecklistRows =
     [
@@ -637,7 +660,10 @@ public sealed class ReadinessRegisterPromotionService
             manifestBytes,
             "application/json"));
 
-        EnsureCatalogAllowsPromotion(options.Paths.CatalogPath, registerVersionId, manifestHash, archiveHash);
+        if (!options.ReplaceExisting)
+        {
+            EnsureCatalogAllowsPromotion(options.Paths.CatalogPath, registerVersionId, manifestHash, archiveHash);
+        }
         var feat147AuditPackage = Feat147PromotionAudit.TryGenerate(options.Paths, register, generatedAt);
         var feat150CleanupPackage = Feat150CleanupAudit.TryGenerate(
             options.Paths,
@@ -1629,10 +1655,13 @@ public sealed class ReadinessRegisterPromotionService
 
     private static void EnsureInternalAudit95ClaimProfiles(JsonObject register)
     {
-        register["claimProfiles"] = BuildInternalAudit95ClaimProfiles();
+        register["claimProfiles"] = BuildInternalAudit95ClaimProfiles(GetRequiredString(register, "registerVersion"));
     }
 
-    private static JsonArray BuildInternalAudit95ClaimProfiles() =>
+    private static bool ShouldBindVeritas500NonBindingEvidence(string registerVersion) =>
+        string.Equals(registerVersion, DevelopmentProfileClarificationTargetVersion, StringComparison.Ordinal);
+
+    private static JsonArray BuildInternalAudit95ClaimProfiles(string registerVersion) =>
         new()
         {
             BuildClaimProfile(
@@ -1686,13 +1715,36 @@ public sealed class ReadinessRegisterPromotionService
                 true,
                 "3/5",
                 "standard",
-                "amber",
-                "not_observed",
+                ShouldBindVeritas500NonBindingEvidence(registerVersion) ? "green" : "amber",
+                ShouldBindVeritas500NonBindingEvidence(registerVersion) ? "passed" : "not_observed",
                 "internal_non_binding_rehearsal",
-                "The non-binding Veritas 3/5 profile is tracked, but no accepted runtime rehearsal evidence is bound to it in the current accepted evidence baseline.",
-                "Requires a Veritas 3/5 threshold ceremony, trustee evidence, bindingStatus Non-Binding, and isNonBindingElection true.",
-                [],
-                ["productMode == HushVoting! Veritas", "thresholdProfile == 3/5", "bindingStatus == Non-Binding", "isNonBindingElection == true"]),
+                ShouldBindVeritas500NonBindingEvidence(registerVersion)
+                    ? "HushVoting! Veritas 500, Non-Binding IV binds finalized runtime evidence for the internal technical Veritas 3/5 rehearsal profile."
+                    : "The non-binding Veritas 3/5 profile is tracked, but no accepted runtime rehearsal evidence is bound to it in the current accepted evidence baseline.",
+                ShouldBindVeritas500NonBindingEvidence(registerVersion)
+                    ? "The pass is limited to internal non-binding rehearsal evidence. It does not claim production rollout readiness, public/state election readiness, legal sufficiency, certification, independent validation, high-assurance trustee custody, or SP-09 external review."
+                    : "Requires a Veritas 3/5 threshold ceremony, trustee evidence, bindingStatus Non-Binding, and isNonBindingElection true.",
+                ShouldBindVeritas500NonBindingEvidence(registerVersion) ? Veritas500NonBindingEvidenceRefs : Array.Empty<string>(),
+                ShouldBindVeritas500NonBindingEvidence(registerVersion)
+                    ?
+                    [
+                        "productMode == HushVoting! Veritas",
+                        "thresholdProfile == 3/5",
+                        "bindingStatus == Non-Binding",
+                        "isNonBindingElection == true",
+                        "selectedProfileId == dkg-dev-3of5",
+                        "governanceMode == TrusteeThreshold",
+                        "lifecycleState == Finalized",
+                        "acceptedTrusteeCount == 5",
+                        "governedApprovalCount == 3",
+                        "acceptedFinalizationShareCount == 3",
+                        "eligibleVoterCount == 2",
+                        "countedVoteCount == 2",
+                        "package warningCount == 0",
+                        "standalone verifier warning/failure count == 0",
+                        "public verification package result == package_structure_valid",
+                    ]
+                    : ["productMode == HushVoting! Veritas", "thresholdProfile == 3/5", "bindingStatus == Non-Binding", "isNonBindingElection == true"]),
             BuildClaimProfile(
                 "hushvoting.veritas_3_of_5.binding",
                 "Binding HushVoting! Veritas 3/5",
@@ -3340,12 +3392,46 @@ public sealed class ReadinessRegisterPromotionService
 
     private static IReadOnlyList<PromotedFile> BuildProfileEvidenceProcedurePageFiles(JsonObject register) =>
         ProfileEvidenceProcedureRows
+            .Select(row => GetRegisterSpecificProfileEvidenceProcedureRow(register, row))
             .Select(row => new PromotedFile(
                 GetProfileEvidenceProcedurePageRelativePath(row),
                 "restricted",
                 EncodingWithoutBom(GetProfileEvidenceProcedurePageMarkdown(register, row)),
                 "text/markdown"))
             .ToArray();
+
+    private static ProfileEvidenceProcedureRow GetRegisterSpecificProfileEvidenceProcedureRow(
+        JsonObject register,
+        ProfileEvidenceProcedureRow row)
+    {
+        if (!ShouldBindVeritas500NonBindingEvidence(GetRequiredString(register, "registerVersion")))
+        {
+            return row;
+        }
+
+        if (string.Equals(row.CheckId, "RDY-CHECK-LIFECYCLE-BALLOT-PUBLICATION-TALLY-COUNT", StringComparison.Ordinal))
+        {
+            return row with
+            {
+                V018Timing = "Direct non-binding finalized at 2026-06-05T10:21:41.7215447Z; Direct binding finalized at 2026-06-04T21:32:52.7016107Z; Veritas 3/5 non-binding finalized in HushVoting! Veritas 500, Non-Binding IV at package attempt 2026-06-11T08:08:56.0611053Z.",
+                V018EvidenceResult = "Passed for Direct and Veritas 3/5 non-binding profile-bound packages: each finalized cleanly with two eligible voters, two counted votes, zero blanks, and consistent accepted/published/tally/result hashes. The older FEAT-139 failed-finalize continuity residual is not used as the Veritas IV package result.",
+            };
+        }
+
+        if (string.Equals(row.CheckId, "RDY-CHECK-VERITAS-TRUSTEE-CEREMONY-ACCEPTANCE", StringComparison.Ordinal))
+        {
+            return row with
+            {
+                PassRule = "Veritas passes only when trustee ceremony evidence proves the exact threshold, accepted trustee set, election-scoped trustee keys, tally public key, release evidence, and accepted threshold shares for that election.",
+                DevelopmentApplicability = "Required for Veritas development/rehearsal; disabled for Direct",
+                DevelopmentCheck = "For Direct runs, verify the exclusion: acceptedTrusteeCount=0, finalizationShareCount=0, governedApprovalCount=0, and trustees=[] are visible. For Veritas 3/5 non-binding, verify acceptedTrusteeCount=5, requiredApprovalCount=3, governedApprovalCount=3, accepted finalization shares=3, and trustee verifier pass output.",
+                V018Timing = "Direct exclusion checked in report packages generated at 2026-06-05T10:21:41.7215447Z and 2026-06-04T21:32:52.7016107Z. Veritas 3/5 non-binding checked in HushVoting! Veritas 500, Non-Binding IV at report package attempt 2026-06-11T08:08:56.0611053Z and standalone verifier time 2026-06-11T08:15:21.5032203Z.",
+                V018EvidenceResult = "Passed for Veritas 3/5 non-binding in RDY-REG-v0.1.9: five accepted trustees, 3-of-5 threshold, three governed approvals, three accepted finalization shares, trustee verifier output pass, package warningCount=0, and standalone verifier warnings/failures=0. Direct packages remain correctly disabled with no Veritas ceremony claim.",
+            };
+        }
+
+        return row;
+    }
 
     private static PromotedFile BuildExternalAuditorEntryPointPageFile(JsonObject register) =>
         new(
@@ -3504,7 +3590,7 @@ public sealed class ReadinessRegisterPromotionService
         AppendClaimProfilesSection(sb, register, includeEvidence: false);
         AppendDevelopmentProfileClarificationSection(sb, register);
         AppendExternalAuditorEntryPointSection(sb);
-        AppendProfileEvidenceProcedureSection(sb);
+        AppendProfileEvidenceProcedureSection(sb, register);
         AppendEnvironmentOperationalChecklistSection(sb);
 
         sb.AppendLine();
@@ -3680,7 +3766,7 @@ public sealed class ReadinessRegisterPromotionService
         AppendClaimProfilesSection(sb, register, includeEvidence: true);
         AppendDevelopmentProfileClarificationSection(sb, register);
         AppendExternalAuditorEntryPointSection(sb);
-        AppendProfileEvidenceProcedureSection(sb);
+        AppendProfileEvidenceProcedureSection(sb, register);
         AppendEnvironmentOperationalChecklistSection(sb);
 
         sb.AppendLine();
@@ -3808,14 +3894,14 @@ public sealed class ReadinessRegisterPromotionService
         }
     }
 
-    private static void AppendProfileEvidenceProcedureSection(StringBuilder sb)
+    private static void AppendProfileEvidenceProcedureSection(StringBuilder sb, JsonObject register)
     {
         sb.AppendLine();
         sb.AppendLine("## Profile Evidence Verification Procedure");
         sb.AppendLine();
         sb.AppendLine("A claim profile gate is not a standalone checkmark. A passed profile must be backed by field-level evidence checks against the database-backed records and exported proof artifacts below. Profiles marked not_observed or future_gated use the same rows as unmet requirements before they can pass.");
         AppendTableHeader(sb, "Page", "Scope", "Development Mode", "Check Performed", "Database / Record Surface", "Evidence / Proof Artifacts", "Pass Rule");
-        foreach (var row in ProfileEvidenceProcedureRows)
+        foreach (var row in ProfileEvidenceProcedureRows.Select(row => GetRegisterSpecificProfileEvidenceProcedureRow(register, row)))
         {
             AppendTableRow(
                 sb,
@@ -3839,7 +3925,7 @@ public sealed class ReadinessRegisterPromotionService
         sb.AppendLine();
         sb.AppendLine("## v0.1.9 Development And Production Boundary Clarification");
         sb.AppendLine();
-        sb.AppendLine("RDY-REG-v0.1.9 is a clarification and reviewer-hardening publication over the accepted RDY-REG-v0.1.8 score. It does not raise the numeric score or silently promote Veritas profile gates without a signed exported verifier package.");
+        sb.AppendLine("RDY-REG-v0.1.9 is a clarification, reviewer-hardening, and Veritas 3/5 non-binding evidence-binding publication over the accepted RDY-REG-v0.1.8 score. It does not raise the numeric score. It promotes only the package-bound HushVoting! Veritas 500, Non-Binding IV profile gate; binding Veritas and larger trustee profiles remain unpromoted until their own packages are bound.");
         sb.AppendLine();
         AppendTableHeader(sb, "Topic", "Development / Non-Binding Rehearsal", "Binding / Production Expectation");
         AppendTableRow(
@@ -3857,6 +3943,11 @@ public sealed class ReadinessRegisterPromotionService
             "ProtocolPackageExternalReviewStatus",
             "NotReviewed means no independent external reviewer conclusion has been imported. Development verifier profiles accept this as a non-claim when SP-09 shape is valid.",
             "Production or external-review claims require SP-09 reviewer evidence and a catalog/binding status that reflects the reviewed conclusion.");
+        AppendTableRow(
+            sb,
+            "Veritas 3/5 non-binding runtime evidence",
+            "HushVoting! Veritas 500, Non-Binding IV is accepted for the internal technical non-binding 3-of-5 claim because the finalized public verification package binds NonBinding/isNonBindingElection=true, dkg-dev-3of5, five accepted trustees, three governed approvals, three accepted finalization shares, two counted votes, package warningCount=0, and standalone verifier warnings/failures=0.",
+            "Binding Veritas 500 must use the production 3-of-5 profile and its own exported package. Veritas 2k/10k thresholds and binding variants remain separate evidence runs even when the code path is shared.");
         AppendTableRow(
             sb,
             "Deployment proof family",
@@ -3909,7 +4000,7 @@ public sealed class ReadinessRegisterPromotionService
                 : "- Hush-owned 95+ hardening, rehearsal evidence, binding-election proof generation, and proof-verification evidence remain future execution gates.");
             if (isDevelopmentProfileClarification)
             {
-                sb.AppendLine("- RDY-REG-v0.1.9 clarifies that development/rehearsal flags are accepted only inside the development evidence boundary; production and external-review claims still require their production evidence.");
+                sb.AppendLine("- RDY-REG-v0.1.9 clarifies that development/rehearsal flags are accepted only inside the development evidence boundary and binds HushVoting! Veritas 500, Non-Binding IV to the internal Veritas 3/5 non-binding profile; production and external-review claims still require their production evidence.");
             }
         }
         else

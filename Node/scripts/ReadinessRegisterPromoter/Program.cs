@@ -29,7 +29,8 @@ var options = new ReadinessRegisterPromotionOptions(
             null,
             System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal)
         : null,
-    arguments.ContainsKey("check-only"));
+    arguments.ContainsKey("check-only"),
+    arguments.ContainsKey("replace-existing"));
 
 try
 {

@@ -38,11 +38,17 @@ public class ElectionLifecycleServiceTests
             ActorPublicAddress: "owner-address",
             SnapshotReason: "initial draft",
             Draft: CreateAdminDraftSpecification(
+                officialResultVisibilityPolicy: OfficialResultVisibilityPolicy.PublicPlaintext,
+                contactCodeProviderReadiness: ElectionContactCodeProviderReadiness.Ready,
                 acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet])));
 
         result.IsSuccess.Should().BeTrue();
         result.Election.Should().NotBeNull();
+        result.Election!.OfficialResultVisibilityPolicy.Should().Be(OfficialResultVisibilityPolicy.PublicPlaintext);
+        result.Election.ContactCodeProviderReadiness.Should().Be(ElectionContactCodeProviderReadiness.Ready);
         result.DraftSnapshot.Should().NotBeNull();
+        result.DraftSnapshot!.Policy.OfficialResultVisibilityPolicy.Should().Be(OfficialResultVisibilityPolicy.PublicPlaintext);
+        result.DraftSnapshot.Policy.ContactCodeProviderReadiness.Should().Be(ElectionContactCodeProviderReadiness.Ready);
         store.Elections.Should().ContainSingle();
         store.DraftSnapshots.Should().ContainSingle();
         store.WarningAcknowledgements.Should().ContainSingle();
@@ -226,14 +232,22 @@ public class ElectionLifecycleServiceTests
             SnapshotReason: "owner updated title",
             Draft: CreateAdminDraftSpecification(
                 title: "Board Election 2026",
+                officialResultVisibilityPolicy: OfficialResultVisibilityPolicy.PublicPlaintext,
+                contactCodeProviderReadiness: ElectionContactCodeProviderReadiness.Ready,
                 acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet])));
 
         updateResult.IsSuccess.Should().BeTrue();
         updateResult.Election.Should().NotBeNull();
         updateResult.Election!.CurrentDraftRevision.Should().Be(2);
         updateResult.Election.Title.Should().Be("Board Election 2026");
+        updateResult.Election.OfficialResultVisibilityPolicy.Should().Be(OfficialResultVisibilityPolicy.PublicPlaintext);
+        updateResult.Election.ContactCodeProviderReadiness.Should().Be(ElectionContactCodeProviderReadiness.Ready);
         store.DraftSnapshots.Should().HaveCount(2);
         store.DraftSnapshots.Select(x => x.DraftRevision).Should().Equal(1, 2);
+        store.DraftSnapshots.Single(x => x.DraftRevision == 2).Policy.OfficialResultVisibilityPolicy
+            .Should().Be(OfficialResultVisibilityPolicy.PublicPlaintext);
+        store.DraftSnapshots.Single(x => x.DraftRevision == 2).Policy.ContactCodeProviderReadiness
+            .Should().Be(ElectionContactCodeProviderReadiness.Ready);
         store.WarningAcknowledgements.Count(x => x.DraftRevision == 2).Should().Be(1);
     }
 
@@ -8247,7 +8261,9 @@ public class ElectionLifecycleServiceTests
         IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null,
         EligibilityMutationPolicy eligibilityMutationPolicy = EligibilityMutationPolicy.FrozenAtOpen,
         ElectionBindingStatus bindingStatus = ElectionBindingStatus.Binding,
-        string? selectedProfileId = null) =>
+        string? selectedProfileId = null,
+        OfficialResultVisibilityPolicy officialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly,
+        ElectionContactCodeProviderReadiness contactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly) =>
         new(
             Title: title,
             ShortDescription: "Annual board vote",
@@ -8274,7 +8290,9 @@ public class ElectionLifecycleServiceTests
                 new ElectionOptionDefinition("alice", "Alice", null, 1, IsBlankOption: false),
                 new ElectionOptionDefinition("bob", "Bob", null, 2, IsBlankOption: false),
             ],
-            AcknowledgedWarningCodes: acknowledgedWarningCodes);
+            AcknowledgedWarningCodes: acknowledgedWarningCodes,
+            OfficialResultVisibilityPolicy: officialResultVisibilityPolicy,
+            ContactCodeProviderReadiness: contactCodeProviderReadiness);
 
     private static ElectionDraftSpecification CreateTrusteeDraftSpecification(
         string title = "Governed Referendum",

@@ -463,6 +463,9 @@ public sealed class ReadinessRegisterPromotionServiceTests
         var directBindingProfile = promotedRegister["claimProfiles"]!.AsArray()
             .Select(node => node!.AsObject())
             .Single(profile => profile["profileId"]!.GetValue<string>() == "hushvoting.direct.binding");
+        var v018VeritasNonBindingProfile = promotedRegister["claimProfiles"]!.AsArray()
+            .Select(node => node!.AsObject())
+            .Single(profile => profile["profileId"]!.GetValue<string>() == "hushvoting.veritas_3_of_5.non_binding");
         promotedRegister["claimProfiles"]!.AsArray().Should().HaveCount(10);
         directNonBindingProfile["productMode"]!.GetValue<string>().Should().Be("HushVoting! Direct");
         directNonBindingProfile["bindingStatus"]!.GetValue<string>().Should().Be("Non-Binding");
@@ -483,6 +486,8 @@ public sealed class ReadinessRegisterPromotionServiceTests
         directBindingProfile["isNonBindingElection"]!.GetValue<bool>().Should().BeFalse();
         directBindingProfile["gateStatus"]!.GetValue<string>().Should().Be("passed");
         directBindingProfile["verifierWarningCount"]!.GetValue<int>().Should().Be(0);
+        v018VeritasNonBindingProfile["gateStatus"]!.GetValue<string>().Should().Be("not_observed");
+        v018VeritasNonBindingProfile["evidenceRefs"]!.AsArray().Should().BeEmpty();
         scorecard.Should().Contain("Total score: 95/100");
         scorecard.Should().Contain("internal-audit-95 hardening is accepted");
         scorecard.Should().Contain("## HushVoting Claim Profiles");
@@ -632,11 +637,35 @@ public sealed class ReadinessRegisterPromotionServiceTests
         v019Result.TotalScore.Should().Be(95);
         v019PromotedRegister["sourceCommit"]!.GetValue<string>().Should()
             .Be("RDY-REG-v0.1.9-development-profile-clarification");
+        var v019VeritasNonBindingProfile = v019PromotedRegister["claimProfiles"]!.AsArray()
+            .Select(node => node!.AsObject())
+            .Single(profile => profile["profileId"]!.GetValue<string>() == "hushvoting.veritas_3_of_5.non_binding");
+        v019VeritasNonBindingProfile["gateSeverity"]!.GetValue<string>().Should().Be("green");
+        v019VeritasNonBindingProfile["gateStatus"]!.GetValue<string>().Should().Be("passed");
+        v019VeritasNonBindingProfile["requiredEvidence"]!.AsArray()
+            .Select(node => node!.GetValue<string>())
+            .Should()
+            .Contain("acceptedFinalizationShareCount == 3")
+            .And
+            .Contain("package warningCount == 0")
+            .And
+            .Contain("standalone verifier warning/failure count == 0");
+        v019VeritasNonBindingProfile["evidenceRefs"]!.AsArray()
+            .Select(node => node!.GetValue<string>())
+            .Should()
+            .Contain("hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Veritas-500-Non-Binding-IV-20260611081304/evidence-summary.json")
+            .And
+            .Contain("hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Veritas-500-Non-Binding-IV-20260611081304/public-verification-package/artifacts/election-record/trustee-release-evidence.json")
+            .And
+            .Contain("hush-documents/PrivateServer_ElectronicVoting/Live-Rehearsal-Evidence/HushVoting-Veritas-500-Non-Binding-IV-20260611081304/public-verifier-output/VerifierOutput.json");
         v019Scorecard.Should().Contain("v0.1.9 Development And Production Boundary Clarification");
+        v019Scorecard.Should().Contain("HushVoting! Veritas 500, Non-Binding IV");
+        v019Scorecard.Should().Contain("package warningCount=0");
+        v019Scorecard.Should().Contain("standalone verifier warnings/failures=0");
         v019Scorecard.Should().Contain("Binding trustee elections resolve to dkg-prod-3of5");
         v019Scorecard.Should().Contain("DevOnly becomes a blocker outside the development/rehearsal boundary");
         v019Scorecard.Should().Contain("Production or external-review claims require SP-09 reviewer evidence");
-        v019PublicSummary.Should().Contain("RDY-REG-v0.1.9 clarifies that development/rehearsal flags are accepted only inside the development evidence boundary");
+        v019PublicSummary.Should().Contain("RDY-REG-v0.1.9 clarifies that development/rehearsal flags are accepted only inside the development evidence boundary and binds HushVoting! Veritas 500, Non-Binding IV");
         service.Promote(v019Options with { CheckOnly = true }).RegisterVersionId.Should().Be("RDY-REG-v0.1.9");
     }
 
