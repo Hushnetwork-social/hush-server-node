@@ -1,0 +1,6 @@
+{
+  "repository": "hush-voting-web-client",
+  "revision": "3484bf170b9e4d0e84b4ae86dbc2517640ad9cfe",
+  "note": "Pinned HushVoting corpus revision for HushServerNode compatibility CI. The .NET runner consumes this one canonical source via an explicit pinned checkout; update only via dual-owner review when the corpus contract changes.",
+  "updated": "2026-08-02"
+}

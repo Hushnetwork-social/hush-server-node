@@ -1,0 +1,113 @@
+name: Identity Compatibility - Server to HushVoting
+
+# FEAT-001 Phase 6 (Task 6.3): HushServerNode-pull-request compatibility CI.
+# When shared crypto libraries or the .NET conformance runner change, this
+# workflow:
+#   1. builds and runs the runner's focused test suite; and
+#   2. checks out the APPROVED HushVoting corpus at a PINNED revision
+#      (Tools/HushIdentityCompatibilityConformance/corpus-pin.json) and runs
+#      the full corpus, failing on any mismatch.
+# Normal server production builds remain independent of the client repository;
+# the main ci.yml build does not fetch mutable compatibility artifacts.
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "Shared/Olimpo.KeyDerivation/**"
+      - "Shared/Olimpo.CredentialsManager/**"
+      - "Shared/HushShared.Blockchain.TransactionModel/**"
+      - "Tools/HushIdentityCompatibilityConformance/**"
+  push:
+    branches: [master]
+    paths:
+      - "Shared/Olimpo.KeyDerivation/**"
+      - "Shared/Olimpo.CredentialsManager/**"
+      - "Shared/HushShared.Blockchain.TransactionModel/**"
+      - "Tools/HushIdentityCompatibilityConformance/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: identity-compat-server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dotnet-conformance:
+    name: .NET runner tests and pinned-corpus conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out HushServerNode
+        uses: actions/checkout@v5
+
+      - name: Read pinned corpus revision
+        id: pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          PIN="Tools/HushIdentityCompatibilityConformance/corpus-pin.json"
+          REV="$(node -e "console.log(JSON.parse(require('fs').readFileSync('${PIN}','utf8')).revision)")"
+          if ! [[ "${REV}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::corpus-pin.json revision is not a 40-hex commit: ${REV}"
+            exit 1
+          fi
+          echo "revision=${REV}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check out pinned HushVoting corpus
+        uses: actions/checkout@v5
+        with:
+          repository: Hushnetwork-social/hush-voting-web-client
+          ref: ${{ steps.pin.outputs.revision }}
+          path: hush-voting-web-client
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build runner and tests
+        run: dotnet build Tools/HushIdentityCompatibilityConformance.Tests/HushIdentityCompatibilityConformance.Tests.csproj --nologo
+
+      - name: Runner test suite
+        env:
+          HUSH_CONFORMANCE_CORPUS: ${{ github.workspace }}/hush-voting-web-client/conformance/identity/v1
+        run: dotnet test Tools/HushIdentityCompatibilityConformance.Tests/HushIdentityCompatibilityConformance.Tests.csproj --no-build --verbosity minimal
+
+      - name: Run full corpus against pinned revision (exit 0)
+        id: conformance
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIGEST="$(sha256sum hush-voting-web-client/conformance/identity/v1/manifest.json | cut -d' ' -f1)"
+          dotnet run --project Tools/HushIdentityCompatibilityConformance \
+            -- --corpus hush-voting-web-client/conformance/identity/v1 \
+            --manifest-digest "${DIGEST}" \
+            --report conformance/reports/dotnet-identity-report.json
+          echo "manifest-digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
+
+      - name: Record revisions and digest
+        shell: bash
+        run: |
+          {
+            echo "## Identity Compatibility Cross-Check (server side)"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| HushServerNode revision | \`${GITHUB_SHA}\` |"
+            echo "| Pinned HushVoting corpus revision | \`${{ steps.pin.outputs.revision }}\` |"
+            echo "| Manifest digest | \`${{ steps.conformance.outputs.manifest-digest }}\` |"
+            echo "| .NET result | ${{ steps.conformance.outcome }} (exit 0) |"
+            echo ""
+            echo "Replay obligation: every future corpus version must pass; native/Rust implementations must replay all applicable versions."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload .NET report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-identity-report
+          path: conformance/reports/dotnet-identity-report.json
+          if-no-files-found: error

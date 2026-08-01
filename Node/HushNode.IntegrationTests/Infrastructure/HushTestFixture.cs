@@ -203,6 +203,20 @@ internal sealed class HushTestFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// Executes a non-query SQL statement against the PostgreSQL database.
+    /// </summary>
+    /// <param name="sql">The SQL statement to execute.</param>
+    public async Task ExecuteNonQueryAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(PostgresConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
     /// Executes a scalar SQL query against the PostgreSQL database.
     /// </summary>
     /// <typeparam name="T">The type of the result.</typeparam>
