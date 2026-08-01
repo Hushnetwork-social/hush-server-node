@@ -18,6 +18,7 @@ public static class ReportWriter
         var dir = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var json = JsonSerializer.Serialize(report, Options);
-        File.WriteAllText(path, json + "\n", System.Text.Encoding.UTF8);
+        // Corpus formatting rules require UTF-8 without BOM.
+        File.WriteAllText(path, json + "\n", new System.Text.UTF8Encoding(false));
     }
 }
