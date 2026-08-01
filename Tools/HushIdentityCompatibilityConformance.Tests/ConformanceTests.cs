@@ -119,6 +119,28 @@ public class CorpusValidationTests
         }
     }
 
+    [Fact]
+    public void Manifest_schema_violation_is_rejected()
+    {
+        if (Corpus is null) throw new InvalidOperationException("corpus not found; set HUSH_CONFORMANCE_CORPUS");
+        var tmp = CopyCorpus(Corpus);
+        try
+        {
+            // Parseable manifest whose files entry violates manifest.schema.json
+            // (bad path pattern, negative bytes) — integrity digest matches, so
+            // only the schema check can reject it.
+            File.WriteAllText(Path.Combine(tmp, "manifest.json"), "{\"contractVersion\":\"1.0.0\",\"files\":[{\"path\":\"bad path !!!\",\"bytes\":-1,\"sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\"}]}\n");
+            var newDigest = CorpusLocator.ManifestDigest(tmp);
+            var result = CorpusValidator.Validate(tmp, newDigest);
+            result.Valid.Should().BeFalse();
+            result.Errors.Should().Contain(e => e.Contains("manifest.schema.json", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Directory.Delete(tmp, recursive: true);
+        }
+    }
+
     private static string CopyCorpus(string source)
     {
         var tmp = TempCorpus();
@@ -252,6 +274,17 @@ public class DatAdapterTests
         result.Code.Should().Be(expectedCode, id);
     }
 
+    [Fact]
+    public void Duplicate_detection_does_not_false_positive_on_escaped_quote_values()
+    {
+        // A value containing an escaped quote followed by a colon must not be
+        // mistaken for a duplicate property (regex heuristic robustness).
+        var payload = "{\"ProfileName\":\"say \\\"hi\\\": now\",\"PublicSigningAddress\":\"0237fdd4364c0b898908be2f1a98a6b4a7890c623ae92a283640e44d87e048daa5\",\"PrivateSigningKey\":\"6e3f74236c3d4a20553be05963f624696990c22245599b3d1b30262af793d885\",\"PublicEncryptAddress\":\"032ebaf076203f15ac8119cfdbc9394d1c7b9929b0647e4f607e27da95701f8556\",\"PrivateEncryptKey\":\"1a68f2d543282dd612502a1b3688e85eeca280057129d512011645a51cf6d552\",\"IsPublic\":true,\"Mnemonic\":null}";
+        var result = DatAdapter.ParsePortableCredentialsStrict(payload);
+        result.Ok.Should().BeTrue("escaped-quote colon inside a value is not a duplicate key");
+        result.Record!.ProfileName.Should().Be("say \"hi\": now");
+    }
+
     [Theory]
     [InlineData("D-014", "DAT_MNEMONIC_KEY_MISMATCH")]
     [InlineData("D-015", "DAT_KEY_MISMATCH")]
@@ -375,11 +408,48 @@ public class ReportAndExitCodeTests
     public void Full_corpus_run_passes_and_report_is_secret_safe()
     {
         var corpus = CorpusLocator.Find() ?? throw new InvalidOperationException("corpus not found");
-        var report = ConformanceRunner.Run(corpus);
+        var result = ConformanceRunner.Run(corpus);
+        var report = result.Report;
         report.Result.Should().Be("PASS");
         report.Summary.Total.Should().BeGreaterThan(100);
         report.Summary.Failed.Should().Be(0);
         report.Records.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Full_corpus_completes_within_sixty_second_budget()
+    {
+        var corpus = CorpusLocator.Find() ?? throw new InvalidOperationException("corpus not found");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = ConformanceRunner.Run(corpus);
+        sw.Stop();
+        result.Report.Result.Should().Be("PASS");
+        sw.Elapsed.TotalSeconds.Should().BeLessThan(60, "complete .NET corpus suite must finish within 60s in CI");
+    }
+
+    [Fact]
+    public void Candidate_derivation_completes_within_one_second_per_mnemonic()
+    {
+        var corpus = CorpusLocator.Find() ?? throw new InvalidOperationException("corpus not found");
+        var result = ConformanceRunner.Run(corpus);
+        var deriveTimings = result.Timings.Where(t => t.Operation == "MNEMONIC_DERIVE").ToList();
+        deriveTimings.Should().NotBeEmpty();
+        foreach (var t in deriveTimings)
+        {
+            t.Milliseconds.Should().BeLessThan(1000, $"candidate derivation for {t.ProducerId} within 1s");
+        }
+        result.Timings.Should().Contain(t => t.Operation == "TOTAL" && t.Milliseconds > 0);
+    }
+
+    [Fact]
+    public void Per_producer_timings_contain_no_credential_values()
+    {
+        var corpus = CorpusLocator.Find() ?? throw new InvalidOperationException("corpus not found");
+        var result = ConformanceRunner.Run(corpus);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(result.Timings);
+        serialized.Should().NotContain("abandon amount");
+        serialized.Should().NotContain("hush-public-test-password");
+        serialized.Should().NotContain("6e3f74236c3d4a20553be05963f624696990c22245599b3d1b30262af793d885");
     }
 
     [Fact]
@@ -403,7 +473,7 @@ public class ReportAndExitCodeTests
             var text = File.ReadAllText(target);
             text = text.Replace("0237fdd4364c0b898908be2f1a98a6b4a7890c623ae92a283640e44d87e048daa5", "0337fdd4364c0b898908be2f1a98a6b4a7890c623ae92a283640e44d87e048daa5");
             File.WriteAllText(target, text);
-            var report = ConformanceRunner.Run(tmp);
+            var report = ConformanceRunner.Run(tmp).Report;
             report.Result.Should().Be("FAIL");
             report.Records.Should().NotBeEmpty();
         }

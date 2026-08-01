@@ -49,9 +49,15 @@ public static class Program
                 return ExitInvalidCorpus;
             }
 
-            var report = ConformanceRunner.Run(corpus);
+            var result = ConformanceRunner.Run(corpus);
+            var report = result.Report;
             ReportWriter.Write(report, reportPath);
+            WriteTimings(result.Timings, reportPath);
             Console.WriteLine($"Result: {report.Result} | total={report.Summary.Total} passed={report.Summary.Passed} failed={report.Summary.Failed}");
+            foreach (var t in result.Timings)
+            {
+                Console.WriteLine($"TIMING {t.Operation} {t.ProducerId} {t.Milliseconds:F1}ms");
+            }
             Console.WriteLine($"Report: {reportPath}");
             if (report.Records.Count > 0)
             {
@@ -122,6 +128,29 @@ public static class Program
         catch
         {
             // report write failure must not mask the exit code
+        }
+    }
+
+    /// <summary>Write per-group timings beside the report (no credential values).</summary>
+    private static void WriteTimings(IReadOnlyList<ConformanceRunner.Timing> timings, string reportPath)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(Path.GetFullPath(reportPath));
+            var timingsPath = Path.Combine(dir ?? Environment.CurrentDirectory, "dotnet-timings.json");
+            var payload = new
+            {
+                contractVersion = ConformanceRunner.ContractVersion,
+                schemaVersion = ConformanceRunner.SchemaVersion,
+                runtime = "dotnet",
+                timings = timings.Select(t => new { operation = t.Operation, producerId = t.ProducerId, milliseconds = Math.Round(t.Milliseconds, 1) }).ToArray(),
+            };
+            File.WriteAllText(timingsPath, System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }) + "\n", new System.Text.UTF8Encoding(false));
+            Console.WriteLine($"Timings: {timingsPath}");
+        }
+        catch
+        {
+            // timing side-output must never mask the conformance result
         }
     }
 

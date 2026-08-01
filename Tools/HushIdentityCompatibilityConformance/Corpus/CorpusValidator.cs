@@ -42,6 +42,7 @@ public static class CorpusValidator
         ["signature-vectors"] = "urn:hushvoting:conformance:identity:v1:schemas:signature-vectors",
         ["negative-vectors"] = "urn:hushvoting:conformance:identity:v1:schemas:negative-vectors",
         ["lookup-outcomes"] = "urn:hushvoting:conformance:identity:v1:schemas:lookup-outcomes",
+        ["manifest"] = "urn:hushvoting:conformance:identity:v1:schemas:manifest",
     };
 
     private const string ProducerSchemaId = "urn:hushvoting:conformance:identity:v1:schemas:producer";
@@ -86,9 +87,10 @@ public static class CorpusValidator
         }
 
         List<ManifestEntry> entries;
+        JsonNode? manifestNode;
         try
         {
-            var manifestNode = JsonNode.Parse(manifestBytes) ?? throw new InvalidOperationException("empty manifest");
+            manifestNode = JsonNode.Parse(manifestBytes) ?? throw new InvalidOperationException("empty manifest");
             var files = manifestNode["files"]?.AsArray() ?? throw new InvalidOperationException("manifest has no files array");
             entries = files.Select(f => new ManifestEntry
             {
@@ -100,6 +102,17 @@ public static class CorpusValidator
         catch (Exception ex)
         {
             return new ValidationResult { Valid = false, Errors = new[] { $"manifest.json is not valid JSON: {ex.Message}" } };
+        }
+
+        // Manifest document itself is validated against manifest.schema.json.
+        var manifestSchema = LoadSchemas(corpusRoot).GetValueOrDefault("urn:hushvoting:conformance:identity:v1:schemas:manifest");
+        if (manifestSchema is not null)
+        {
+            var manifestResult = manifestSchema.Evaluate(manifestNode, new EvaluationOptions { OutputFormat = OutputFormat.List });
+            if (!manifestResult.IsValid)
+            {
+                errors.Add($"manifest.json failed manifest.schema.json: {string.Join("; ", manifestResult.Details.Where(d => d.HasErrors).Select(d => d.InstanceLocation.ToString()).Distinct().Take(8))}");
+            }
         }
 
         if (entries.Count == 0)

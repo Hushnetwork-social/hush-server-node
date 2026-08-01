@@ -38,6 +38,12 @@ public static class ConformanceRunner
         Summary Summary,
         IReadOnlyList<ConformanceRecord> Records);
 
+    /// <summary>Per-group timing (milliseconds) — never contains credential values.</summary>
+    public sealed record Timing(string Operation, string ProducerId, double Milliseconds);
+
+    /// <summary>Conformance run result: the secret-safe report plus side-channel timings.</summary>
+    public sealed record RunResult(ConformanceReport Report, IReadOnlyList<Timing> Timings);
+
     public sealed record Summary(int Total, int Passed, int Failed);
 
     private sealed class FailureBuilder
@@ -47,9 +53,11 @@ public static class ConformanceRunner
     }
 
     /// <summary>Run the full corpus and return the secret-safe report.</summary>
-    public static ConformanceReport Run(string corpusRoot)
+    public static RunResult Run(string corpusRoot)
     {
         var f = new FailureBuilder();
+        var timings = new List<Timing>();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         var mnemonicVectors = CorpusDocuments.ReadVectors<MnemonicVector>(corpusRoot, "vectors/mnemonic-vectors.json");
         var keyVectors = CorpusDocuments.ReadVectors<KeyVector>(corpusRoot, "vectors/key-vectors.json");
@@ -62,7 +70,10 @@ public static class ConformanceRunner
         // ---- mnemonic vectors --------------------------------------------------
         foreach (var v in mnemonicVectors)
         {
+            var deriveSw = System.Diagnostics.Stopwatch.StartNew();
             var derived = DeriveCandidates(v.Mnemonic);
+            deriveSw.Stop();
+            timings.Add(new Timing("MNEMONIC_DERIVE", v.ProducerId, deriveSw.Elapsed.TotalMilliseconds));
             if (!derived.Ok || derived.Candidates is null)
             {
                 Check(f, v.Id, v.ProducerId, "MNEMONIC_DERIVE", "candidates", "ok", "failure");
@@ -267,13 +278,18 @@ public static class ConformanceRunner
             }
         }
 
-        return new ConformanceReport(
-            SchemaVersion,
-            ContractVersion,
-            "dotnet",
-            f.Records.Count == 0 ? "PASS" : "FAIL",
-            new Summary(f.Total, f.Total - f.Records.Count, f.Records.Count),
-            f.Records);
+        sw.Stop();
+        timings.Add(new Timing("TOTAL", "P-00", sw.Elapsed.TotalMilliseconds));
+
+        return new RunResult(
+            new ConformanceReport(
+                SchemaVersion,
+                ContractVersion,
+                "dotnet",
+                f.Records.Count == 0 ? "PASS" : "FAIL",
+                new Summary(f.Total, f.Total - f.Records.Count, f.Records.Count),
+                f.Records),
+            timings);
     }
 
     private static string M24Of() => "abandon amount liar amount expire adjust cage candy arch gather drum bullet absurd math era live bid rhythm alien crouch range attend journey unaware";
