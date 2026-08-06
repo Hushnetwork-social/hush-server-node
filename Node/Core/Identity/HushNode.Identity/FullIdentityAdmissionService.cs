@@ -74,10 +74,20 @@ public sealed class FullIdentityAdmissionService(
             return FullIdentityReservationResult.Accepted();
         }
 
-        var existing = _reservations[signingAddress];
-        return existing == entry
-            ? FullIdentityReservationResult.Pending()
-            : FullIdentityReservationResult.Conflict();
+        // The reservation exists but may have been released concurrently
+        // (TryGetValue, never the indexer — a removed entry must not throw).
+        if (_reservations.TryGetValue(signingAddress, out var existing))
+        {
+            return existing == entry
+                ? FullIdentityReservationResult.Pending()
+                : FullIdentityReservationResult.Conflict();
+        }
+
+        // Released between TryAdd failure and the read: retry the reservation
+        // once so a stale entry can never wedge the exact transaction.
+        return _reservations.TryAdd(signingAddress, entry)
+            ? FullIdentityReservationResult.Accepted()
+            : FullIdentityReservationResult.Pending();
     }
 
     public Task<FullIdentityReservationResult> ReserveAsync(
@@ -92,10 +102,17 @@ public sealed class FullIdentityAdmissionService(
             return Task.FromResult(FullIdentityReservationResult.Accepted());
         }
 
-        var existing = _reservations[signingAddress];
-        return Task.FromResult(existing == entry
-            ? FullIdentityReservationResult.Pending()
-            : FullIdentityReservationResult.Conflict());
+        // TryGetValue (never the indexer): a concurrent release must not throw.
+        if (_reservations.TryGetValue(signingAddress, out var existing))
+        {
+            return Task.FromResult(existing == entry
+                ? FullIdentityReservationResult.Pending()
+                : FullIdentityReservationResult.Conflict());
+        }
+
+        return Task.FromResult(_reservations.TryAdd(signingAddress, entry)
+            ? FullIdentityReservationResult.Accepted()
+            : FullIdentityReservationResult.Pending());
     }
 
     public Task ReleaseAsync(string signingAddress, CancellationToken cancellationToken)
