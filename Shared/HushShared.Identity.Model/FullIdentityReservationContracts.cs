@@ -13,6 +13,8 @@
 
 namespace HushShared.Identity.Model;
 
+using HushShared.Blockchain.TransactionModel;
+
 /// <summary>Structured FullIdentity submission outcome (never free-form message control).</summary>
 public enum FullIdentitySubmitOutcome
 {
@@ -79,6 +81,17 @@ public interface IFullIdentityReservationService
 
     /// <summary>Marks the identity indexed after commit (final state; never re-enters pending).</summary>
     Task MarkIndexedAsync(string signingAddress, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Orchestrated FullIdentity admission (validate -> indexed check -> reserve).
+/// Implemented in the identity module; consumed by the blockchain ingress.
+/// </summary>
+public interface IFullIdentityAdmissionService
+{
+    Task<FullIdentityReservationResult> AdmitAsync(
+        AbstractTransaction transaction,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>

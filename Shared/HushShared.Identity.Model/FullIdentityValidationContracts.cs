@@ -68,6 +68,9 @@ public static class FullIdentityValidationCodes
     public const string UnsupportedSignatureEncoding = "FULL_IDENTITY_UNSUPPORTED_SIGNATURE_ENCODING";
     public const string InvalidSignature = "FULL_IDENTITY_INVALID_SIGNATURE";
 
+    // Terminal: conflicting same-signing pending admission
+    public const string Conflict = "FULL_IDENTITY_CONFLICT";
+
     /// <summary>Allowlisted editable codes — the ONLY class that may re-enter explicit review.</summary>
     public static readonly IReadOnlySet<string> EditableCodes =
         new HashSet<string>(StringComparer.Ordinal) { AliasOutOfBounds, AliasDisallowedCharacters };
@@ -80,7 +83,8 @@ public static class FullIdentityValidationCodes
         (code == MalformedJson || code == UnsupportedKind || code == InvalidTransactionId ||
          code == InvalidTimestamp || code == InvalidPayloadSize || code == UnsupportedContext ||
          code == InvalidSigningAddress || code == InvalidEncryptionAddress ||
-         code == SignatoryMismatch || code == UnsupportedSignatureEncoding || code == InvalidSignature);
+         code == SignatoryMismatch || code == UnsupportedSignatureEncoding || code == InvalidSignature ||
+         code == Conflict);
 }
 
 /// <summary>
@@ -133,6 +137,9 @@ public interface IFullIdentitySignatureVerifier
 public interface IFullIdentityCanonicalSerializer
 {
     string SerializeCanonicalUnsignedJson(SignedTransaction<FullIdentityPayload> transaction);
+
+    /// <summary>Exact UTF-8 byte length of the canonical payload JSON (PayloadSize rule).</summary>
+    int PayloadJsonUtf8Length(string alias, string signingAddress, string encryptAddress, bool isPublic);
 }
 
 /// <summary>
