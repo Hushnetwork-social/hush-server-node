@@ -62,6 +62,7 @@ public sealed class FullIdentityValidationContractsTests
     [InlineData(FullIdentityValidationCodes.SignatoryMismatch)]
     [InlineData(FullIdentityValidationCodes.UnsupportedSignatureEncoding)]
     [InlineData(FullIdentityValidationCodes.InvalidSignature)]
+    [InlineData(FullIdentityValidationCodes.Conflict)]
     public void TerminalCodes_AreNeverEditable(string code)
     {
         FullIdentityValidationCodes.IsEditable(code).Should().BeFalse();

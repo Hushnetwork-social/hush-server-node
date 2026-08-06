@@ -12,6 +12,7 @@ using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Elections.Model;
 using HushShared.Feeds.Model;
+using HushShared.Identity.Model;
 using Microsoft.Extensions.Logging;
 using Olimpo;
 
@@ -26,6 +27,8 @@ public class BlockchainGrpcService(
     IAttachmentTempStorageService attachmentTempStorageService,
     ICredentialsProvider credentialsProvider,
     ILogger<BlockchainGrpcService> logger,
+    IFullIdentityAdmissionService fullIdentityAdmissionService,
+    IFullIdentityReservationService fullIdentityReservationService,
     IElectionWebClientDeploymentProofObservationService? webClientProofObservationService = null)
     : HushBlockchain.HushBlockchainBase
 {
@@ -37,8 +40,13 @@ public class BlockchainGrpcService(
     private readonly IAttachmentTempStorageService _attachmentTempStorageService = attachmentTempStorageService;
     private readonly ICredentialsProvider _credentialsProvider = credentialsProvider;
     private readonly ILogger<BlockchainGrpcService> _logger = logger;
+    private readonly IFullIdentityAdmissionService _fullIdentityAdmissionService = fullIdentityAdmissionService;
+    private readonly IFullIdentityReservationService _fullIdentityReservationService = fullIdentityReservationService;
     private readonly IElectionWebClientDeploymentProofObservationService? _webClientProofObservationService =
         webClientProofObservationService;
+
+    /// <summary>Stable code for unparseable signed-transaction JSON (any kind).</summary>
+    private const string MalformedTransactionJsonCode = "MALFORMED_TRANSACTION_JSON";
 
     /// <summary>FEAT-066: Maximum number of attachments per message.</summary>
     private const int MaxAttachmentsPerMessage = 5;
@@ -80,12 +88,64 @@ public class BlockchainGrpcService(
         var status = TransactionStatus.Unspecified;
         var validationCode = string.Empty;
 
-        var transaction = JsonSerializer.Deserialize<AbstractTransaction>(request.SignedTransaction)
-            ?? throw new InvalidDataException("Transaction invalid or without handler");
+        AbstractTransaction transaction;
+        try
+        {
+            transaction = JsonSerializer.Deserialize<AbstractTransaction>(request.SignedTransaction)
+                ?? throw new InvalidDataException("Transaction invalid or without handler");
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidDataException or NotSupportedException)
+        {
+            // FEAT-011: expected malformed-input failures are typed outcomes,
+            // never exceptions escaping the ingress.
+            return new SubmitSignedTransactionReply
+            {
+                Successfull = false,
+                Message = "Transaction could not be parsed",
+                Status = TransactionStatus.Rejected,
+                ValidationCode = MalformedTransactionJsonCode,
+            };
+        }
+
         await RecordWebClientProofObservationAsync(transaction, request.WebClientDeploymentProof, context);
 
         if (this.ValidateUserSignature(transaction))
         {
+            // FEAT-011: FullIdentity admission gate (validate -> indexed check -> reserve).
+            if (transaction.PayloadKind == FullIdentityPayloadHandler.FullIdentityPayloadKind)
+            {
+                var admission = await this._fullIdentityAdmissionService.AdmitAsync(transaction, context.CancellationToken);
+                switch (admission.Outcome)
+                {
+                    case FullIdentitySubmitOutcome.Accepted:
+                        break; // continue to content-handler validation and validator signing
+                    case FullIdentitySubmitOutcome.Pending:
+                        return new SubmitSignedTransactionReply
+                        {
+                            Successfull = true,
+                            Message = "Identity registration is already pending",
+                            Status = TransactionStatus.Pending,
+                            ValidationCode = string.Empty,
+                        };
+                    case FullIdentitySubmitOutcome.AlreadyExists:
+                        return new SubmitSignedTransactionReply
+                        {
+                            Successfull = true,
+                            Message = "Identity already exists",
+                            Status = TransactionStatus.AlreadyExists,
+                            ValidationCode = string.Empty,
+                        };
+                    default:
+                        return new SubmitSignedTransactionReply
+                        {
+                            Successfull = false,
+                            Message = "Identity registration rejected",
+                            Status = TransactionStatus.Rejected,
+                            ValidationCode = admission.ValidationCode ?? string.Empty,
+                        };
+                }
+            }
+
             // FEAT-057: Check idempotency for FeedMessage transactions BEFORE content validation
             var messageId = this.TryExtractMessageId(transaction);
             if (messageId is { } feedMessageId)
@@ -161,6 +221,15 @@ public class BlockchainGrpcService(
                         foreach (var id in savedAttachmentIds)
                         {
                             await this._attachmentTempStorageService.DeleteAsync(id);
+                        }
+
+                        // FEAT-011: release a FullIdentity reservation that could not be admitted
+                        if (transaction.PayloadKind == FullIdentityPayloadHandler.FullIdentityPayloadKind &&
+                            transaction is SignedTransaction<FullIdentityPayload> fullIdentity)
+                        {
+                            await this._fullIdentityReservationService.ReleaseAsync(
+                                fullIdentity.Payload.PublicSigningAddress,
+                                context.CancellationToken);
                         }
 
                         successful = false;

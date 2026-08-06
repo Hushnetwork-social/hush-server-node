@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
+using Olimpo;
 using Olimpo.EntityFramework.Persistency;
 using HushNode.Caching;
+using HushNode.Events;
 using HushNode.Identity.Storage;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Identity.Model;
@@ -11,34 +14,35 @@ namespace HushNode.Identity;
 public class FullIdentityTransactionHandler(
     IUnitOfWorkProvider<IdentityDbContext> unitOfWorkProvider,
     IBlockchainCache blockchainCache,
-    ILogger<FullIdentityTransactionHandler> logger) 
+    IEventAggregator eventAggregator,
+    ILogger<FullIdentityTransactionHandler> logger)
     : IFullIdentityTransactionHandler
 {
     private readonly IUnitOfWorkProvider<IdentityDbContext> _unitOfWorkProvider = unitOfWorkProvider;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
+    private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly ILogger<FullIdentityTransactionHandler> _logger = logger;
 
     public async Task HandleFullIdentityTransaction(ValidatedTransaction<FullIdentityPayload> transaction)
     {
-        // Validate required fields before processing
         if (string.IsNullOrWhiteSpace(transaction.Payload.IdentityAlias))
         {
-            this._logger.LogWarning("Rejecting FullIdentity transaction: IdentityAlias is null or empty. Signatory: {Signatory}",
-                transaction.UserSignature.Signatory);
+            this._logger.LogWarning("Rejecting FullIdentity transaction: alias is null or empty. Kind: {PayloadKind}",
+                transaction.PayloadKind);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(transaction.Payload.PublicSigningAddress))
         {
-            this._logger.LogWarning("Rejecting FullIdentity transaction: PublicSigningAddress is null or empty. Signatory: {Signatory}",
-                transaction.UserSignature.Signatory);
+            this._logger.LogWarning("Rejecting FullIdentity transaction: signing address is null or empty. Kind: {PayloadKind}",
+                transaction.PayloadKind);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(transaction.Payload.PublicEncryptAddress))
         {
-            this._logger.LogWarning("Rejecting FullIdentity transaction: PublicEncryptAddress is null or empty. Signatory: {Signatory}",
-                transaction.UserSignature.Signatory);
+            this._logger.LogWarning("Rejecting FullIdentity transaction: encrypt address is null or empty. Kind: {PayloadKind}",
+                transaction.PayloadKind);
             return;
         }
 
@@ -47,12 +51,10 @@ public class FullIdentityTransactionHandler(
             .GetRepository<IIdentityRepository>()
             .AnyAsync(transaction.Payload.PublicSigningAddress);
 
-        if(identityExists)
+        if (identityExists)
         {
-            // Identity already exists - this can happen if the same transaction is processed twice
-            // or if the client retries identity creation. Gracefully skip instead of crashing.
-            this._logger.LogWarning("Skipping FullIdentity transaction: Identity already exists for address {Address}",
-                transaction.Payload.PublicSigningAddress);
+            this._logger.LogDebug("Skipping FullIdentity transaction: identity already indexed for {TruncatedAddress}",
+                TruncateAddress(transaction.Payload.PublicSigningAddress));
             return;
         }
 
@@ -61,33 +63,50 @@ public class FullIdentityTransactionHandler(
 
     private async Task InsertFullIdentity(ValidatedTransaction<FullIdentityPayload> transaction)
     {
-        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
-
+        var signingAddress = transaction.Payload.PublicSigningAddress;
         var profile = new Profile(
             transaction.Payload.IdentityAlias,
             string.Empty,
-            transaction.Payload.PublicSigningAddress,
+            signingAddress,
             transaction.Payload.PublicEncryptAddress,
             transaction.Payload.IsPublic,
             this._blockchainCache.LastBlockIndex);
 
         try
         {
-            await writableUnitOfWork
-                .GetRepository<IIdentityRepository>()
-                .AddFullIdentity(profile);
+            using (var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable())
+            {
+                await writableUnitOfWork
+                    .GetRepository<IIdentityRepository>()
+                    .AddFullIdentity(profile);
 
-            await writableUnitOfWork.CommitAsync();
+                await writableUnitOfWork.CommitAsync();
+            }
 
-            this._logger.LogInformation($"Full identity added: {profile.Alias} | {profile.PublicSigningAddress}");
+            // FEAT-011: publish cache coherence AFTER the commit so no stale
+            // success/absence is ever served post-index (established
+            // IdentityUpdatedEvent invalidation pattern).
+            await this._eventAggregator.PublishAsync(new IdentityUpdatedEvent(signingAddress));
+
+            this._logger.LogInformation("Full identity indexed. TruncatedAddress: {TruncatedAddress}",
+                TruncateAddress(signingAddress));
         }
-        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("PK_Profile") == true ||
-                                           ex.InnerException?.Message.Contains("duplicate key") == true)
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            // Race condition: Another request inserted the same identity between our check and insert.
-            // This is expected under high load. Gracefully skip.
-            this._logger.LogWarning("Race condition detected: Identity already exists for address {Address}. Skipping duplicate insert.",
-                transaction.Payload.PublicSigningAddress);
+            // Race condition: another request inserted the same identity between
+            // our check and insert. Typed unique-violation detection (Postgres
+            // SqlState 23505) — never stringly exception inspection. Gracefully
+            // converge: the existing profile is authoritative.
+            this._logger.LogDebug("FullIdentity duplicate insert converged for {TruncatedAddress}",
+                TruncateAddress(signingAddress));
         }
     }
+
+    /// <summary>Typed duplicate detection: Postgres unique_violation (23505).</summary>
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: "23505" };
+
+    /// <summary>Non-identifying diagnostics: first 8 characters of the address only.</summary>
+    private static string TruncateAddress(string address) =>
+        address.Length <= 8 ? address : address[..8];
 }

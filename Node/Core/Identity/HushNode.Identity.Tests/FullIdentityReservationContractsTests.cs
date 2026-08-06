@@ -91,6 +91,13 @@ public sealed class FullIdentityReservationContractsTests
     }
 
     [Fact]
+    public void AdmissionServiceContract_HasOrchestratedAdmitAsync()
+    {
+        var members = typeof(IFullIdentityAdmissionService).GetMethods().Select(m => m.Name);
+        members.Should().BeEquivalentTo("AdmitAsync");
+    }
+
+    [Fact]
     public void ReservationServiceContract_HasNoHumanAttestationOrExportMembers()
     {
         var members = typeof(IFullIdentityReservationService).GetMethods().Select(m => m.Name);
