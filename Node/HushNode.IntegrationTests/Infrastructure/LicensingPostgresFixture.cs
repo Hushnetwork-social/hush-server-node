@@ -67,7 +67,14 @@ public sealed class LicensingPostgresFixture : IAsyncLifetime
     /// <summary>Creates the unified HushNodeDbContext for a database on the shared container.</summary>
     public HushNodeDbContext CreateContext(string databaseName)
     {
-        var builder = new NpgsqlConnectionStringBuilder(AdminConnectionString) { Database = databaseName };
+        var builder = new NpgsqlConnectionStringBuilder(AdminConnectionString)
+        {
+            Database = databaseName,
+            // FEAT-013 100-way concurrency tests run many simultaneous coordinator attempts. Keep the
+            // client pool below the container's default Postgres max_connections so SQLSTATE 53300 is
+            // never hit; logical concurrency is preserved (attempts queue on the pool).
+            MaxPoolSize = 24,
+        };
         var options = new DbContextOptionsBuilder<HushNodeDbContext>()
             .UseNpgsql(builder.ConnectionString)
             .Options;
