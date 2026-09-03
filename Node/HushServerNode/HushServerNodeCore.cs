@@ -41,6 +41,7 @@ using StackExchange.Redis;
 using HushNode.UrlMetadata.gRPC;
 using HushNode.Events;
 using HushNode.Indexing.Interfaces;
+using HushServerNode.HushVotingLicensingIntegration;
 using HushServerNode.Testing;
 
 namespace HushServerNode;
@@ -566,7 +567,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             .RegisterNotificationGrpc()
             .RegisterPushNotificationsModule()
             .RegisterCoreModuleUrlMetadata()
-            .RegisterHushVotingLicensing();
+            .RegisterHushVotingLicensing()
+            .RegisterHushVotingLicensingIntegration();
 
         if (testConfig != null)
         {
