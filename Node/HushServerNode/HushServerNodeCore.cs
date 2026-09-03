@@ -30,6 +30,7 @@ using HushNode.Feeds;
 using HushNode.Feeds.gRPC;
 using HushNode.Elections;
 using HushNode.Elections.gRPC;
+using HushNode.HushVoting.Licensing.Storage;
 using HushNode.Reactions;
 using HushNode.Reactions.gRPC;
 using HushNode.Caching;
@@ -564,7 +565,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             .RegisterInternalModuleIdentity()
             .RegisterNotificationGrpc()
             .RegisterPushNotificationsModule()
-            .RegisterCoreModuleUrlMetadata();
+            .RegisterCoreModuleUrlMetadata()
+            .RegisterHushVotingLicensing();
 
         if (testConfig != null)
         {
