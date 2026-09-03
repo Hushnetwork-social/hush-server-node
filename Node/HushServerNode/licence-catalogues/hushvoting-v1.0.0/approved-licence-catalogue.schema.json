@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hushvoting-licence-catalogue/v1",
+  "title": "HushVoting Licence Catalogue (v1)",
+  "description": "Schema for the release-controlled HushVoting licence catalogue manifest. Enforces structural bounds before materialization; exact v1 semantic validation (plan set, caps, ranks, terms, availability, governance) is applied by the domain validator and never duplicated here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "plans", "profileCompatibility"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "hushvoting-licence-catalogue/v1.0.0",
+      "maxLength": 96
+    },
+    "plans": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/plan" }
+    },
+    "profileCompatibility": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/profileCompatibilityEntry" }
+    }
+  },
+  "$defs": {
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "planId", "family", "displayName", "safeDescription", "displayOrder",
+        "upgradeRank", "unlimitedElections", "term", "availability",
+        "governanceOptions", "catalogueVersion"
+      ],
+      "properties": {
+        "planId": { "type": "string", "minLength": 1, "maxLength": 96 },
+        "family": { "$ref": "#/$defs/family" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "safeDescription": { "type": "string", "minLength": 1, "maxLength": 320 },
+        "displayOrder": { "$ref": "#/$defs/nonNegativeInt" },
+        "upgradeRank": { "$ref": "#/$defs/nonNegativeInt" },
+        "eligibleVoterCap": { "type": ["integer", "null"], "minimum": 0, "maximum": 2147483647 },
+        "unlimitedElections": { "type": "boolean" },
+        "term": { "$ref": "#/$defs/term" },
+        "availability": { "$ref": "#/$defs/availability" },
+        "unavailableSafeReason": { "type": ["string", "null"], "maxLength": 320 },
+        "governanceOptions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/governanceOption" }
+        },
+        "catalogueVersion": { "type": "string", "const": "hushvoting-licence-catalogue/v1.0.0" }
+      }
+    },
+    "governanceOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "customerTrusteeCount", "requiredApprovalCount", "safeLabel", "bindingStatuses"],
+      "properties": {
+        "id": { "$ref": "#/$defs/governanceOptionId" },
+        "customerTrusteeCount": { "$ref": "#/$defs/nonNegativeInt" },
+        "requiredApprovalCount": { "$ref": "#/$defs/nonNegativeInt" },
+        "safeLabel": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "bindingStatuses": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/bindingStatus" }
+        }
+      }
+    },
+    "profileCompatibilityEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["governanceOptionId", "bindingStatus", "runtimeProfileId", "devOnly"],
+      "properties": {
+        "governanceOptionId": { "$ref": "#/$defs/governanceOptionId" },
+        "bindingStatus": { "$ref": "#/$defs/bindingStatus" },
+        "runtimeProfileId": { "type": "string", "minLength": 1, "maxLength": 96 },
+        "devOnly": { "type": "boolean" }
+      }
+    },
+    "term": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "const": "Perpetual" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "years"],
+          "properties": {
+            "kind": { "const": "CalendarYears" },
+            "years": { "type": "integer", "minimum": 1, "maximum": 100 }
+          }
+        }
+      ]
+    },
+    "family": { "enum": ["Direct", "Veritas", "Enterprise"] },
+    "availability": { "enum": ["Default", "AutomaticUpgrade", "Unavailable"] },
+    "bindingStatus": { "enum": ["NonBinding", "Binding"] },
+    "governanceOptionId": {
+      "enum": ["no-customer-trustees", "trustees-3of5", "trustees-7of10", "trustees-8of13"]
+    },
+    "nonNegativeInt": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
+  }
+}
