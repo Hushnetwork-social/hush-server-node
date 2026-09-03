@@ -51,7 +51,7 @@ public sealed class HushVotingLicensingHostIntegrationTests
     {
         var services = new ServiceCollection();
         LicensingStorageHostBuild.RegisterHushVotingLicensingStorageServices(
-            services, new HostBuilderContext(new Dictionary<object, object?>()));
+            services, new HostBuilderContext(new Dictionary<object, object>()));
 
         using var provider = services.BuildServiceProvider();
         var configurators = provider.GetServices<IDbContextConfigurator>().ToArray();
@@ -65,7 +65,7 @@ public sealed class HushVotingLicensingHostIntegrationTests
     {
         var services = new ServiceCollection();
         LicensingStorageHostBuild.RegisterHushVotingLicensingStorageServices(
-            services, new HostBuilderContext(new Dictionary<object, object?>()));
+            services, new HostBuilderContext(new Dictionary<object, object>()));
         services.AddDbContext<HushNodeDbContext>(options =>
             options.UseNpgsql("Host=localhost;Database=unused;Username=u;Password=p"));
 
