@@ -184,8 +184,7 @@ public sealed class HushVotingLicencePlanConstructionTests
     [Fact]
     public void Plan_RejectsEmptyDisplayNameAndNegativeValues()
     {
-        var baseArgs = new object[]
-        {
+        var act = () => new HushVotingLicencePlan(
             HushVotingLicencePlanId.DirectFree,
             HushVotingLicenceFamily.Direct,
             "   ",
@@ -196,25 +195,9 @@ public sealed class HushVotingLicencePlanConstructionTests
             true,
             HushVotingLicenceTerm.Perpetual,
             HushVotingLicenceAvailability.Default,
-            (string?)null,
+            null,
             Array.Empty<HushVotingGovernanceOption>(),
-            HushVotingLicenceCatalogueVersion.V1,
-        };
-
-        var act = () => new HushVotingLicencePlan(
-            (HushVotingLicencePlanId)baseArgs[0],
-            (HushVotingLicenceFamily)baseArgs[1],
-            (string)baseArgs[2],
-            (string)baseArgs[3],
-            (int)baseArgs[4],
-            (int)baseArgs[5],
-            (int?)baseArgs[6],
-            (bool)baseArgs[7],
-            (HushVotingLicenceTerm)baseArgs[8],
-            (HushVotingLicenceAvailability)baseArgs[9],
-            (string?)baseArgs[10],
-            (IReadOnlyList<HushVotingGovernanceOption>)baseArgs[11],
-            (HushVotingLicenceCatalogueVersion)baseArgs[12]);
+            HushVotingLicenceCatalogueVersion.V1);
 
         act.Should().Throw<ArgumentException>();
 

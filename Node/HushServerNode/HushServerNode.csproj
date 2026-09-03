@@ -27,6 +27,7 @@
     <None Update="ApplicationSettings.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="ApplicationSettings.*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="ceremony-profiles\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="licence-catalogues\**\*.*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
