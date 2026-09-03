@@ -95,12 +95,16 @@ public static class HushVotingLicenceCatalogueValidator
         }
 
         // 2) Per-plan exact semantic comparison against canonical v1.
-        foreach (var candidate in candidatePlans.Where(static p => p.Id.IsKnown))
+        for (var i = 0; i < candidatePlans.Count; i++)
         {
-            var canonicalPlan = canonicalById[candidate.Id.Value];
-            var basePath = $"/plans/{Array.IndexOf(candidatePlans.ToArray(), candidate)}";
+            var candidate = candidatePlans[i];
+            if (!candidate.Id.IsKnown || !canonicalById.ContainsKey(candidate.Id.Value))
+            {
+                continue;
+            }
 
-            ValidatePlanSemantics(candidate, canonicalPlan, basePath, failures);
+            var canonicalPlan = canonicalById[candidate.Id.Value];
+            ValidatePlanSemantics(candidate, canonicalPlan, $"/plans/{i}", failures);
         }
 
         // 3) Exactly one enabled Default and it must be Direct Free.
