@@ -394,4 +394,7 @@ public sealed record LicenceFailureInjection
 
     /// <summary>Invoked after a successful COMMIT; throwing models a lost success response (committed case).</summary>
     public Func<int, CancellationToken, Task>? AfterCommitAsync { get; init; }
+
+    /// <summary>Diagnostic counter hook (test evidence); production callers never set it.</summary>
+    public Func<int>? AttemptCounter { get; init; }
 }

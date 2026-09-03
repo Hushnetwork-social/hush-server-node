@@ -47,13 +47,19 @@ public static class LicencePostgresFailureClassifier
 
         for (var current = exception; current is not null; current = current.InnerException)
         {
-            if (current is NpgsqlException)
+            // PostgresException derives from NpgsqlException: classify SQLSTATEs precisely first so
+            // integrity failures (23xxx/22xxx) are never mistaken for storage outages.
+            if (current is PostgresException { SqlState: var sqlState })
             {
-                return true;
+                if (sqlState.StartsWith("08", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                continue;
             }
 
-            if (current is PostgresException { SqlState: var sqlState }
-                && sqlState.StartsWith("08", StringComparison.Ordinal))
+            if (current is NpgsqlException)
             {
                 return true;
             }
