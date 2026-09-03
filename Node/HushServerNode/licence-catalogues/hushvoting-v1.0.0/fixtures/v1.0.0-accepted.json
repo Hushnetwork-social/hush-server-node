@@ -1,0 +1,244 @@
+{
+  "plans": [
+    {
+      "availability": "Default",
+      "catalogueVersion": "hushvoting-licence-catalogue/v1.0.0",
+      "displayName": "HushVoting! Direct Free",
+      "displayOrder": 10,
+      "eligibleVoterCap": 100,
+      "family": "Direct",
+      "governanceOptions": [
+        {
+          "bindingStatuses": [
+            "NonBinding",
+            "Binding"
+          ],
+          "customerTrusteeCount": 0,
+          "id": "no-customer-trustees",
+          "requiredApprovalCount": 0,
+          "safeLabel": "No customer trustees"
+        }
+      ],
+      "planId": "hushvoting.direct.free",
+      "safeDescription": "Admin-controlled elections for up to 100 eligible voters, with no customer trustees.",
+      "term": {
+        "kind": "Perpetual"
+      },
+      "unlimitedElections": true,
+      "upgradeRank": 0
+    },
+    {
+      "availability": "AutomaticUpgrade",
+      "catalogueVersion": "hushvoting-licence-catalogue/v1.0.0",
+      "displayName": "HushVoting! Veritas 500",
+      "displayOrder": 20,
+      "eligibleVoterCap": 500,
+      "family": "Veritas",
+      "governanceOptions": [
+        {
+          "bindingStatuses": [
+            "NonBinding",
+            "Binding"
+          ],
+          "customerTrusteeCount": 0,
+          "id": "no-customer-trustees",
+          "requiredApprovalCount": 0,
+          "safeLabel": "No customer trustees"
+        },
+        {
+          "bindingStatuses": [
+            "NonBinding",
+            "Binding"
+          ],
+          "customerTrusteeCount": 5,
+          "id": "trustees-3of5",
+          "requiredApprovalCount": 3,
+          "safeLabel": "3 of 5 trustees"
+        }
+      ],
+      "planId": "hushvoting.veritas.500",
+      "safeDescription": "Elections for up to 500 eligible voters, with no trustees or a fixed 3-of-5 trustee ceremony.",
+      "term": {
+        "kind": "CalendarYears",
+        "years": 1
+      },
+      "unlimitedElections": true,
+      "upgradeRank": 1000
+    },
+    {
+      "availability": "AutomaticUpgrade",
+      "catalogueVersion": "hushvoting-licence-catalogue/v1.0.0",
+      "displayName": "HushVoting! Veritas 2k",
+      "displayOrder": 30,
+      "eligibleVoterCap": 2000,
+      "family": "Veritas",
+      "governanceOptions": [
+        {
+          "bindingStatuses": [
+            "NonBinding",
+            "Binding"
+          ],
+          "customerTrusteeCount": 0,
+          "id": "no-customer-trustees",
+          "requiredApprovalCount": 0,
+          "safeLabel": "No customer trustees"
+        },
+        {
+          "bindingStatuses": [
+            "NonBinding",
+            "Binding"
+          ],
+          "customerTrusteeCount": 5,
+          "id": "trustees-3of5",
+          "requiredApprovalCount": 3,
+          "safeLabel": "3 of 5 trustees"
+        },
+        {
+          "bindingStatuses": [
+            "NonBinding",
+            "Binding"
+          ],
+          "customerTrusteeCount": 10,
+          "id": "trustees-7of10",
+          "requiredApprovalCount": 7,
+          "safeLabel": "7 of 10 trustees"
+        }
+      ],
+      "planId": "hushvoting.veritas.2000",
+      "safeDescription": "Elections for up to 2,000 eligible voters, with no trustees or a fixed 3-of-5 or 7-of-10 trustee ceremony.",
+      "term": {
+        "kind": "CalendarYears",
+        "years": 1
+      },
+      "unlimitedElections": true,
+      "upgradeRank": 2000
+    },
+    {
+      "availability": "AutomaticUpgrade",
+      "catalogueVersion": "hushvoting-licence-catalogue/v1.0.0",
+      "displayName": "HushVoting! Veritas 10k",
+      "displayOrder": 40,
+      "eligibleVoterCap": 10000,
+      "family": "Veritas",
+      "governanceOptions": [
+        {
+          "bindingStatuses": [
+            "NonBinding",
+            "Binding"
+          ],
+          "customerTrusteeCount": 0,
+          "id": "no-customer-trustees",
+          "requiredApprovalCount": 0,
+          "safeLabel": "No customer trustees"
+        },
+        {
+          "bindingStatuses": [
+            "NonBinding",
+            "Binding"
+          ],
+          "customerTrusteeCount": 5,
+          "id": "trustees-3of5",
+          "requiredApprovalCount": 3,
+          "safeLabel": "3 of 5 trustees"
+        },
+        {
+          "bindingStatuses": [
+            "NonBinding",
+            "Binding"
+          ],
+          "customerTrusteeCount": 10,
+          "id": "trustees-7of10",
+          "requiredApprovalCount": 7,
+          "safeLabel": "7 of 10 trustees"
+        },
+        {
+          "bindingStatuses": [
+            "NonBinding",
+            "Binding"
+          ],
+          "customerTrusteeCount": 13,
+          "id": "trustees-8of13",
+          "requiredApprovalCount": 8,
+          "safeLabel": "8 of 13 trustees"
+        }
+      ],
+      "planId": "hushvoting.veritas.10000",
+      "safeDescription": "Elections for up to 10,000 eligible voters, with no trustees or a fixed 3-of-5, 7-of-10, or 8-of-13 trustee ceremony.",
+      "term": {
+        "kind": "CalendarYears",
+        "years": 1
+      },
+      "unlimitedElections": true,
+      "upgradeRank": 3000
+    },
+    {
+      "availability": "Unavailable",
+      "catalogueVersion": "hushvoting-licence-catalogue/v1.0.0",
+      "displayName": "HushVoting! Enterprise",
+      "displayOrder": 50,
+      "eligibleVoterCap": null,
+      "family": "Enterprise",
+      "governanceOptions": [],
+      "planId": "hushvoting.enterprise",
+      "safeDescription": "Customer-specific voter and trustee configuration. Contact provider - not yet available.",
+      "term": {
+        "kind": "CalendarYears",
+        "years": 1
+      },
+      "unavailableSafeReason": "Customer-specific configuration is not yet available in v1.",
+      "unlimitedElections": true,
+      "upgradeRank": 4000
+    }
+  ],
+  "profileCompatibility": [
+    {
+      "bindingStatus": "NonBinding",
+      "devOnly": true,
+      "governanceOptionId": "no-customer-trustees",
+      "runtimeProfileId": "admin-dev-1of1"
+    },
+    {
+      "bindingStatus": "Binding",
+      "devOnly": false,
+      "governanceOptionId": "no-customer-trustees",
+      "runtimeProfileId": "admin-prod-1of1"
+    },
+    {
+      "bindingStatus": "NonBinding",
+      "devOnly": true,
+      "governanceOptionId": "trustees-3of5",
+      "runtimeProfileId": "dkg-dev-3of5"
+    },
+    {
+      "bindingStatus": "Binding",
+      "devOnly": false,
+      "governanceOptionId": "trustees-3of5",
+      "runtimeProfileId": "dkg-prod-3of5"
+    },
+    {
+      "bindingStatus": "NonBinding",
+      "devOnly": true,
+      "governanceOptionId": "trustees-7of10",
+      "runtimeProfileId": "dkg-dev-7of10"
+    },
+    {
+      "bindingStatus": "Binding",
+      "devOnly": false,
+      "governanceOptionId": "trustees-7of10",
+      "runtimeProfileId": "dkg-prod-7of10"
+    },
+    {
+      "bindingStatus": "NonBinding",
+      "devOnly": true,
+      "governanceOptionId": "trustees-8of13",
+      "runtimeProfileId": "dkg-dev-8of13"
+    },
+    {
+      "bindingStatus": "Binding",
+      "devOnly": false,
+      "governanceOptionId": "trustees-8of13",
+      "runtimeProfileId": "dkg-prod-8of13"
+    }
+  ],
+  "version": "hushvoting-licence-catalogue/v1.0.0"
+}
