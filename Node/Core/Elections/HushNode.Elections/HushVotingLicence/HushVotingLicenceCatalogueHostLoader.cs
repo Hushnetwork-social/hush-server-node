@@ -122,14 +122,14 @@ public static class HushVotingLicenceCatalogueHostLoader
         var contentRootFull = Path.GetFullPath(contentRoot);
         var candidate = Path.GetFullPath(Path.Combine(contentRootFull, relative));
 
-        // Confine beneath the content root (no traversal / symlink escape).
-        var relativeToRoot = Path.GetRelativePath(contentRootFull, candidate);
-        if (relativeToRoot.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relativeToRoot))
+        // Confine beneath the content root: reject lexical traversal AND symlink escape. A symlink
+        // inside the root that points outside must never grant access to an out-of-root file.
+        if (!IsRealPathBeneath(contentRootFull, candidate))
         {
             failures.Add(new HushVotingLicenceValidationFailure(
                 HushVotingLicenceValidationCodes.LicCatFileMissing,
                 "/catalogueRelativePath",
-                "Configured catalogue path escapes the application content root."));
+                "Configured catalogue path escapes the application content root (traversal or symbolic link)."));
             return null;
         }
 
@@ -442,6 +442,67 @@ public static class HushVotingLicenceCatalogueHostLoader
         }
 
         return result;
+    }
+
+
+    /// <summary>
+    /// True when the candidate path's fully resolved real location stays beneath the content root.
+    /// Guards against both lexical traversal and symbolic-link escape. On platforms where the
+    /// current user lacks the privilege to resolve a link target, resolution failures reject the
+    /// path (fail closed).
+    /// </summary>
+    private static bool IsRealPathBeneath(string contentRootFull, string candidate)
+    {
+        var rootWithSep = contentRootFull.EndsWith(Path.DirectorySeparatorChar)
+            ? contentRootFull
+            : contentRootFull + Path.DirectorySeparatorChar;
+
+        var relative = Path.GetRelativePath(contentRootFull, candidate);
+        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
+        {
+            return false;
+        }
+
+        // Walk every existing component of the relative path. When a component is a symbolic link,
+        // require its final resolved target to stay inside the content root; otherwise a link placed
+        // inside the root could expose an out-of-root release file.
+        var current = contentRootFull;
+        foreach (var part in relative.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, part);
+            if (!File.Exists(current) && !Directory.Exists(current))
+            {
+                // Missing final file is handled separately as LIC_CAT_FILE_MISSING.
+                continue;
+            }
+
+            try
+            {
+                FileSystemInfo info = Directory.Exists(current)
+                    ? new DirectoryInfo(current)
+                    : new FileInfo(current);
+
+                if (info.LinkTarget is null)
+                {
+                    continue;
+                }
+
+                var resolved = info.ResolveLinkTarget(returnFinalTarget: true);
+                if (resolved is null || !resolved.FullName.StartsWith(rootWithSep, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+            {
+                // Cannot prove the component is confined -> fail closed.
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private sealed record ParsedCatalogue(

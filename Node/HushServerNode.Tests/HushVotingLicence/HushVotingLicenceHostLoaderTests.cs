@@ -238,6 +238,45 @@ public sealed class HushVotingLicenceHostLoaderTests : IDisposable
     }
 
     [Fact]
+    public void Load_SymlinkEscape_IsRejected()
+    {
+        // Create a symlink inside the content root that points outside of it.
+        var outside = Path.Combine(Path.GetTempPath(), $"feat012-outside-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outside);
+        var linkPath = Path.Combine(_root, "licence-catalogues", "hushvoting-v1.0.0");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(_root, "licence-catalogues"));
+            Directory.CreateSymbolicLink(linkPath, outside);
+
+            var json = ValidCatalogueJson();
+            WriteAsset(
+                "licence-catalogues/hushvoting-v1.0.0/approved-licence-catalogue.json",
+                json); // writes through the link into the outside dir
+            WriteReleaseMetadata(Sha256(json));
+
+            var result = HushVotingLicenceCatalogueHostLoader.LoadFromContentRoot(_root, Options());
+
+            result.IsValid.Should().BeFalse();
+            result.Validation.Failures.Should().Contain(f =>
+                f.Code == HushVotingLicenceValidationCodes.LicCatFileMissing &&
+                f.Message.Contains("symbolic link", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(linkPath) && new DirectoryInfo(linkPath).LinkTarget is not null)
+            {
+                Directory.Delete(linkPath);
+            }
+
+            if (Directory.Exists(outside))
+            {
+                Directory.Delete(outside, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void Load_DigestMismatch_IsRejected()
     {
         var json = ValidCatalogueJson();
