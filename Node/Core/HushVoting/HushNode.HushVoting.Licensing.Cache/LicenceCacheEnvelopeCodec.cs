@@ -119,11 +119,15 @@ public sealed class LicenceCacheEnvelopeCodec
     }
 
     /// <summary>
-    /// Formats the Redis value: base64(canonical envelope bytes) + "." + lowercase-hex tag.
-    /// Neither segment contains '.', so a trailing split is unambiguous.
+    /// Formats the Redis value: canonical envelope text + newline + lowercase-hex tag. Canonical JSON
+    /// contains no literal newlines (System.Text.Json escapes control characters), so a trailing split
+    /// is unambiguous. The tag is excluded from the authenticated canonical bytes. The newline format
+    /// lets the revision-aware CAS Lua script extract the numeric revision with a bounded pattern.
     /// </summary>
     public string FormatRedisValue(byte[] canonicalEnvelopeBytes, byte[] tagBytes) =>
-        Convert.ToBase64String(canonicalEnvelopeBytes) + "." + Convert.ToHexString(tagBytes).ToLowerInvariant();
+        Encoding.UTF8.GetString(canonicalEnvelopeBytes) +
+        "\n" +
+        Convert.ToHexString(tagBytes).ToLowerInvariant();
 
     /// <summary>
     /// Splits a stored Redis value into canonical envelope bytes and tag bytes.
@@ -146,15 +150,15 @@ public sealed class LicenceCacheEnvelopeCodec
             return false;
         }
 
-        var lastDot = redisValue.LastIndexOf('.');
-        if (lastDot <= 0 || lastDot == redisValue.Length - 1)
+        var lastNewline = redisValue.LastIndexOf('\n');
+        if (lastNewline <= 0 || lastNewline == redisValue.Length - 1)
         {
             stableReason = LicenceCacheReasonCodes.EnvelopeMalformed;
             return false;
         }
 
-        var b64 = redisValue[..lastDot];
-        var tagHex = redisValue[(lastDot + 1)..];
+        var envelopeText = redisValue[..lastNewline];
+        var tagHex = redisValue[(lastNewline + 1)..];
 
         if (tagHex.Length != 64 || tagHex.Any(c => !Uri.IsHexDigit(c)))
         {
@@ -162,9 +166,7 @@ public sealed class LicenceCacheEnvelopeCodec
             return false;
         }
 
-        // Base64 length for an envelope of maxEnvelopeBytes (ceil(n/3)*4), plus slack.
-        var maxBase64Length = ((maxEnvelopeBytes + 2) / 3) * 4;
-        if (b64.Length > maxBase64Length)
+        if (envelopeText.Length > maxEnvelopeBytes)
         {
             stableReason = LicenceCacheReasonCodes.EnvelopeOversized;
             return false;
@@ -172,18 +174,12 @@ public sealed class LicenceCacheEnvelopeCodec
 
         try
         {
-            canonicalEnvelopeBytes = Convert.FromBase64String(b64);
+            canonicalEnvelopeBytes = Encoding.UTF8.GetBytes(envelopeText);
             tagBytes = Convert.FromHexString(tagHex);
         }
         catch (FormatException)
         {
             stableReason = LicenceCacheReasonCodes.EnvelopeMalformed;
-            return false;
-        }
-
-        if (canonicalEnvelopeBytes.Length > maxEnvelopeBytes)
-        {
-            stableReason = LicenceCacheReasonCodes.EnvelopeOversized;
             return false;
         }
 

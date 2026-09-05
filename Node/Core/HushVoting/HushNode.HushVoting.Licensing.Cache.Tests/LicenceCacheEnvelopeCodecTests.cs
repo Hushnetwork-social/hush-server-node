@@ -195,8 +195,8 @@ public sealed class LicenceCacheEnvelopeCodecTests
     [Fact]
     public void Oversized_redis_value_is_rejected_without_parsing()
     {
-        var big = new string('A', (Options.MaxEnvelopeBytes * 4 / 3) + 400);
-        var value = big + "." + new string('0', 64);
+        var big = new string('A', Options.MaxEnvelopeBytes + 1);
+        var value = big + "\n" + new string('0', 64);
 
         Codec.TrySplitRedisValue(value, Options.MaxEnvelopeBytes, out _, out _, out var reason)
             .Should().BeFalse();
