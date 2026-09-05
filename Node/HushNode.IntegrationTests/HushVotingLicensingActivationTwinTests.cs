@@ -689,14 +689,15 @@ public sealed class HushVotingLicensingActivationTwinTests
                 FixedNowUtc));
             var resolution = Task.Run(() => ResolveAsync(_fixture, databaseName, identity, FixedNowUtc));
 
-            await Task.WhenAll(activation, resolution);
+            var activationResult = await activation;
+            var resolutionResult = await resolution;
 
             // Expiry always wins and the racing activation conflicts deterministically regardless of
             // lock order: whichever operation normalized the expiry first, the activation that carries
             // the old plan/revision records precondition_conflict and exactly one effective assignment
             // remains.
-            activation.Result.Outcome.Should().Be(LicenceActivationOutcome.PreconditionConflict);
-            resolution.Result.Outcome.Should().BeOneOf(
+            activationResult.Outcome.Should().Be(LicenceActivationOutcome.PreconditionConflict);
+            resolutionResult.Outcome.Should().BeOneOf(
                 LicenceResolutionOutcome.ExpiredToDefault,
                 LicenceResolutionOutcome.ResolvedExisting);
 
