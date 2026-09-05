@@ -20,6 +20,7 @@ public sealed class LicensingDbContextConfigurator : IDbContextConfigurator
         ConfigureAssignment(modelBuilder);
         ConfigureTransitionEvent(modelBuilder);
         ConfigureActivationOperation(modelBuilder);
+        ConfigureCacheOutbox(modelBuilder);
     }
 
     private static void ConfigureCatalogueRelease(ModelBuilder modelBuilder)
@@ -245,5 +246,62 @@ public sealed class LicensingDbContextConfigurator : IDbContextConfigurator
 
         entity.HasIndex(x => x.LicenceSubjectId)
             .HasDatabaseName("IX_LicenceActivationOperation_Subject");
+    }
+
+    private static void ConfigureCacheOutbox(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<LicenceCacheOutboxEntity>();
+        entity.ToTable("LicenceCacheOutbox", SchemaName, table =>
+        {
+            table.HasCheckConstraint("CK_LicenceCacheOutbox_ChangeKind",
+                "\"ChangeKind\" IN ('provisioned_default', 'provisioned_migration_default', " +
+                "'activated_higher_plan', 'expired_to_default')");
+            table.HasCheckConstraint("CK_LicenceCacheOutbox_RevisionNonNegative",
+                "\"CommittedRevision\" >= 0");
+            table.HasCheckConstraint("CK_LicenceCacheOutbox_AttemptNonNegative",
+                "\"AttemptCount\" >= 0");
+            table.HasCheckConstraint("CK_LicenceCacheOutbox_AvailableAfterCreated",
+                "\"AvailableAfterUtc\" >= \"CreatedUtc\"");
+            table.HasCheckConstraint("CK_LicenceCacheOutbox_LeaseConsistent",
+                "(\"LeaseOwnerToken\" IS NULL AND \"LeaseExpiresUtc\" IS NULL) OR " +
+                "(\"LeaseOwnerToken\" IS NOT NULL AND \"LeaseExpiresUtc\" IS NOT NULL)");
+            table.HasCheckConstraint("CK_LicenceCacheOutbox_ErrorCodeBounded",
+                "\"LastSafeErrorCode\" IS NULL OR char_length(\"LastSafeErrorCode\") BETWEEN 1 AND 64");
+        });
+
+        entity.HasKey(x => x.Id);
+        entity.Property(x => x.Id).HasColumnType("uuid").IsRequired();
+        entity.Property(x => x.LicenceSubjectId).HasColumnType("uuid").IsRequired();
+        entity.Property(x => x.CommittedRevision).HasColumnType("bigint").IsRequired();
+        entity.Property(x => x.ChangeKind)
+            .HasColumnType("varchar(" + LicenceCacheOutboxChangeKinds.MaxLength + ")")
+            .IsRequired();
+        entity.Property(x => x.CreatedUtc).HasColumnType("timestamp with time zone").IsRequired();
+        entity.Property(x => x.AvailableAfterUtc).HasColumnType("timestamp with time zone").IsRequired();
+        entity.Property(x => x.AttemptCount).HasColumnType("integer").IsRequired();
+        entity.Property(x => x.LeaseOwnerToken).HasColumnType("varchar(64)");
+        entity.Property(x => x.LeaseExpiresUtc).HasColumnType("timestamp with time zone");
+        entity.Property(x => x.DeliveredUtc).HasColumnType("timestamp with time zone");
+        entity.Property(x => x.LastSafeErrorCode).HasColumnType("varchar(64)");
+        entity.Property(x => x.LastAttemptUtc).HasColumnType("timestamp with time zone");
+
+        entity.HasOne(x => x.Subject)
+            .WithMany()
+            .HasForeignKey(x => x.LicenceSubjectId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Pending claim ordering (available, oldest first) for skip-locked dispatchers.
+        entity.HasIndex(x => new { x.DeliveredUtc, x.AvailableAfterUtc, x.CreatedUtc, x.Id })
+            .HasFilter("\"DeliveredUtc\" IS NULL")
+            .HasDatabaseName("IX_LicenceCacheOutbox_PendingClaimOrder");
+
+        // Delivered-retention cleanup (delivered rows older than the retention window).
+        entity.HasIndex(x => x.DeliveredUtc)
+            .HasFilter("\"DeliveredUtc\" IS NOT NULL")
+            .HasDatabaseName("IX_LicenceCacheOutbox_DeliveredCleanup");
+
+        // Health/telemetry depth query by subject and state.
+        entity.HasIndex(x => x.LicenceSubjectId)
+            .HasDatabaseName("IX_LicenceCacheOutbox_Subject");
     }
 }
