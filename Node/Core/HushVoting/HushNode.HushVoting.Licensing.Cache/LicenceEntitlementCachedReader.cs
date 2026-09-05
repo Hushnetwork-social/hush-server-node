@@ -81,6 +81,10 @@ public sealed class LicenceEntitlementCachedReader : ICachedEntitlementReader
                 {
                     return hit;
                 }
+
+                // A permitted probe that completed without a connection error is a success: when the
+                // circuit is half-open this is the single probe that closes it; otherwise it is a no-op.
+                _circuit.RecordProbeSuccess();
             }
             catch (OperationCanceledException)
             {

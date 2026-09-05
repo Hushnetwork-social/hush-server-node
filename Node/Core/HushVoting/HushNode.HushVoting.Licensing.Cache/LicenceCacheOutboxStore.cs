@@ -50,6 +50,26 @@ public interface ILicenceCacheOutboxStore
 }
 
 /// <summary>
+/// Scalar projection of one claimable outbox row for raw-SQL claiming. Deliberately not the EF
+/// entity: SqlQueryRaw requires a navigation-free shape and the dispatcher only reads scalar fields.
+/// </summary>
+internal sealed class LicenceCacheOutboxClaimRow
+{
+    public Guid Id { get; set; }
+    public Guid LicenceSubjectId { get; set; }
+    public long CommittedRevision { get; set; }
+    public string ChangeKind { get; set; } = string.Empty;
+    public DateTime CreatedUtc { get; set; }
+    public DateTime AvailableAfterUtc { get; set; }
+    public int AttemptCount { get; set; }
+    public string? LeaseOwnerToken { get; set; }
+    public DateTime? LeaseExpiresUtc { get; set; }
+    public DateTime? DeliveredUtc { get; set; }
+    public string? LastSafeErrorCode { get; set; }
+    public DateTime? LastAttemptUtc { get; set; }
+}
+
+/// <summary>
 /// Default implementation over <see cref="DbContext"/>. Claim ordering and skip-locked semantics are
 /// executed with raw SQL so one dispatcher never blocks another and leases expire safely.
 /// </summary>
@@ -105,33 +125,69 @@ public sealed class LicenceCacheOutboxStore : ILicenceCacheOutboxStore
         CancellationToken cancellationToken)
     {
         await using var context = _contextFactory();
-        var sql =
+        // Claim in two bounded commands so every statement stays plain SQL that Npgsql executes
+        // directly (no RETURNING composition): first atomically lease up to maxRows with
+        // skip-locked semantics (FOR UPDATE SKIP LOCKED must precede LIMIT in PostgreSQL), then read
+        // back exactly the leased rows owned by this claim token. The entity type itself cannot be
+        // used with SqlQueryRaw (it declares navigations), so the read projects onto the scalar
+        // claim-row shape and is mapped back to untracked entities for the dispatcher.
+        var claimSql =
             """
             UPDATE "HushVoting"."LicenceCacheOutbox" AS o
             SET "LeaseOwnerToken" = @owner, "LeaseExpiresUtc" = @expires, "LastAttemptUtc" = @now
             WHERE o."Id" IN (
-                SELECT inner."Id" FROM "HushVoting"."LicenceCacheOutbox" AS inner
-                WHERE inner."DeliveredUtc" IS NULL
-                  AND inner."AvailableAfterUtc" <= @now
-                  AND (inner."LeaseExpiresUtc" IS NULL OR inner."LeaseExpiresUtc" < @now)
-                ORDER BY inner."CreatedUtc", inner."Id"
-                LIMIT @limit
+                SELECT c."Id" FROM "HushVoting"."LicenceCacheOutbox" AS c
+                WHERE c."DeliveredUtc" IS NULL
+                  AND c."AvailableAfterUtc" <= @now
+                  AND (c."LeaseExpiresUtc" IS NULL OR c."LeaseExpiresUtc" < @now)
+                ORDER BY c."CreatedUtc", c."Id"
                 FOR UPDATE SKIP LOCKED
+                LIMIT @limit
             )
-            RETURNING "Id", "LicenceSubjectId", "CommittedRevision", "ChangeKind", "CreatedUtc",
-                      "AvailableAfterUtc", "AttemptCount", "LeaseOwnerToken", "LeaseExpiresUtc",
-                      "DeliveredUtc", "LastSafeErrorCode", "LastAttemptUtc"
             """;
 
-        var rows = await context.Database.SqlQueryRaw<LicenceCacheOutboxEntity>(
-                sql,
-                new NpgsqlParameter("owner", leaseOwnerToken),
-                new NpgsqlParameter("expires", leaseExpiresUtc),
-                new NpgsqlParameter("now", nowUtc),
-                new NpgsqlParameter("limit", maxRows))
+        var affected = await context.Database.ExecuteSqlRawAsync(
+            claimSql,
+            new NpgsqlParameter("owner", leaseOwnerToken),
+            new NpgsqlParameter("expires", leaseExpiresUtc),
+            new NpgsqlParameter("now", nowUtc),
+            new NpgsqlParameter("limit", maxRows))
+            .ConfigureAwait(false);
+        if (affected == 0)
+        {
+            return Array.Empty<LicenceCacheOutboxEntity>();
+        }
+
+        var readSql =
+            """
+            SELECT "Id", "LicenceSubjectId", "CommittedRevision", "ChangeKind", "CreatedUtc",
+                   "AvailableAfterUtc", "AttemptCount", "LeaseOwnerToken", "LeaseExpiresUtc",
+                   "DeliveredUtc", "LastSafeErrorCode", "LastAttemptUtc"
+            FROM "HushVoting"."LicenceCacheOutbox"
+            WHERE "LeaseOwnerToken" = @owner
+            ORDER BY "CreatedUtc", "Id"
+            """;
+
+        var rows = await context.Database.SqlQueryRaw<LicenceCacheOutboxClaimRow>(
+                readSql,
+                new NpgsqlParameter("owner", leaseOwnerToken))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        return rows;
+        return rows.Select(static r => new LicenceCacheOutboxEntity
+        {
+            Id = r.Id,
+            LicenceSubjectId = r.LicenceSubjectId,
+            CommittedRevision = r.CommittedRevision,
+            ChangeKind = r.ChangeKind,
+            CreatedUtc = r.CreatedUtc,
+            AvailableAfterUtc = r.AvailableAfterUtc,
+            AttemptCount = r.AttemptCount,
+            LeaseOwnerToken = r.LeaseOwnerToken,
+            LeaseExpiresUtc = r.LeaseExpiresUtc,
+            DeliveredUtc = r.DeliveredUtc,
+            LastSafeErrorCode = r.LastSafeErrorCode,
+            LastAttemptUtc = r.LastAttemptUtc,
+        }).ToArray();
     }
 
     public async Task MarkDeliveredAsync(Guid id, DateTime deliveredUtc, CancellationToken cancellationToken)
@@ -181,9 +237,9 @@ public sealed class LicenceCacheOutboxStore : ILicenceCacheOutboxStore
             DELETE FROM "HushVoting"."LicenceCacheOutbox"
             WHERE "DeliveredUtc" IS NOT NULL AND "DeliveredUtc" < @cutoff
               AND "Id" IN (
-                  SELECT inner."Id" FROM "HushVoting"."LicenceCacheOutbox" AS inner
-                  WHERE inner."DeliveredUtc" IS NOT NULL AND inner."DeliveredUtc" < @cutoff
-                  ORDER BY inner."DeliveredUtc"
+                  SELECT c."Id" FROM "HushVoting"."LicenceCacheOutbox" AS c
+                  WHERE c."DeliveredUtc" IS NOT NULL AND c."DeliveredUtc" < @cutoff
+                  ORDER BY c."DeliveredUtc"
                   LIMIT @limit
               )
             """;
