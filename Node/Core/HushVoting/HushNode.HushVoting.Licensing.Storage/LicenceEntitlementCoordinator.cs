@@ -23,6 +23,92 @@ public static partial class LicenceEntitlementCoordinator
     private const string OperationResolve = "resolve";
 
     // ---------------------------------------------------------------------------------------
+    // Shared outbox contribution helpers (Phase 6 Task 6.3)
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Adds exactly one FEAT-014 cache-outbox row to the in-progress authoritative transaction when
+    /// the cache outbox policy is enabled. Never calls SaveChanges: the caller's own SaveChanges/commit
+    /// persists the row atomically with the assignment/events, so rollback discards it and an ambiguous
+    /// commit reconciliation never duplicates it.
+    /// </summary>
+    private static void AddCacheOutboxRowIfEnabled(
+        DbContext db,
+        LicenceCacheOutboxPolicy? policy,
+        Guid licenceSubjectId,
+        long committedRevision,
+        string changeKind,
+        DateTime nowUtc)
+    {
+        if (policy is not { Enabled: true } || db is null)
+        {
+            return;
+        }
+
+        if (!LicenceCacheOutboxChangeKinds.TryValidate(changeKind, out var errorCode))
+        {
+            throw new InvalidOperationException("Cache outbox change kind invalid: " + errorCode);
+        }
+
+        db.Set<LicenceCacheOutboxEntity>().Add(new LicenceCacheOutboxEntity
+        {
+            Id = Guid.CreateVersion7(),
+            LicenceSubjectId = licenceSubjectId,
+            CommittedRevision = committedRevision,
+            ChangeKind = changeKind,
+            CreatedUtc = nowUtc,
+            AvailableAfterUtc = nowUtc,
+            AttemptCount = 0,
+            LeaseOwnerToken = null,
+            LeaseExpiresUtc = null,
+            DeliveredUtc = null,
+            LastSafeErrorCode = null,
+            LastAttemptUtc = null,
+        });
+    }
+
+    /// <summary>
+    /// Best-effort immediate post-commit cache publication (Phase 6 Task 6.3). Runs only after the
+    /// authoritative commit/reconciliation succeeded, never before. A Redis failure must never change,
+    /// reverse, or hide the committed FEAT-013 result: the durable outbox row is the recovery path.
+    /// </summary>
+    private static async Task AttemptCommittedPublicationAsync(
+        LicenceResolutionResult result,
+        AuthenticatedIdentitySubject subject,
+        LicenceCacheOutboxPolicy? policy,
+        CancellationToken cancellationToken)
+    {
+        if (policy is not { Enabled: true } || policy.CommittedPublisher is null ||
+            !result.IsSuccess || result.Entitlement is null)
+        {
+            return;
+        }
+
+        // Only cache-relevant state changes are published immediately (provisioning, migration
+        // provisioning, annual expiry to default). Non-mutating resolution publishes nothing.
+        if (result.Outcome is not
+            (LicenceResolutionOutcome.ProvisionedDefault
+            or LicenceResolutionOutcome.ProvisionedMigrationDefault
+            or LicenceResolutionOutcome.ExpiredToDefault))
+        {
+            return;
+        }
+
+        try
+        {
+            await policy.CommittedPublisher(subject, result.Entitlement, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Best effort only; the durable outbox dispatcher converges Redis later.
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
     // GetOrProvision
     // ---------------------------------------------------------------------------------------
 
@@ -37,7 +123,8 @@ public static partial class LicenceEntitlementCoordinator
         TimeProvider timeProvider,
         LicenceTelemetry? telemetry,
         CancellationToken cancellationToken,
-        LicenceFailureInjection? failureInjection = null)
+        LicenceFailureInjection? failureInjection = null,
+        LicenceCacheOutboxPolicy? cacheOutbox = null)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(configuration);
@@ -55,7 +142,8 @@ public static partial class LicenceEntitlementCoordinator
                 {
                     attemptNumber++;
                     return await RunResolveAttemptAsync(
-                        contextFactory, configuration, subject, nowUtc, attemptNumber, telemetry, failureInjection, ct);
+                        contextFactory, configuration, subject, nowUtc, attemptNumber, telemetry, failureInjection,
+                        cacheOutbox, ct);
                 },
                 reconcileCommittedAsync: ct => ReconcileResolveAsync(
                     contextFactory, subject, ct),
@@ -64,6 +152,7 @@ public static partial class LicenceEntitlementCoordinator
                 cancellationToken);
 
             RecordResolution(result, telemetry, timeProvider, startedAt);
+            await AttemptCommittedPublicationAsync(result, subject, cacheOutbox, cancellationToken).ConfigureAwait(false);
             return result;
         }
         catch (LicenceExecutionExhaustedException exception)
@@ -98,6 +187,7 @@ public static partial class LicenceEntitlementCoordinator
         int attemptNumber,
         LicenceTelemetry? telemetry,
         LicenceFailureInjection? injection,
+        LicenceCacheOutboxPolicy? cacheOutbox,
         CancellationToken cancellationToken)
     {
         if (injection?.BeforeAttemptAsync is { } beforeAttempt)
@@ -151,6 +241,32 @@ public static partial class LicenceEntitlementCoordinator
                             ? LicenceResolutionOutcome.ProvisionedMigrationDefault
                             : LicenceResolutionOutcome.ProvisionedDefault,
                         ToEntitlement(provisioned.Assignment, subjectRow.EntitlementRevision));
+                }
+            }
+
+            // FEAT-014 Phase 6 Task 6.3: stage one cache-outbox row inside the same transaction and
+            // committed revision for each cache-relevant state change. ResolvedExisting and failures
+            // create no row. Rollback discards it, and the ambiguous-commit reconcile path returns the
+            // already-committed result without staging another row, so duplicates are impossible.
+            if (cacheOutbox is { Enabled: true } && result.IsSuccess && result.Outcome is { } committedOutcome)
+            {
+                var changeKind = committedOutcome switch
+                {
+                    LicenceResolutionOutcome.ProvisionedDefault => LicenceCacheOutboxChangeKinds.ProvisionedDefault,
+                    LicenceResolutionOutcome.ProvisionedMigrationDefault => LicenceCacheOutboxChangeKinds.ProvisionedMigrationDefault,
+                    LicenceResolutionOutcome.ExpiredToDefault => LicenceCacheOutboxChangeKinds.ExpiredToDefault,
+                    _ => null,
+                };
+
+                if (changeKind is not null)
+                {
+                    AddCacheOutboxRowIfEnabled(
+                        db,
+                        cacheOutbox,
+                        subjectRow.LicenceSubjectId,
+                        subjectRow.EntitlementRevision,
+                        changeKind,
+                        nowUtc);
                 }
             }
 

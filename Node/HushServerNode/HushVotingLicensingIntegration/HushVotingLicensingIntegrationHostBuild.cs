@@ -46,7 +46,8 @@ public static class HushVotingLicensingIntegrationHostBuild
             () => CreateFreshDbContext(sp),
             sp.GetRequiredService<LicenceServiceConfiguration>(),
             TimeProvider.System,
-            sp.GetService<LicenceTelemetry>()));
+            sp.GetService<LicenceTelemetry>(),
+            sp.GetService<LicenceCacheOutboxPolicy>()));
         services.AddSingleton<HushVotingLicenceRolloutReadinessBootstrapper>();
         services.AddSingleton<Olimpo.IBootstrapper, HushVotingLicenceRolloutReadinessBootstrapper>(
             sp => sp.GetRequiredService<HushVotingLicenceRolloutReadinessBootstrapper>());

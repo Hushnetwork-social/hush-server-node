@@ -568,7 +568,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             .RegisterPushNotificationsModule()
             .RegisterCoreModuleUrlMetadata()
             .RegisterHushVotingLicensing()
-            .RegisterHushVotingLicensingIntegration();
+            .RegisterHushVotingLicensingIntegration()
+            .RegisterHushVotingLicenceCache();
 
         if (testConfig != null)
         {

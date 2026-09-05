@@ -28,7 +28,8 @@ public static partial class LicenceEntitlementCoordinator
         TimeProvider timeProvider,
         LicenceTelemetry? telemetry,
         CancellationToken cancellationToken,
-        LicenceFailureInjection? failureInjection = null)
+        LicenceFailureInjection? failureInjection = null,
+        LicenceCacheOutboxPolicy? cacheOutbox = null)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(configuration);
@@ -48,7 +49,7 @@ public static partial class LicenceEntitlementCoordinator
                     attemptNumber++;
                     return await RunActivateAttemptAsync(
                         contextFactory, configuration, subject, command, nowUtc, attemptNumber,
-                        telemetry, failureInjection, ct);
+                        telemetry, failureInjection, cacheOutbox, ct);
                 },
                 reconcileCommittedAsync: ct => ReconcileActivateAsync(
                     contextFactory, subject, command, ct),
@@ -57,6 +58,7 @@ public static partial class LicenceEntitlementCoordinator
                 cancellationToken);
 
             RecordActivation(result, telemetry, timeProvider, startedAt);
+            await AttemptCommittedActivationPublicationAsync(result, subject, cacheOutbox, cancellationToken).ConfigureAwait(false);
             return result;
         }
         catch (LicenceExecutionExhaustedException exception)
@@ -83,6 +85,46 @@ public static partial class LicenceEntitlementCoordinator
         telemetry?.RecordOperationDuration(OperationActivate, outcomeName, timeProvider.GetElapsedTime(startedAt));
     }
 
+    /// <summary>
+    /// Best-effort immediate post-commit cache publication (Phase 6 Task 6.3). Runs only after the
+    /// authoritative commit/reconciliation succeeded, never before. A Redis failure must never change,
+    /// reverse, or hide the committed FEAT-013 result: the durable outbox row is the recovery path.
+    /// </summary>
+    private static async Task AttemptCommittedActivationPublicationAsync(
+        LicenceActivationResult result,
+        AuthenticatedIdentitySubject subject,
+        LicenceCacheOutboxPolicy? policy,
+        CancellationToken cancellationToken)
+    {
+        if (policy is not { Enabled: true } || policy.CommittedPublisher is null ||
+            !result.IsSuccess || result.Entitlement is null)
+        {
+            return;
+        }
+
+        // Only an actually committed higher-plan activation is published immediately. Replays that
+        // return an already-committed durable Activated outcome have no new cache-relevant mutation
+        // and must not fabricate a second publication.
+        if (result.Outcome is not LicenceActivationOutcome.Activated ||
+            !LicenceEntitlementOutcomeNames.IsDurableOperationResult(LicenceActivationOutcome.Activated))
+        {
+            return;
+        }
+
+        try
+        {
+            await policy.CommittedPublisher(subject, result.Entitlement, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Best effort only; the durable outbox dispatcher converges Redis later.
+        }
+    }
+
     private static async Task<LicenceActivationResult> RunActivateAttemptAsync(
         Func<DbContext> contextFactory,
         LicenceServiceConfiguration configuration,
@@ -92,6 +134,7 @@ public static partial class LicenceEntitlementCoordinator
         int attemptNumber,
         LicenceTelemetry? telemetry,
         LicenceFailureInjection? injection,
+        LicenceCacheOutboxPolicy? cacheOutbox,
         CancellationToken cancellationToken)
     {
         if (injection?.BeforeAttemptAsync is { } beforeAttempt)
@@ -142,6 +185,17 @@ public static partial class LicenceEntitlementCoordinator
             if (expiry.DidExpire)
             {
                 telemetry?.RecordExpiryNormalized();
+
+                // The annual expiry to Direct Free is itself a committed cache-relevant state change
+                // (Phase 6 Task 6.3); stage the outbox row inside this same transaction at the expiry
+                // revision so an activation that later fails still converges the cache to Direct Free.
+                AddCacheOutboxRowIfEnabled(
+                    db,
+                    cacheOutbox,
+                    subjectRow.LicenceSubjectId,
+                    subjectRow.EntitlementRevision,
+                    LicenceCacheOutboxChangeKinds.ExpiredToDefault,
+                    nowUtc);
             }
 
             var operation = NewActivationOperationRow(
@@ -243,6 +297,16 @@ public static partial class LicenceEntitlementCoordinator
                         operation.DurableResult = LicenceEntitlementOutcomeNames.ToWireName(outcome);
                         resultingAssignment = assignment;
                         resultingRevision = nextRevision;
+
+                        // FEAT-014 Phase 6 Task 6.3: one cache-outbox row for the committed activation
+                        // supersede at its exact resulting revision, staged in the same transaction.
+                        AddCacheOutboxRowIfEnabled(
+                            db,
+                            cacheOutbox,
+                            subjectRow.LicenceSubjectId,
+                            nextRevision,
+                            LicenceCacheOutboxChangeKinds.ActivatedHigherPlan,
+                            nowUtc);
                     }
                 }
             }

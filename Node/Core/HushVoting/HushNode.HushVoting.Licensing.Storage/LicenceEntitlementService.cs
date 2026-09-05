@@ -15,12 +15,14 @@ public sealed class LicenceEntitlementService
     private readonly LicenceServiceConfiguration _configuration;
     private readonly TimeProvider _timeProvider;
     private readonly LicenceTelemetry? _telemetry;
+    private readonly LicenceCacheOutboxPolicy? _cacheOutbox;
 
     public LicenceEntitlementService(
         Func<DbContext> contextFactory,
         LicenceServiceConfiguration configuration,
         TimeProvider? timeProvider = null,
-        LicenceTelemetry? telemetry = null)
+        LicenceTelemetry? telemetry = null,
+        LicenceCacheOutboxPolicy? cacheOutbox = null)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(configuration);
@@ -29,6 +31,7 @@ public sealed class LicenceEntitlementService
         _configuration = configuration;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _telemetry = telemetry;
+        _cacheOutbox = cacheOutbox;
     }
 
     /// <summary>Resolves or atomically provisions the effective entitlement (see FeatureDescription GetOrProvision).</summary>
@@ -43,7 +46,9 @@ public sealed class LicenceEntitlementService
             subject,
             _timeProvider,
             _telemetry,
-            cancellationToken);
+            cancellationToken,
+            failureInjection: null,
+            cacheOutbox: _cacheOutbox);
     }
 
     /// <summary>Activates a higher Veritas plan behind the server-only boundary (durable and idempotent).</summary>
@@ -61,6 +66,8 @@ public sealed class LicenceEntitlementService
             command,
             _timeProvider,
             _telemetry,
-            cancellationToken);
+            cancellationToken,
+            failureInjection: null,
+            cacheOutbox: _cacheOutbox);
     }
 }

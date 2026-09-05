@@ -4,6 +4,17 @@ using Microsoft.EntityFrameworkCore;
 namespace HushNode.HushVoting.Licensing.Cache;
 
 /// <summary>
+/// Dispatcher seam used by the bounded hosted outbox worker (Phase 6) so the worker can be unit
+/// tested with a deterministic fake and never needs Redis/PostgreSQL to prove lifecycle behaviour.
+/// </summary>
+public interface ILicenceCacheOutboxDispatcher
+{
+    Task<int> ProcessOnceAsync(CancellationToken cancellationToken);
+
+    Task<int> PurgeDeliveredOnceAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Pure retry scheduling: capped exponential backoff with deterministic jitter derived from the row
 /// id (never wall-clock sleeps; tests use the returned instant directly).
 /// </summary>
@@ -32,7 +43,7 @@ public static class LicenceCacheOutboxBackoffCalculator
 /// delivered rows for the configured window, and preserve every undelivered row. Immediate
 /// post-commit best-effort publication is delegated to <see cref="LicenceCacheRedisWriter"/>.
 /// </summary>
-public sealed class LicenceCacheOutboxDispatcherService
+public sealed class LicenceCacheOutboxDispatcherService : ILicenceCacheOutboxDispatcher
 {
     private readonly ILicenceCacheOutboxStore _outbox;
     private readonly Func<DbContext> _contextFactory;
