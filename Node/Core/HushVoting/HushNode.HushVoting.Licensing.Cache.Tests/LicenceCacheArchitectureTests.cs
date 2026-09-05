@@ -23,12 +23,21 @@ public sealed class LicenceCacheArchitectureTests
 
         publicTypes.Should().BeEquivalentTo(new[]
         {
+            "HushNode.HushVoting.Licensing.Cache.CachedEntitlementEnvelope",
             "HushNode.HushVoting.Licensing.Cache.CachedEntitlementProjection",
             "HushNode.HushVoting.Licensing.Cache.CachedEntitlementReadResult",
             "HushNode.HushVoting.Licensing.Cache.EntitlementCacheReadOutcome",
             "HushNode.HushVoting.Licensing.Cache.ICachedEntitlementReader",
+            "HushNode.HushVoting.Licensing.Cache.LicenceCacheEnvelopeCodec",
+            "HushNode.HushVoting.Licensing.Cache.LicenceCacheKeyBuilder",
+            "HushNode.HushVoting.Licensing.Cache.LicenceCacheKeyDerivation",
+            "HushNode.HushVoting.Licensing.Cache.LicenceCacheKeyRing",
+            "HushNode.HushVoting.Licensing.Cache.LicenceCacheMasterKey",
             "HushNode.HushVoting.Licensing.Cache.LicenceCacheOptionErrorCodes",
             "HushNode.HushVoting.Licensing.Cache.LicenceCacheOptions",
+            "HushNode.HushVoting.Licensing.Cache.LicenceCacheReasonCodes",
+            "HushNode.HushVoting.Licensing.Cache.LicenceCacheTtlCalculator",
+            "HushNode.HushVoting.Licensing.Cache.LicenceCacheTtlResult",
         });
     }
 
