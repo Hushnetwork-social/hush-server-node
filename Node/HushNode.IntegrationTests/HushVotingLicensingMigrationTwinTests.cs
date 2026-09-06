@@ -39,17 +39,17 @@ public sealed class HushVotingLicensingMigrationTwinTests
             await _fixture.MigrateToAsync(databaseName, PredecessorMigration);
             (await TableCountInHushVotingAsync(databaseName)).Should().Be(0);
 
-            // 2) Clean upgrade to head installs the five FEAT-013 licensing tables plus the FEAT-014
-            //    cache outbox (six HushVoting tables) once.
+            // 2) Clean upgrade to head installs the FEAT-013 licensing tables (5), the FEAT-014
+            //    cache outbox, and the FEAT-015 pending-reservation table (seven HushVoting tables).
             await _fixture.MigrateToHeadAsync(databaseName);
-            (await TableCountInHushVotingAsync(databaseName)).Should().Be(6);
+            (await TableCountInHushVotingAsync(databaseName)).Should().Be(7);
 
             // Representative check constraints and unique indexes are present.
             (await ConstraintCountAsync(databaseName, "CK_")).Should().BeGreaterThan(10);
 
             // 3) Restart is idempotent (already migrated).
             await _fixture.MigrateToHeadAsync(databaseName);
-            (await TableCountInHushVotingAsync(databaseName)).Should().Be(6);
+            (await TableCountInHushVotingAsync(databaseName)).Should().Be(7);
 
             // 4) Empty-schema down migration succeeds and removes the schema.
             await _fixture.MigrateToAsync(databaseName, PredecessorMigration);
@@ -63,11 +63,12 @@ public sealed class HushVotingLicensingMigrationTwinTests
             var exception = await act.Should().ThrowAsync<PostgresException>();
             exception.And.MessageText.Should().Contain("Destructive rollback refused");
 
-            // Forward-fix posture: EF applies Down migrations in reverse order, so the FEAT-014
-            // outbox migration (no pending rows) rolls back before the FEAT-013 guard refuses; the
-            // database rests at FEAT-013. Re-applying head restores the full six-table state.
+            // Forward-fix posture: EF applies Down migrations in reverse order, so the FEAT-015
+            // reservation and FEAT-014 outbox migrations (no pending rows) roll back before the
+            // FEAT-013 guard refuses; the database rests at FEAT-013. Re-applying head restores the
+            // full seven-table state.
             await _fixture.MigrateToHeadAsync(databaseName);
-            (await TableCountInHushVotingAsync(databaseName)).Should().Be(6);
+            (await TableCountInHushVotingAsync(databaseName)).Should().Be(7);
         }
         finally
         {

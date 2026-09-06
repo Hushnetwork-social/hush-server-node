@@ -30,4 +30,5 @@ public sealed class LicenceSubjectEntity
     public ICollection<LicenceAssignmentEntity> Assignments { get; set; } = new List<LicenceAssignmentEntity>();
     public ICollection<LicenceTransitionEventEntity> TransitionEvents { get; set; } = new List<LicenceTransitionEventEntity>();
     public ICollection<LicenceActivationOperationEntity> ActivationOperations { get; set; } = new List<LicenceActivationOperationEntity>();
+    public ICollection<LicencePendingReservationEntity> PendingReservations { get; set; } = new List<LicencePendingReservationEntity>();
 }

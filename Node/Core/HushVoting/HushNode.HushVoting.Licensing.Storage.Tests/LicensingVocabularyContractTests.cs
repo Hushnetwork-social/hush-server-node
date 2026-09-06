@@ -32,6 +32,36 @@ public class LicensingVocabularyContractTests
         LicencePersistenceVocabulary.SourceMigrationLazyDefault.Should().Be("migration_lazy_default");
         LicencePersistenceVocabulary.SourceAutomaticUpgrade.Should().Be("automatic_upgrade");
         LicencePersistenceVocabulary.SourceAutomaticExpiry.Should().Be("automatic_expiry");
+        LicencePersistenceVocabulary.SourceBaselineFree.Should().Be("baseline_free");
+        LicencePersistenceVocabulary.SourceConfirmedUpgrade.Should().Be("confirmed_upgrade");
+    }
+
+    [Fact]
+    public void Reservation_lifecycle_vocabulary_is_closed_and_exact()
+    {
+        LicencePersistenceVocabulary.ReservationLifecyclePending.Should().Be("pending");
+        LicencePersistenceVocabulary.ReservationLifecycleSuperseded.Should().Be("superseded");
+        LicencePersistenceVocabulary.ReservationLifecycleResolved.Should().Be("resolved");
+    }
+
+    [Fact]
+    public void Reservation_lifecycle_set_matches_the_schema_check_constraint()
+    {
+        var expected = new[]
+        {
+            "pending",
+            "superseded",
+            "resolved",
+        };
+
+        var actual = new[]
+        {
+            LicencePersistenceVocabulary.ReservationLifecyclePending,
+            LicencePersistenceVocabulary.ReservationLifecycleSuperseded,
+            LicencePersistenceVocabulary.ReservationLifecycleResolved,
+        };
+
+        actual.Should().BeEquivalentTo(expected);
     }
 
     [Fact]

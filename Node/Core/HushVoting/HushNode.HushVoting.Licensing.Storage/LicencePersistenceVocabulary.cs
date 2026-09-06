@@ -38,4 +38,13 @@ public static class LicencePersistenceVocabulary
     public const string OperationResultPlanUnavailable = "plan_unavailable";
     public const string OperationResultPreconditionConflict = "precondition_conflict";
     public const string OperationResultEntitlementNotInitialized = "entitlement_not_initialized";
+
+    // FEAT-015 indexed-projection sources (closed, additive; FEAT-013 sources stay valid for retained history).
+    public const string SourceBaselineFree = "baseline_free";
+    public const string SourceConfirmedUpgrade = "confirmed_upgrade";
+
+    // FEAT-015 DB-backed pending-reservation lifecycle (closed v1 set).
+    public const string ReservationLifecyclePending = "pending";
+    public const string ReservationLifecycleSuperseded = "superseded";
+    public const string ReservationLifecycleResolved = "resolved";
 }

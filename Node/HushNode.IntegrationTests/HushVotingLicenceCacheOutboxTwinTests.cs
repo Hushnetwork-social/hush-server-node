@@ -69,9 +69,10 @@ public sealed class HushVotingLicenceCacheOutboxTwinTests
             (await TableCountInHushVotingAsync(databaseName)).Should().Be(5);
             (await TableExistsAsync(databaseName, "LicenceCacheOutbox")).Should().BeFalse();
 
-            // Upgrading to the FEAT-014 head adds exactly one table and preserves licensing data.
+            // Upgrading to the FEAT-014 head (pinned; the unified stream later adds FEAT-015 tables)
+            // adds exactly one table and preserves licensing data.
             await InsertLicensingDataAsync(databaseName);
-            await _fixture.MigrateToHeadAsync(databaseName);
+            await _fixture.MigrateToAsync(databaseName, HeadMigration);
             (await TableCountInHushVotingAsync(databaseName)).Should().Be(6);
             (await TableExistsAsync(databaseName, "LicenceCacheOutbox")).Should().BeTrue();
             (await SubjectCountAsync(databaseName)).Should().Be(1);

@@ -212,4 +212,57 @@ public class LicensingModelContractTests
             key.Properties[0].ClrType.Should().Be(typeof(Guid));
         }
     }
+
+    [Fact]
+    public void Pending_reservation_is_mapped_with_fingerprint_intent_and_lifecycle_constraints()
+    {
+        var model = BuildModel();
+        model.GetEntityTypes().Select(e => e.ClrType)
+            .Should().Contain(typeof(LicencePendingReservationEntity));
+
+        var reservation = Entity<LicencePendingReservationEntity>();
+        reservation.GetTableName().Should().Be("LicencePendingReservation");
+        reservation.GetSchema().Should().Be("HushVoting");
+
+        reservation.GetProperty(nameof(LicencePendingReservationEntity.CanonicalPayloadFingerprintSha256))
+            .GetColumnType().Should().Be("varchar(64)");
+        reservation.GetProperty(nameof(LicencePendingReservationEntity.TransitionIntent))
+            .GetColumnType().Should().Be("varchar(32)");
+        reservation.GetProperty(nameof(LicencePendingReservationEntity.OriginatingTransactionId))
+            .GetColumnType().Should().Be("uuid");
+
+        var subjectFk = reservation.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(LicenceSubjectEntity));
+        subjectFk.DeleteBehavior.Should().Be(DeleteBehavior.Restrict);
+    }
+
+    [Fact]
+    public void Assignment_has_unique_originating_transaction_index()
+    {
+        var assignment = Entity<LicenceAssignmentEntity>();
+        var originatingIndex = assignment.GetIndexes()
+            .Single(index => index.Properties.Count == 1
+                && index.Properties[0].Name == nameof(LicenceAssignmentEntity.OriginatingTransactionId));
+
+        originatingIndex.IsUnique.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Assignment_origin_and_supersession_columns_are_nullable_for_legacy_rows()
+    {
+        var assignment = Entity<LicenceAssignmentEntity>();
+
+        assignment.GetProperty(nameof(LicenceAssignmentEntity.OriginatingTransactionId)).IsNullable.Should().BeTrue();
+        assignment.GetProperty(nameof(LicenceAssignmentEntity.OriginatingBlockIndex)).IsNullable.Should().BeTrue();
+        assignment.GetProperty(nameof(LicenceAssignmentEntity.OriginatingBlockTimeStampUtc)).IsNullable.Should().BeTrue();
+        assignment.GetProperty(nameof(LicenceAssignmentEntity.SupersededByAssignmentId)).IsNullable.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Subject_exposes_pending_reservations_collection()
+    {
+        var subject = Entity<LicenceSubjectEntity>();
+        subject.GetNavigations().Select(n => n.Name)
+            .Should().Contain(nameof(LicenceSubjectEntity.PendingReservations));
+    }
 }

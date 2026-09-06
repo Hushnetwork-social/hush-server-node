@@ -21,6 +21,7 @@ public sealed class LicensingDbContextConfigurator : IDbContextConfigurator
         ConfigureTransitionEvent(modelBuilder);
         ConfigureActivationOperation(modelBuilder);
         ConfigureCacheOutbox(modelBuilder);
+        ConfigurePendingReservation(modelBuilder);
     }
 
     private static void ConfigureCatalogueRelease(ModelBuilder modelBuilder)
@@ -92,7 +93,7 @@ public sealed class LicensingDbContextConfigurator : IDbContextConfigurator
             table.HasCheckConstraint("CK_LicenceAssignment_LifecycleStatus",
                 "\"LifecycleStatus\" IN ('active', 'superseded', 'expired')");
             table.HasCheckConstraint("CK_LicenceAssignment_Source",
-                "\"Source\" IN ('default_free', 'migration_lazy_default', 'automatic_upgrade', 'automatic_expiry')");
+                "\"Source\" IN ('default_free', 'migration_lazy_default', 'automatic_upgrade', 'automatic_expiry', 'baseline_free', 'confirmed_upgrade')");
             table.HasCheckConstraint("CK_LicenceAssignment_PlanFamily",
                 "\"PlanFamily\" IN ('direct', 'veritas', 'enterprise')");
             table.HasCheckConstraint("CK_LicenceAssignment_TermKind",
@@ -113,6 +114,13 @@ public sealed class LicensingDbContextConfigurator : IDbContextConfigurator
                 "((\"LifecycleStatus\" = 'active' AND \"LifecycleChangedAtUtc\" IS NULL AND \"LifecycleReason\" IS NULL) OR (\"LifecycleStatus\" IN ('superseded', 'expired') AND \"LifecycleChangedAtUtc\" IS NOT NULL AND \"LifecycleReason\" IS NOT NULL))");
             table.HasCheckConstraint("CK_LicenceAssignment_EffectiveFromNotBackdated",
                 "\"EffectiveFromUtc\" >= '2020-01-01T00:00:00Z'");
+            table.HasCheckConstraint("CK_LicenceAssignment_IndexOriginAllOrNone",
+                "((\"OriginatingTransactionId\" IS NULL AND \"OriginatingBlockIndex\" IS NULL AND \"OriginatingBlockTimeStampUtc\" IS NULL) OR " +
+                "(\"OriginatingTransactionId\" IS NOT NULL AND \"OriginatingBlockIndex\" IS NOT NULL AND \"OriginatingBlockTimeStampUtc\" IS NOT NULL))");
+            table.HasCheckConstraint("CK_LicenceAssignment_OriginatingBlockNonNegative",
+                "\"OriginatingBlockIndex\" IS NULL OR \"OriginatingBlockIndex\" >= 0");
+            table.HasCheckConstraint("CK_LicenceAssignment_SupersessionPair",
+                "((\"SupersededByAssignmentId\" IS NULL) OR (\"LifecycleStatus\" = 'superseded'))");
         });
 
         entity.HasKey(x => x.LicenceAssignmentId);
@@ -144,6 +152,27 @@ public sealed class LicensingDbContextConfigurator : IDbContextConfigurator
             .WithMany()
             .HasForeignKey(x => x.CreatedByOperationId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        entity.Property(x => x.OriginatingTransactionId).HasColumnType("uuid");
+        entity.Property(x => x.OriginatingBlockIndex).HasColumnType("bigint");
+        entity.Property(x => x.OriginatingBlockTimeStampUtc).HasColumnType("timestamp with time zone");
+        entity.Property(x => x.SupersededByAssignmentId).HasColumnType("uuid");
+
+        // Supersession relationship (self-referencing; a superseded row points at its successor).
+        entity.HasOne(x => x.SupersededByAssignment)
+            .WithMany()
+            .HasForeignKey(x => x.SupersededByAssignmentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Unique originating licence transaction = the public licence reference. NULLs (legacy
+        // FEAT-013 rows) are not constrained by Postgres unique indexes; readiness refuses them.
+        entity.HasIndex(x => x.OriginatingTransactionId)
+            .IsUnique()
+            .HasDatabaseName("IX_LicenceAssignment_OriginatingTransactionId");
+
+        // Block provenance correlation (rebuild + readiness).
+        entity.HasIndex(x => x.OriginatingBlockIndex)
+            .HasDatabaseName("IX_LicenceAssignment_OriginatingBlockIndex");
 
         // At most one ACTIVE assignment per subject.
         entity.HasIndex(x => x.LicenceSubjectId)
@@ -246,6 +275,61 @@ public sealed class LicensingDbContextConfigurator : IDbContextConfigurator
 
         entity.HasIndex(x => x.LicenceSubjectId)
             .HasDatabaseName("IX_LicenceActivationOperation_Subject");
+    }
+
+    private static void ConfigurePendingReservation(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<LicencePendingReservationEntity>();
+        entity.ToTable("LicencePendingReservation", SchemaName, table =>
+        {
+            table.HasCheckConstraint("CK_LicencePendingReservation_FingerprintFormat",
+                "char_length(\"CanonicalPayloadFingerprintSha256\") = 64");
+            table.HasCheckConstraint("CK_LicencePendingReservation_Intent",
+                "\"TransitionIntent\" IN ('baseline_free', 'confirmed_upgrade')");
+            table.HasCheckConstraint("CK_LicencePendingReservation_Lifecycle",
+                "\"LifecycleStatus\" IN ('pending', 'superseded', 'resolved')");
+            table.HasCheckConstraint("CK_LicencePendingReservation_RankNonNegative",
+                "\"RequestedUpgradeRank\" >= 0");
+            table.HasCheckConstraint("CK_LicencePendingReservation_ResolvedPair",
+                "((\"LifecycleStatus\" = 'pending' AND \"ResolvedAtUtc\" IS NULL) OR " +
+                "(\"LifecycleStatus\" IN ('superseded', 'resolved') AND \"ResolvedAtUtc\" IS NOT NULL))");
+            table.HasCheckConstraint("CK_LicencePendingReservation_BaselineNoExpectedCurrent",
+                "((\"TransitionIntent\" = 'baseline_free' AND \"ExpectedCurrentLicenceTransactionId\" IS NULL AND \"ExpectedCurrentPlanId\" IS NULL) OR " +
+                "(\"TransitionIntent\" = 'confirmed_upgrade' AND \"ExpectedCurrentLicenceTransactionId\" IS NOT NULL AND \"ExpectedCurrentPlanId\" IS NOT NULL))");
+        });
+
+        entity.HasKey(x => x.LicencePendingReservationId);
+        entity.Property(x => x.OriginatingTransactionId).HasColumnType("uuid").IsRequired();
+        entity.Property(x => x.CanonicalPayloadFingerprintSha256).HasColumnType("varchar(64)").IsRequired();
+        entity.Property(x => x.TransitionIntent).HasColumnType("varchar(32)").IsRequired();
+        entity.Property(x => x.RequestedPlanId).HasColumnType("varchar(64)").IsRequired();
+        entity.Property(x => x.ObservedCatalogueVersion).HasColumnType("varchar(96)").IsRequired();
+        entity.Property(x => x.ExpectedCurrentLicenceTransactionId).HasColumnType("uuid");
+        entity.Property(x => x.ExpectedCurrentPlanId).HasColumnType("varchar(64)");
+        entity.Property(x => x.LifecycleStatus).HasColumnType("varchar(16)").IsRequired();
+        entity.Property(x => x.RequestedUpgradeRank).HasColumnType("integer").IsRequired();
+        entity.Property(x => x.CreatedAtUtc).HasColumnType("timestamp with time zone").IsRequired();
+        entity.Property(x => x.ResolvedAtUtc).HasColumnType("timestamp with time zone");
+
+        entity.HasOne(x => x.LicenceSubject)
+            .WithMany(x => x.PendingReservations)
+            .HasForeignKey(x => x.LicenceSubjectId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Idempotency: one reservation per exact signed transaction UUID.
+        entity.HasIndex(x => x.OriginatingTransactionId)
+            .IsUnique()
+            .HasDatabaseName("IX_LicencePendingReservation_OriginatingTransactionId");
+
+        // At most one PENDING reservation per identity (admission competition).
+        entity.HasIndex(x => x.LicenceSubjectId)
+            .IsUnique()
+            .HasFilter("\"LifecycleStatus\" = 'pending'")
+            .HasDatabaseName("IX_LicencePendingReservation_SinglePendingPerSubject");
+
+        // Pending claim / resolution telemetry.
+        entity.HasIndex(x => x.LicenceSubjectId)
+            .HasDatabaseName("IX_LicencePendingReservation_Subject");
     }
 
     private static void ConfigureCacheOutbox(ModelBuilder modelBuilder)
