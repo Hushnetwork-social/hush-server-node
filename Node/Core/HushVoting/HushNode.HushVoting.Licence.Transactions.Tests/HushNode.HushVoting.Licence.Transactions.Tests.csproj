@@ -33,4 +33,9 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- EF pins unify transitive versions pulled via the Transactions -> Storage module chain. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+  </ItemGroup>
+
 </Project>

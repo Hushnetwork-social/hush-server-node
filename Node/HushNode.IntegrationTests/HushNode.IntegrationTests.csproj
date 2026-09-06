@@ -79,6 +79,7 @@
   <ItemGroup>
     <!-- Reference HushServerNode for internal class access via InternalsVisibleTo -->
     <ProjectReference Include="..\HushServerNode\HushServerNode.csproj" />
+    <ProjectReference Include="..\Core\HushVoting\HushNode.HushVoting.Licence.Transactions\HushNode.HushVoting.Licence.Transactions.csproj" />
     <ProjectReference Include="..\..\Shared\HushShared.Elections.PublicationProof\HushShared.Elections.PublicationProof.csproj" />
     <ProjectReference Include="..\..\Shared\HushShared.Elections.Verification.Model\HushShared.Elections.Verification.Model.csproj" />
   </ItemGroup>

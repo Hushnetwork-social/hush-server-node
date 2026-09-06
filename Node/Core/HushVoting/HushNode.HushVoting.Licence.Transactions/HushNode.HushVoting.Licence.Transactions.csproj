@@ -13,6 +13,15 @@
     <!-- Approved FEAT-001 signature-encoding classifier/contracts (compact base64 r||s and the
          explicitly Approved historical DER hex). Shared model only; never a Core dependency. -->
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Identity.Model\HushShared.Identity.Model.csproj" />
+    <!-- DB-backed per-identity pending reservation entity + EF projection reader (D4). The
+         transactions module mirrors FullIdentity admission which references its storage module. -->
+    <ProjectReference Include="..\HushNode.HushVoting.Licensing.Storage\HushNode.HushVoting.Licensing.Storage.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Pins unify transitive EF Core references (Npgsql/Storage resolve lower otherwise). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" PrivateAssets="all" />
+    <PackageReference Include="Npgsql" Version="10.0.3" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>
