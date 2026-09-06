@@ -171,6 +171,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.HushVoting.Licensi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.HushVoting.Licensing.Cache.Tests", "Core\HushVoting\HushNode.HushVoting.Licensing.Cache.Tests\HushNode.HushVoting.Licensing.Cache.Tests.csproj", "{5AF4B651-FD11-44DA-BD73-9B77BFA608D1}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "HushVoting", "HushVoting", "{B655CA37-42B3-C04F-C6BC-61169EB7C359}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.HushVoting.Licence.Transactions", "Core\HushVoting\HushNode.HushVoting.Licence.Transactions\HushNode.HushVoting.Licence.Transactions.csproj", "{B797F928-AE16-4F2D-AB14-619D28A0114F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.HushVoting.Licence.Transactions.Tests", "Core\HushVoting\HushNode.HushVoting.Licence.Transactions.Tests\HushNode.HushVoting.Licence.Transactions.Tests.csproj", "{434C4699-0428-4D1D-9C26-9CB1572F158B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1025,6 +1031,30 @@ Global
 		{5AF4B651-FD11-44DA-BD73-9B77BFA608D1}.Release|x64.Build.0 = Release|Any CPU
 		{5AF4B651-FD11-44DA-BD73-9B77BFA608D1}.Release|x86.ActiveCfg = Release|Any CPU
 		{5AF4B651-FD11-44DA-BD73-9B77BFA608D1}.Release|x86.Build.0 = Release|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Debug|x64.Build.0 = Debug|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Debug|x86.Build.0 = Debug|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Release|x64.ActiveCfg = Release|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Release|x64.Build.0 = Release|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Release|x86.ActiveCfg = Release|Any CPU
+		{B797F928-AE16-4F2D-AB14-619D28A0114F}.Release|x86.Build.0 = Release|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Debug|x64.Build.0 = Debug|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Debug|x86.Build.0 = Debug|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Release|x64.ActiveCfg = Release|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Release|x64.Build.0 = Release|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Release|x86.ActiveCfg = Release|Any CPU
+		{434C4699-0428-4D1D-9C26-9CB1572F158B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1087,5 +1117,7 @@ Global
 		{D4A3E638-28EA-4B40-B8AB-E0691876B11C} = {AAEB55DF-16D3-89DE-7662-B8457A5D8E70}
 		{1F7F73FC-DE91-4146-8561-1F3B1D89B292} = {AAEB55DF-16D3-89DE-7662-B8457A5D8E70}
 		{5AF4B651-FD11-44DA-BD73-9B77BFA608D1} = {AAEB55DF-16D3-89DE-7662-B8457A5D8E70}
+		{B797F928-AE16-4F2D-AB14-619D28A0114F} = {B655CA37-42B3-C04F-C6BC-61169EB7C359}
+		{434C4699-0428-4D1D-9C26-9CB1572F158B} = {B655CA37-42B3-C04F-C6BC-61169EB7C359}
 	EndGlobalSection
 EndGlobal

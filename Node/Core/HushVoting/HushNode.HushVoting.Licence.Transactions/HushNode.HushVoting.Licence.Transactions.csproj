@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.Model\HushShared.Blockchain.Model.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.HushVoting.Licensing.Model\HushShared.HushVoting.Licensing.Model.csproj" />
+  </ItemGroup>
+
+</Project>
