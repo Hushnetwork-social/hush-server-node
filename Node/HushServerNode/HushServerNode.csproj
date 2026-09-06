@@ -12,15 +12,13 @@
     <PackageReference Include="Grpc.AspNetCore.Server.Reflection" Version="2.67.0" />
     <PackageReference Include="Grpc.AspNetCore.Web" Version="2.67.0" />
 
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.2">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
 
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.2" />
-    <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,6 +44,7 @@
     <ProjectReference Include="..\Core\Feeds\HushNode.Feeds.gRPC\HushNode.Feeds.gRPC.csproj" />
     <ProjectReference Include="..\Core\Elections\HushNode.Elections.gRPC\HushNode.Elections.gRPC.csproj" />
     <ProjectReference Include="..\Core\HushVoting\HushNode.HushVoting.Licensing.Storage\HushNode.HushVoting.Licensing.Storage.csproj" />
+    <ProjectReference Include="..\Core\HushVoting\HushNode.HushVoting.Licence.Transactions\HushNode.HushVoting.Licence.Transactions.csproj" />
     <ProjectReference Include="..\Core\HushVoting\HushNode.HushVoting.Licensing.Cache\HushNode.HushVoting.Licensing.Cache.csproj" />
     <ProjectReference Include="..\Core\Reactions\HushNode.Reactions.gRPC\HushNode.Reactions.gRPC.csproj" />
     <ProjectReference Include="..\Infrastructure\HushNode.Notifications.gRPC\HushNode.Notifications.gRPC.csproj" />
@@ -57,26 +56,22 @@
           AfterTargets="Build"
           Condition="'$(ResolveProtocolPackageOnBuild)' != 'false' and '$(DesignTimeBuild)' != 'true'">
     <PropertyGroup>
-      <_ProtocolPackagePowerShell Condition="'$(OS)' == 'Windows_NT'">powershell</_ProtocolPackagePowerShell>
-      <_ProtocolPackagePowerShell Condition="'$(OS)' != 'Windows_NT'">pwsh</_ProtocolPackagePowerShell>
-      <_ProtocolPackageResolverScript>$(MSBuildThisFileDirectory)..\scripts\resolve-protocol-package-for-build.ps1</_ProtocolPackageResolverScript>
+      <_ProtocolPackageResolverScript>$(MSBuildThisFileDirectory)..\scripts\resolve-protocol-package-for-build.sh</_ProtocolPackageResolverScript>
       <_ProtocolPackageServerRoot>$(MSBuildThisFileDirectory)..\..</_ProtocolPackageServerRoot>
       <_ProtocolPackageOutputRoot>$(OutDir)ProtocolPackages</_ProtocolPackageOutputRoot>
     </PropertyGroup>
-    <Exec Command="&quot;$(_ProtocolPackagePowerShell)&quot; -NoProfile -ExecutionPolicy Bypass -File &quot;$(_ProtocolPackageResolverScript)&quot; -Configuration &quot;$(Configuration)&quot; -ServerRepositoryRoot &quot;$(_ProtocolPackageServerRoot)&quot; -OutputRoot &quot;$(_ProtocolPackageOutputRoot)&quot;" />
+    <Exec Command="bash &quot;$(_ProtocolPackageResolverScript)&quot; --configuration &quot;$(Configuration)&quot; --server-repository-root &quot;$(_ProtocolPackageServerRoot)&quot; --output-root &quot;$(_ProtocolPackageOutputRoot)&quot;" />
   </Target>
 
   <Target Name="ResolveProtocolPackageForPublishOutput"
           AfterTargets="Publish"
           Condition="'$(ResolveProtocolPackageOnBuild)' != 'false' and '$(DesignTimeBuild)' != 'true' and '$(PublishDir)' != ''">
     <PropertyGroup>
-      <_ProtocolPackagePowerShell Condition="'$(OS)' == 'Windows_NT'">powershell</_ProtocolPackagePowerShell>
-      <_ProtocolPackagePowerShell Condition="'$(OS)' != 'Windows_NT'">pwsh</_ProtocolPackagePowerShell>
-      <_ProtocolPackageResolverScript>$(MSBuildThisFileDirectory)..\scripts\resolve-protocol-package-for-build.ps1</_ProtocolPackageResolverScript>
+      <_ProtocolPackageResolverScript>$(MSBuildThisFileDirectory)..\scripts\resolve-protocol-package-for-build.sh</_ProtocolPackageResolverScript>
       <_ProtocolPackageServerRoot>$(MSBuildThisFileDirectory)..\..</_ProtocolPackageServerRoot>
       <_ProtocolPackagePublishOutputRoot>$(PublishDir)ProtocolPackages</_ProtocolPackagePublishOutputRoot>
     </PropertyGroup>
-    <Exec Command="&quot;$(_ProtocolPackagePowerShell)&quot; -NoProfile -ExecutionPolicy Bypass -File &quot;$(_ProtocolPackageResolverScript)&quot; -Configuration &quot;$(Configuration)&quot; -ServerRepositoryRoot &quot;$(_ProtocolPackageServerRoot)&quot; -OutputRoot &quot;$(_ProtocolPackagePublishOutputRoot)&quot;" />
+    <Exec Command="bash &quot;$(_ProtocolPackageResolverScript)&quot; --configuration &quot;$(Configuration)&quot; --server-repository-root &quot;$(_ProtocolPackageServerRoot)&quot; --output-root &quot;$(_ProtocolPackagePublishOutputRoot)&quot;" />
   </Target>
 
 </Project>

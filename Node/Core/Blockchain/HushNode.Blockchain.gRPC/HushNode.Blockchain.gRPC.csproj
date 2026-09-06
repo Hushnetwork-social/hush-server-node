@@ -13,9 +13,9 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
 
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.2" />
-    <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +31,8 @@
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Feeds.Model\HushShared.Feeds.Model.csproj" />
     <ProjectReference Include="..\..\Feeds\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
+    <!-- FEAT-015 additive licence admission gate (licence payload kind only). -->
+    <ProjectReference Include="..\..\HushVoting\HushNode.HushVoting.Licence.Transactions\HushNode.HushVoting.Licence.Transactions.csproj" />
   </ItemGroup>
 
 </Project>

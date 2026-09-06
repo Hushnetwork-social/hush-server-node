@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using HushNode.Caching;
 using HushNode.Elections.HushVotingLicence;
+using HushNode.HushVoting.Licence.Transactions;
 using HushNode.HushVoting.Licensing.Storage;
 using HushNode.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -53,6 +54,50 @@ public static class HushVotingLicensingIntegrationHostBuild
         services.AddSingleton<HushVotingLicenceRolloutReadinessBootstrapper>();
         services.AddSingleton<Olimpo.IBootstrapper, HushVotingLicenceRolloutReadinessBootstrapper>(
             sp => sp.GetRequiredService<HushVotingLicenceRolloutReadinessBootstrapper>());
+
+        // FEAT-015: licence transaction pipeline (deserializer, validator, reservation, admission
+        // gate, block-context index strategy, content handler). The validation context source
+        // resolves the signatory's exact indexed identity + current catalogue + indexed state.
+        RegisterLicenceTransactionPipeline(services);
+    }
+
+    /// <summary>Registers the FEAT-015 licence transaction pipeline components.</summary>
+    public static void RegisterLicenceTransactionPipeline(IServiceCollection services)
+    {
+        services.AddSingleton<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceCanonicalSerializer,
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceCanonicalSerializer>();
+        services.AddSingleton<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceSignatureVerifier,
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceSignatureVerifier>();
+        services.AddSingleton<HostLicenceValidationContextSource>();
+        services.AddSingleton<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceValidationContextSource>(
+            sp => sp.GetRequiredService<HostLicenceValidationContextSource>());
+        services.AddSingleton<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceTransactionValidator>(sp =>
+            new HushNode.HushVoting.Licence.Transactions.HushVotingLicenceTransactionValidator(
+                sp.GetRequiredService<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceCanonicalSerializer>(),
+                sp.GetRequiredService<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceSignatureVerifier>(),
+                sp.GetRequiredService<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceValidationContextSource>()));
+        services.AddTransient<HushShared.Blockchain.TransactionModel.ITransactionDeserializerStrategy,
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceDeserializerStrategy>();
+        services.AddSingleton<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceReservationStore>(sp =>
+            new HushNode.HushVoting.Licence.Transactions.HushVotingLicenceReservationStore(
+                () => CreateFreshDbContext(sp)));
+        services.AddSingleton<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceAdmissionGate>(sp =>
+            new HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAdmissionService(
+                sp.GetRequiredService<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceTransactionValidator>(),
+                sp.GetRequiredService<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceValidationContextSource>(),
+                sp.GetRequiredService<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceReservationStore>(),
+                () => CreateFreshDbContext(sp)));
+        services.AddSingleton<HushNode.Indexing.Interfaces.IBlockContextIndexStrategy>(sp =>
+            new HushNode.HushVoting.Licence.Transactions.LicenceBlockContextIndexStrategy(
+                sp.GetRequiredService<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceTransactionValidator>(),
+                sp.GetRequiredService<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceValidationContextSource>(),
+                () => CreateFreshDbContext(sp),
+                sp.GetRequiredService<LicenceServiceConfiguration>(),
+                sp.GetService<LicenceCacheOutboxPolicy>()));
+        services.AddTransient<HushShared.Blockchain.TransactionModel.ITransactionContentHandler>(
+            sp => new HushNode.HushVoting.Licence.Transactions.HushVotingLicenceContentHandler(
+                sp.GetRequiredService<HushNode.Credentials.ICredentialsProvider>(),
+                sp.GetRequiredService<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceTransactionValidator>()));
     }
 
     /// <summary>

@@ -8,6 +8,7 @@ using HushNode.Feeds.Storage;
 using HushNode.Idempotency;
 using HushNode.Interfaces.Models;
 using HushNode.MemPool;
+using HushNode.HushVoting.Licence.Transactions;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Elections.Model;
@@ -29,7 +30,8 @@ public class BlockchainGrpcService(
     ILogger<BlockchainGrpcService> logger,
     IFullIdentityAdmissionService fullIdentityAdmissionService,
     IFullIdentityReservationService fullIdentityReservationService,
-    IElectionWebClientDeploymentProofObservationService? webClientProofObservationService = null)
+    IElectionWebClientDeploymentProofObservationService? webClientProofObservationService = null,
+    IHushVotingLicenceAdmissionGate? licenceAdmissionGate = null)
     : HushBlockchain.HushBlockchainBase
 {
     private readonly IBlockchainStorageService _blockchainStorageService = blockchainStorageService;
@@ -42,6 +44,7 @@ public class BlockchainGrpcService(
     private readonly ILogger<BlockchainGrpcService> _logger = logger;
     private readonly IFullIdentityAdmissionService _fullIdentityAdmissionService = fullIdentityAdmissionService;
     private readonly IFullIdentityReservationService _fullIdentityReservationService = fullIdentityReservationService;
+    private readonly IHushVotingLicenceAdmissionGate? _licenceAdmissionGate = licenceAdmissionGate;
     private readonly IElectionWebClientDeploymentProofObservationService? _webClientProofObservationService =
         webClientProofObservationService;
 
@@ -140,6 +143,45 @@ public class BlockchainGrpcService(
                         {
                             Successfull = false,
                             Message = "Identity registration rejected",
+                            Status = TransactionStatus.Rejected,
+                            ValidationCode = admission.ValidationCode ?? string.Empty,
+                        };
+                }
+            }
+
+            // FEAT-015: licence admission gate (validate -> indexed check -> DB reservation).
+            // Additive: only the licence payload kind is routed here; all other kinds are untouched.
+            if (this._licenceAdmissionGate is not null
+                && transaction.PayloadKind == HushVotingLicenceAssignmentPayloadHandler.LicenceAssignmentPayloadKind)
+            {
+                var admission = await this._licenceAdmissionGate.AdmitAsync(
+                    transaction,
+                    context.CancellationToken);
+                switch (admission.Outcome)
+                {
+                    case HushVotingLicenceSubmitOutcome.Accepted:
+                        break; // continue to content-handler validation and validator signing
+                    case HushVotingLicenceSubmitOutcome.Pending:
+                        return new SubmitSignedTransactionReply
+                        {
+                            Successfull = true,
+                            Message = "Licence transaction is already pending",
+                            Status = TransactionStatus.Pending,
+                            ValidationCode = string.Empty,
+                        };
+                    case HushVotingLicenceSubmitOutcome.AlreadyExists:
+                        return new SubmitSignedTransactionReply
+                        {
+                            Successfull = true,
+                            Message = "Licence transaction already indexed",
+                            Status = TransactionStatus.AlreadyExists,
+                            ValidationCode = string.Empty,
+                        };
+                    default:
+                        return new SubmitSignedTransactionReply
+                        {
+                            Successfull = false,
+                            Message = "Licence transaction rejected",
                             Status = TransactionStatus.Rejected,
                             ValidationCode = admission.ValidationCode ?? string.Empty,
                         };

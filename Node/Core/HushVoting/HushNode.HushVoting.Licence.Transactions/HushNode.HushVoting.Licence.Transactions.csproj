@@ -18,6 +18,8 @@
     <ProjectReference Include="..\HushNode.HushVoting.Licensing.Storage\HushNode.HushVoting.Licensing.Storage.csproj" />
     <!-- Additive block-context index seam (D6): index strategies receive block index + time. -->
     <ProjectReference Include="..\..\Indexing\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />
+    <!-- Block-producer credential signing for the licence content handler (mirrors FullIdentity). -->
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
   </ItemGroup>
 
   <ItemGroup>
