@@ -82,6 +82,21 @@ public sealed class HushVotingLicenceRolloutReadinessBootstrapper : IBootstrappe
             state.Outcome,
             state.RolloutWatermarkBlockHeight);
 
+        // FEAT-015: licence serving is index-authority only. Any legacy off-chain assignment row
+        // (no originating blockchain transaction) refuses serving before the host is ready.
+        var indexAuthorityEvaluator = new LicenceIndexAuthorityReadinessEvaluator(
+            () => HushVotingLicensingIntegrationHostBuild.CreateFreshDbContext(_services));
+        var indexAuthority = await indexAuthorityEvaluator.EvaluateAsync(CancellationToken.None);
+        if (!indexAuthority.Ready)
+        {
+            _logger.LogError(
+                "[HushVotingLicence] Index-authority readiness failed closed. StableCode={StableCode} LegacyRows={LegacyRows}",
+                indexAuthority.StableCode,
+                indexAuthority.LegacyAssignmentCount);
+            throw new InvalidOperationException(
+                $"[HushVotingLicence] Index-authority readiness failed: {indexAuthority.StableCode}");
+        }
+
         BootstrapFinished.OnNext(nameof(HushVotingLicenceRolloutReadinessBootstrapper));
     }
 
