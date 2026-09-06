@@ -151,6 +151,82 @@ public sealed class HushVotingLicenceVerticalSmokeTwinTests : IAsyncLifetime
         reply.ValidationCode.Should().Be("LICENCE_CATALOGUE_STALE");
     }
 
+    [Fact]
+    public async Task UpgradeTraversesTheRealPipeline_AfterDirectFree()
+    {
+        await StartNodeAsync();
+        await IndexIdentityAsync();
+
+        // Index Direct Free first (baseline is only valid with no active entitlement).
+        var free = BuildBaselineLicence();
+        var submitFree = await BlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = System.Text.Json.JsonSerializer.Serialize(free),
+        });
+        submitFree.Status.Should().Be(TransactionStatus.Accepted);
+        await ProduceBlockAsync();
+        await Task.Delay(2_000);
+
+        // Submit a confirmed upgrade to Veritas 2000 (tier skip from Direct Free is allowed)
+        // referencing the indexed Direct Free as the expected current licence.
+        var veritasTx = Guid.NewGuid();
+        var veritasPayload = new HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload(
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceTransitionIntent.ConfirmedUpgrade,
+            "hushvoting.veritas.2000",
+            "hushvoting-licence-catalogue/v1.0.0",
+            free.TransactionId.Value,
+            "hushvoting.direct.free");
+        var veritas = BuildSignedVeritas(veritasPayload, veritasTx);
+        var submitVeritas = await BlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = System.Text.Json.JsonSerializer.Serialize(veritas),
+        });
+        submitVeritas.Status.Should().Be(TransactionStatus.Accepted);
+
+        // Mempool acceptance alone does not activate Veritas (Direct Free still indexed-active).
+        var beforeUpgradeIndex = await LicenceClient().GetMyEntitlementAsync(
+            new GetMyEntitlementRequest(), await SignedLicenceMetadataAsync());
+        beforeUpgradeIndex.State.Should().Be(LicenceEntitlementState.Active);
+        beforeUpgradeIndex.Active.PlanId.Should().Be("hushvoting.direct.free");
+
+        await ProduceBlockAsync();
+        await Task.Delay(2_000);
+
+        var activeVeritas = await LicenceClient().GetMyEntitlementAsync(
+            new GetMyEntitlementRequest(), await SignedLicenceMetadataAsync());
+        activeVeritas.State.Should().Be(LicenceEntitlementState.Active);
+        activeVeritas.Active.PlanId.Should().Be("hushvoting.veritas.2000");
+        activeVeritas.Active.LicenceReference.Should().Be(veritasTx.ToString());
+        activeVeritas.Active.ExpiresAtUtc.Should().NotBeNullOrEmpty(); // annual term indexed
+        activeVeritas.Active.HigherOptions.Select(o => o.PlanId).Should().Equal("hushvoting.veritas.10000");
+    }
+
+    private static HushShared.Blockchain.TransactionModel.States.SignedTransaction<
+        HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload> BuildSignedVeritas(
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload payload,
+            Guid txId)
+    {
+        var size = HushNode.HushVoting.Licence.Transactions.HushVotingLicenceCanonicalJson.PayloadJsonUtf8Length(payload);
+        var unsigned = new HushShared.Blockchain.TransactionModel.States.UnsignedTransaction<
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload>(
+            new HushShared.Blockchain.TransactionModel.TransactionId(txId),
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayloadHandler.LicenceAssignmentPayloadKind,
+            new HushShared.Blockchain.Model.Timestamp(DateTime.UtcNow),
+            payload,
+            size);
+        var canonical = new HushNode.HushVoting.Licence.Transactions.HushVotingLicenceCanonicalSerializer()
+            .SerializeCanonicalUnsignedJson(new HushShared.Blockchain.TransactionModel.States.SignedTransaction<
+                HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload>(
+                unsigned,
+                new HushShared.Blockchain.Model.SignatureInfo(FullIdentityTwinTestData.K001SigningAddress, string.Empty)));
+        var signature = Olimpo.DigitalSignature.SignMessageCompactBase64(
+            canonical, FullIdentityTwinTestData.K001PrivateScalarHex);
+        return new HushShared.Blockchain.TransactionModel.States.SignedTransaction<
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload>(
+            unsigned,
+            new HushShared.Blockchain.Model.SignatureInfo(FullIdentityTwinTestData.K001SigningAddress, signature));
+    }
+
     private static HushShared.Blockchain.TransactionModel.States.SignedTransaction<
         HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload> BuildBaselineLicence()
     {
