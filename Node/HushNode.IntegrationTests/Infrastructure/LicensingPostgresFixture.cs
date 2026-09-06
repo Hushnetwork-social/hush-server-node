@@ -121,3 +121,9 @@ public sealed class LicensingPostgresFixture : IAsyncLifetime
 public sealed class LicensingPostgresCollection : ICollectionFixture<LicensingPostgresFixture>
 {
 }
+
+/// <summary>FEAT-015 licensing real-PostgreSQL collection (projection migration/readiness TwinTests).</summary>
+[CollectionDefinition("FEAT-015 Licensing PostgreSQL")]
+public sealed class Feat015LicensingPostgresCollection : ICollectionFixture<LicensingPostgresFixture>
+{
+}

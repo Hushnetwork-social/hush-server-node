@@ -16,9 +16,6 @@ public static class LicenceIndexAuthorityReadinessCodes
 {
     /// <summary>At least one legacy off-chain assignment row has no originating licence transaction.</summary>
     public const string LegacyOffChainAssignmentPresent = "legacy_offchain_assignment_present";
-
-    /// <summary>At least one indexed assignment references an absent originating block index/time.</summary>
-    public const string IndexedRowMissingBlockProvenance = "indexed_row_missing_block_provenance";
 }
 
 /// <summary>Typed readiness outcome. Expected refusal is data, never an exception.</summary>
@@ -26,8 +23,7 @@ public sealed record LicenceIndexAuthorityReadinessResult(
     bool Ready,
     string? StableCode,
     string? SafeReason,
-    long? LegacyAssignmentCount = null,
-    long? InvalidIndexedRowCount = null)
+    long? LegacyAssignmentCount = null)
 {
     public static LicenceIndexAuthorityReadinessResult Ok() =>
         new(true, null, null);
@@ -35,17 +31,17 @@ public sealed record LicenceIndexAuthorityReadinessResult(
     public static LicenceIndexAuthorityReadinessResult Refuse(
         string stableCode,
         string safeReason,
-        long legacyAssignmentCount,
-        long invalidIndexedRowCount) =>
-        new(false, stableCode, safeReason, legacyAssignmentCount, invalidIndexedRowCount);
+        long legacyAssignmentCount) =>
+        new(false, stableCode, safeReason, legacyAssignmentCount);
 }
 
 /// <summary>
 /// Read-only readiness evaluation over the licence projection. Queries are bounded (no
-/// full-table scans beyond the necessary count), deterministic, and never write. The
-/// evaluator treats every assignment row without an originating transaction as legacy
-/// off-chain authority, and every row that has an originating transaction but lacks the
-/// block index/time pair as an invariant violation — both refuse serving with stable codes.
+/// full-table scans beyond the necessary count), deterministic, and never write. Every
+/// assignment row without an originating transaction is legacy off-chain authority and
+/// refuses serving with a bounded code. Block-provenance integrity is already enforced by
+/// the DB CHECK (all-or-none), so no separate invariant scan is needed here. Storage
+/// unavailability fails closed with a generic bounded code.
 /// </summary>
 public sealed class LicenceIndexAuthorityReadinessEvaluator
 {
@@ -64,18 +60,9 @@ public sealed class LicenceIndexAuthorityReadinessEvaluator
         try
         {
             using var db = _contextFactory();
-            var assignments = db.Set<LicenceAssignmentEntity>().AsNoTracking();
-
-            var legacyOffChainCount = await assignments
+            var legacyOffChainCount = await db.Set<LicenceAssignmentEntity>()
+                .AsNoTracking()
                 .CountAsync(assignment => assignment.OriginatingTransactionId == null, cancellationToken)
-                .ConfigureAwait(false);
-
-            var invalidIndexedCount = await assignments
-                .CountAsync(
-                    assignment => assignment.OriginatingTransactionId != null
-                        && (assignment.OriginatingBlockIndex == null
-                            || assignment.OriginatingBlockTimeStampUtc == null),
-                    cancellationToken)
                 .ConfigureAwait(false);
 
             if (legacyOffChainCount > 0)
@@ -83,17 +70,7 @@ public sealed class LicenceIndexAuthorityReadinessEvaluator
                 return LicenceIndexAuthorityReadinessResult.Refuse(
                     LicenceIndexAuthorityReadinessCodes.LegacyOffChainAssignmentPresent,
                     "Legacy off-chain licence assignments exist without an originating blockchain transaction; they are never converted or deleted.",
-                    legacyOffChainCount,
-                    invalidIndexedCount);
-            }
-
-            if (invalidIndexedCount > 0)
-            {
-                return LicenceIndexAuthorityReadinessResult.Refuse(
-                    LicenceIndexAuthorityReadinessCodes.IndexedRowMissingBlockProvenance,
-                    "Indexed assignment rows are missing required block provenance.",
-                    legacyOffChainCount,
-                    invalidIndexedCount);
+                    legacyOffChainCount);
             }
 
             return LicenceIndexAuthorityReadinessResult.Ok();
@@ -109,7 +86,6 @@ public sealed class LicenceIndexAuthorityReadinessEvaluator
             return LicenceIndexAuthorityReadinessResult.Refuse(
                 "licence_index_readiness_unavailable",
                 "The licence index projection could not be evaluated for readiness.",
-                0,
                 0);
         }
     }

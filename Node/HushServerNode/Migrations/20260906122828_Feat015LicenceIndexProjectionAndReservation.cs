@@ -153,6 +153,24 @@ namespace HushServerNode.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // Destructive rollback guard (FEAT-015/AT-LIC-015-013/014): refuse while any FEAT-015
+            // projection/reservation row that cannot be reconstructed from retained blocks exists.
+            // Pure FEAT-013 legacy rows (no originating transaction) are not FEAT-015 data and roll
+            // back through this migration; the FEAT-013 migration's own guard refuses those.
+            migrationBuilder.Sql(
+                """
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM "HushVoting"."LicencePendingReservation") THEN
+                        RAISE EXCEPTION 'Destructive rollback refused: HushVoting.LicencePendingReservation is not empty; use a forward-fix migration.';
+                    END IF;
+                    IF EXISTS (SELECT 1 FROM "HushVoting"."LicenceAssignment" WHERE "OriginatingTransactionId" IS NOT NULL OR "SupersededByAssignmentId" IS NOT NULL) THEN
+                        RAISE EXCEPTION 'Destructive rollback refused: indexed FEAT-015 licence assignments exist; use a forward-fix migration.';
+                    END IF;
+                END
+                $$
+                """);
+
             migrationBuilder.DropForeignKey(
                 name: "FK_LicenceAssignment_LicenceAssignment_SupersededByAssignmentId",
                 schema: "HushVoting",
