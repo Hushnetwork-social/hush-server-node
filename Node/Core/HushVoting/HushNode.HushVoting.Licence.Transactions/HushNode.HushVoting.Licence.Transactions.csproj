@@ -16,6 +16,8 @@
     <!-- DB-backed per-identity pending reservation entity + EF projection reader (D4). The
          transactions module mirrors FullIdentity admission which references its storage module. -->
     <ProjectReference Include="..\HushNode.HushVoting.Licensing.Storage\HushNode.HushVoting.Licensing.Storage.csproj" />
+    <!-- Additive block-context index seam (D6): index strategies receive block index + time. -->
+    <ProjectReference Include="..\..\Indexing\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />
   </ItemGroup>
 
   <ItemGroup>
