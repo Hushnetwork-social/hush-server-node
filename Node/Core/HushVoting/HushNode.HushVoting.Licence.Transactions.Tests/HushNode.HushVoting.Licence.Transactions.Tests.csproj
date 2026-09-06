@@ -27,4 +27,10 @@
     <ProjectReference Include="..\..\..\..\Shared\HushShared.HushVoting.Licensing.Model\HushShared.HushVoting.Licensing.Model.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\HushNode.HushVoting.Licence.Transactions\Fixtures\v1.0.0\licence-transaction-vectors.json" Link="Fixtures\licence-transaction-vectors.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
