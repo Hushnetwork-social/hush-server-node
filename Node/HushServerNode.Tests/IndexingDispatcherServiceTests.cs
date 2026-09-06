@@ -98,3 +98,91 @@ public class IndexingDispatcherServiceTests
 
     private sealed record DummyPayload : ITransactionPayloadKind;
 }
+
+public class IndexingDispatcherServiceBlockContextTests
+{
+    [Fact]
+    public async Task BlockContextStrategies_ReceiveTheContainingBlockConsensusTime()
+    {
+        var eventAggregatorMock = new Mock<IEventAggregator>();
+        var blockContextMock = new Mock<IBlockContextIndexStrategy>();
+        var tx = CreateTransaction();
+        var blockTime = new Timestamp(DateTime.Parse("2026-09-06T10:00:00Z").ToUniversalTime());
+        var block = CreateBlockWithTime(blockTime, tx);
+
+        blockContextMock.Setup(x => x.CanHandle(It.IsAny<AbstractTransaction>())).Returns(true);
+        DateTime? receivedTime = null;
+        blockContextMock
+            .Setup(x => x.HandleAsync(It.IsAny<AbstractTransaction>(), It.IsAny<DateTime>()))
+            .Returns<AbstractTransaction, DateTime>((_, time) =>
+            {
+                receivedTime = time;
+                return Task.CompletedTask;
+            });
+
+        var sut = new IndexingDispatcherService(
+            indexStrategies: Array.Empty<IIndexStrategy>(),
+            eventAggregator: eventAggregatorMock.Object,
+            blockContextStrategies: new[] { blockContextMock.Object });
+
+        await sut.HandleAsync(new BlockCreatedEvent(block));
+
+        receivedTime.Should().Be(blockTime.Value);
+        blockContextMock.Verify(x => x.HandleAsync(tx, blockTime.Value), Times.Once);
+    }
+
+    [Fact]
+    public async Task PlainIndexStrategies_RemainUnchangedWhenBlockContextStrategiesExist()
+    {
+        var eventAggregatorMock = new Mock<IEventAggregator>();
+        var plainMock = new Mock<IIndexStrategy>();
+        var blockContextMock = new Mock<IBlockContextIndexStrategy>();
+        var tx = CreateTransaction();
+        var block = CreateBlock(tx);
+
+        plainMock.Setup(x => x.CanHandle(It.IsAny<AbstractTransaction>())).Returns(true);
+        plainMock.Setup(x => x.HandleAsync(It.IsAny<AbstractTransaction>())).Returns(Task.CompletedTask);
+        blockContextMock.Setup(x => x.CanHandle(It.IsAny<AbstractTransaction>())).Returns(true);
+        blockContextMock.Setup(x => x.HandleAsync(It.IsAny<AbstractTransaction>(), It.IsAny<DateTime>())).Returns(Task.CompletedTask);
+
+        var sut = new IndexingDispatcherService(
+            indexStrategies: new[] { plainMock.Object },
+            eventAggregator: eventAggregatorMock.Object,
+            blockContextStrategies: new[] { blockContextMock.Object });
+
+        await sut.HandleAsync(new BlockCreatedEvent(block));
+
+        plainMock.Verify(x => x.HandleAsync(tx), Times.Once);
+        blockContextMock.Verify(x => x.HandleAsync(tx, It.IsAny<DateTime>()), Times.Once);
+    }
+
+    private static FinalizedBlock CreateBlockWithTime(Timestamp creationTime, params AbstractTransaction[] transactions)
+    {
+        var unsignedBlock = new UnsignedBlock(
+            new BlockId(Guid.NewGuid()),
+            creationTime,
+            new BlockIndex(123),
+            new BlockId(Guid.NewGuid()),
+            new BlockId(Guid.NewGuid()),
+            transactions);
+        var signed = new SignedBlock(
+            unsignedBlock,
+            new SignatureInfo("producer", "signature"));
+        return new FinalizedBlock(signed, "hash");
+    }
+
+    private static FinalizedBlock CreateBlock(params AbstractTransaction[] transactions) =>
+        CreateBlockWithTime(Timestamp.Current, transactions);
+
+    private static AbstractTransaction CreateTransaction()
+    {
+        return new UnsignedTransaction<DummyPayload>(
+            new TransactionId(Guid.NewGuid()),
+            Guid.NewGuid(),
+            Timestamp.Current,
+            new DummyPayload(),
+            payloadSize: 0);
+    }
+
+    private sealed record DummyPayload : ITransactionPayloadKind;
+}
