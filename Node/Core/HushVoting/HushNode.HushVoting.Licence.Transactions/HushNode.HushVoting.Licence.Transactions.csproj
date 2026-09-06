@@ -10,6 +10,9 @@
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.Model\HushShared.Blockchain.Model.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.HushVoting.Licensing.Model\HushShared.HushVoting.Licensing.Model.csproj" />
+    <!-- Approved FEAT-001 signature-encoding classifier/contracts (compact base64 r||s and the
+         explicitly Approved historical DER hex). Shared model only; never a Core dependency. -->
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Identity.Model\HushShared.Identity.Model.csproj" />
   </ItemGroup>
 
 </Project>
