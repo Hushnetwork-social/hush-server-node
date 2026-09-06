@@ -226,7 +226,7 @@ public sealed class HushVotingLicenceCacheOutboxConvergenceTwinTests
         purged.Should().Be(1);
 
         await using var verify = _fixture.CreateContext(db);
-        verify.Set<LicenceCacheOutboxEntity>().AnyAsync(e => e.Id == deliveredOldId).Result.Should().BeFalse();
+        (await verify.Set<LicenceCacheOutboxEntity>().AnyAsync(e => e.Id == deliveredOldId)).Should().BeFalse();
         var pending = await verify.Set<LicenceCacheOutboxEntity>().SingleAsync(e => e.Id == pendingOldId);
         pending.DeliveredUtc.Should().BeNull("pending work is preserved regardless of age");
 
