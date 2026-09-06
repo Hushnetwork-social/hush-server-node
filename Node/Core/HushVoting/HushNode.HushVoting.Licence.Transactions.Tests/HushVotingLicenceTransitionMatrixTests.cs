@@ -180,14 +180,14 @@ public sealed class HushVotingLicenceTransitionMatrixTests
     }
 
     [Fact]
-    public void Upgrade_to_current_plan_is_rejected_as_not_higher()
+    public void Upgrade_to_current_plan_is_rejected_as_unchanged()
     {
         var decision = Decide(
             Upgrade(HushVotingLicenceTestData.Veritas500, Guid.Parse("22222222-3333-4444-8555-666666666666"), HushVotingLicenceTestData.Veritas500),
             ActiveVeritas500());
 
         decision.IsValid.Should().BeFalse();
-        decision.ValidationCode.Should().Be(HushVotingLicenceValidationCodes.TransitionNotHigher);
+        decision.ValidationCode.Should().Be(HushVotingLicenceValidationCodes.TransitionUnchanged);
     }
 
     [Fact]

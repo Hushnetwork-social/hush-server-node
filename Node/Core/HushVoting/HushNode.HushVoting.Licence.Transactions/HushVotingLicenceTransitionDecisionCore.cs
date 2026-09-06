@@ -191,6 +191,14 @@ public static class HushVotingLicenceTransitionDecisionCore
                 "The indexed current plan is unknown in the current catalogue.");
         }
 
+        // Renewal of the current plan is unchanged; lower rank / downgrade is not higher.
+        if (target == active.CurrentPlanId)
+        {
+            return HushVotingLicenceTransitionDecision.Reject(
+                HushVotingLicenceValidationCodes.TransitionUnchanged,
+                "Selecting the current plan is not an actionable transition.");
+        }
+
         if (plan.UpgradeRank <= currentPlan.UpgradeRank)
         {
             return HushVotingLicenceTransitionDecision.Reject(
