@@ -47,7 +47,43 @@ public sealed class HushVotingLicenceAdmissionService(
         SignedTransaction<HushVotingLicenceAssignmentPayload> transaction,
         CancellationToken cancellationToken)
     {
-        // 1. Composite validation (real signature before identity/state semantics).
+        // 1. Signed-shape gate: the exact canonical bytes must be well-formed and really signed by
+        //    the signatory BEFORE any state-dependent work. This never relies on the generic
+        //    permissive helper and prevents probing arbitrary transaction ids.
+        var canonicalSerializer = new HushVotingLicenceCanonicalSerializer();
+        var shape = HushVotingLicencePayloadShapeGuard.Validate(transaction.Payload);
+        if (!shape.IsValid)
+        {
+            return HushVotingLicenceAdmissionResult.Rejected(
+                shape.ValidationCode ?? HushVotingLicenceValidationCodes.PayloadMalformed,
+                shape.Message ?? "Licence payload shape is invalid.");
+        }
+
+        var signatory = HushVotingLicenceCanonicalAddress.Normalize(transaction.UserSignature.Signatory)
+            ?? throw new InvalidOperationException("Licence signatory is not canonical.");
+
+        var canonicalJson = canonicalSerializer.SerializeCanonicalUnsignedJson(transaction);
+        var signatureOutcome = new HushVotingLicenceSignatureVerifier().Verify(
+            new HushVotingLicenceSignatureVerificationInput(
+                canonicalJson,
+                transaction.UserSignature.Signature,
+                signatory));
+        if (!signatureOutcome.IsValid)
+        {
+            return HushVotingLicenceAdmissionResult.Rejected(
+                HushVotingLicenceValidationCodes.SignatureInvalid,
+                "Licence transaction signature verification failed.");
+        }
+
+        // 2. Indexed-truth check BEFORE state validation: an already-indexed originating
+        //    transaction is ALREADY_EXISTS regardless of current state (exact retry after index).
+        var alreadyIndexed = await IsIndexedAsync(transaction.TransactionId.Value, cancellationToken);
+        if (alreadyIndexed)
+        {
+            return HushVotingLicenceAdmissionResult.AlreadyExists();
+        }
+
+        // 3. Composite validation (identity -> catalogue -> current state -> transition decision).
         var validation = await _validator.ValidateAsync(transaction, cancellationToken);
         if (!validation.IsValid)
         {
@@ -64,16 +100,7 @@ public sealed class HushVotingLicenceAdmissionService(
                 "Licence transition decision did not produce operative facts.");
         }
 
-        // 2. Indexed-truth check: already-indexed originating transaction -> ALREADY_EXISTS.
-        var alreadyIndexed = await IsIndexedAsync(transaction.TransactionId.Value, cancellationToken);
-        if (alreadyIndexed)
-        {
-            return HushVotingLicenceAdmissionResult.AlreadyExists();
-        }
-
-        // 3. Atomic DB reservation (per-identity; exact uuid + fingerprint).
-        var signatory = HushVotingLicenceCanonicalAddress.Normalize(transaction.UserSignature.Signatory)
-            ?? throw new InvalidOperationException("Licence signatory is not canonical.");
+        // 4. Atomic DB reservation (per-identity; exact uuid + fingerprint).
         var identity = await _contextSource.ResolveIdentityAsync(signatory, cancellationToken);
         if (identity is null)
         {

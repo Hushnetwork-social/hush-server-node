@@ -109,6 +109,48 @@ public sealed class HushVotingLicenceVerticalSmokeTwinTests : IAsyncLifetime
         return headers;
     }
 
+    [Fact]
+    public async Task ClientAuthoredCatalogue_IsRejected_ByRealValidator()
+    {
+        await StartNodeAsync();
+        await IndexIdentityAsync();
+
+        // A client cannot author authority: it may only name the observed catalogue release. An
+        // invented/unknown release must be rejected before mempool (AT-LIC-015-005).
+        var payload = new HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload(
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceTransitionIntent.BaselineFree,
+            "hushvoting.direct.free",
+            "hushvoting-licence-catalogue/v99.0.0"); // client-invented release
+        var size = HushNode.HushVoting.Licence.Transactions.HushVotingLicenceCanonicalJson.PayloadJsonUtf8Length(payload);
+        var unsigned = new HushShared.Blockchain.TransactionModel.States.UnsignedTransaction<
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload>(
+            new HushShared.Blockchain.TransactionModel.TransactionId(Guid.NewGuid()),
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayloadHandler.LicenceAssignmentPayloadKind,
+            new HushShared.Blockchain.Model.Timestamp(DateTime.UtcNow),
+            payload,
+            size);
+        var canonical = new HushNode.HushVoting.Licence.Transactions.HushVotingLicenceCanonicalSerializer()
+            .SerializeCanonicalUnsignedJson(new HushShared.Blockchain.TransactionModel.States.SignedTransaction<
+                HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload>(
+                unsigned,
+                new HushShared.Blockchain.Model.SignatureInfo(FullIdentityTwinTestData.K001SigningAddress, string.Empty)));
+        var signature = Olimpo.DigitalSignature.SignMessageCompactBase64(
+            canonical, FullIdentityTwinTestData.K001PrivateScalarHex);
+        var tx = new HushShared.Blockchain.TransactionModel.States.SignedTransaction<
+            HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload>(
+            unsigned,
+            new HushShared.Blockchain.Model.SignatureInfo(FullIdentityTwinTestData.K001SigningAddress, signature));
+
+        var reply = await BlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = System.Text.Json.JsonSerializer.Serialize(tx),
+        });
+
+        reply.Successfull.Should().BeFalse();
+        reply.Status.Should().Be(TransactionStatus.Rejected);
+        reply.ValidationCode.Should().Be("LICENCE_CATALOGUE_STALE");
+    }
+
     private static HushShared.Blockchain.TransactionModel.States.SignedTransaction<
         HushNode.HushVoting.Licence.Transactions.HushVotingLicenceAssignmentPayload> BuildBaselineLicence()
     {
@@ -152,12 +194,21 @@ public sealed class HushVotingLicenceVerticalSmokeTwinTests : IAsyncLifetime
 
         // Submit the signed Direct Free transaction -> ACCEPTED (mempool only).
         var licence = BuildBaselineLicence();
+        var serialized = System.Text.Json.JsonSerializer.Serialize(licence);
         var submit = await BlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
         {
-            SignedTransaction = System.Text.Json.JsonSerializer.Serialize(licence),
+            SignedTransaction = serialized,
         });
         submit.Successfull.Should().BeTrue();
         submit.Status.Should().Be(TransactionStatus.Accepted);
+
+        // AT-LIC-015-009: exact retry while pending -> PENDING, no second mempool item.
+        var retry = await BlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = serialized,
+        });
+        retry.Successfull.Should().BeTrue();
+        retry.Status.Should().Be(TransactionStatus.Pending);
 
         // Mempool acceptance does NOT activate the licence.
         var beforeBlock = await LicenceClient().GetMyEntitlementAsync(
@@ -174,5 +225,13 @@ public sealed class HushVotingLicenceVerticalSmokeTwinTests : IAsyncLifetime
         active.State.Should().Be(LicenceEntitlementState.Active);
         active.Active.PlanId.Should().Be("hushvoting.direct.free");
         active.Active.LicenceReference.Should().Be(licence.TransactionId.Value.ToString());
+
+        // AT-LIC-015-009: after indexing, the exact transaction is ALREADY_EXISTS.
+        var afterIndex = await BlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = serialized,
+        });
+        afterIndex.Successfull.Should().BeTrue();
+        afterIndex.Status.Should().Be(TransactionStatus.AlreadyExists);
     }
 }
