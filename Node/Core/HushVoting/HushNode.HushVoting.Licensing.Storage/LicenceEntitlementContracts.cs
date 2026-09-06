@@ -116,6 +116,10 @@ public enum LicenceResolutionOutcome
 
     /// <summary>Authority could not be established (storage unavailable / rollout not initialized). No entitlement invented.</summary>
     StorageUnavailable = 4,
+
+    /// <summary>FEAT-015: verified indexed absence — no assignment is currently effective and no
+    /// write was performed. The query layer returns no_active_entitlement plus a Direct Free template.</summary>
+    NoActiveEntitlement = 5,
 }
 
 /// <summary>
@@ -150,6 +154,7 @@ public static class LicenceEntitlementOutcomeNames
         LicenceResolutionOutcome.ProvisionedMigrationDefault => "provisioned_migration_default",
         LicenceResolutionOutcome.ExpiredToDefault => "expired_to_default",
         LicenceResolutionOutcome.StorageUnavailable => "storage_unavailable",
+        LicenceResolutionOutcome.NoActiveEntitlement => "no_active_entitlement",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Unknown resolution outcome."),
     };
 
@@ -236,6 +241,11 @@ public sealed record LicenceResolutionResult(
 
     public static LicenceResolutionResult Fail(string stableErrorCode, string safeErrorReason) =>
         new(false, null, null, stableErrorCode, safeErrorReason);
+
+    /// <summary>FEAT-015: verified indexed absence (no active assignment at the evaluation instant).
+    /// Success with no entitlement — never cached, never confused with an unavailable index.</summary>
+    public static LicenceResolutionResult Absent() =>
+        new(true, LicenceResolutionOutcome.NoActiveEntitlement, null, null, null);
 }
 
 /// <summary>

@@ -75,7 +75,9 @@ public static class HushVotingLicenceCacheHostBuild
         services.AddSingleton<ICurrentLicenceCatalogueProvider>(sp =>
             new HostLicenceCatalogueProvider(sp.GetRequiredService<LicenceServiceConfiguration>()));
         services.AddSingleton<IEntitlementAuthorityResolver>(sp =>
-            new HostLicenceAuthorityResolver(() => sp.GetRequiredService<LicenceEntitlementService>()));
+            new LicenceIndexedEntitlementAuthorityResolver(
+                sp.GetRequiredService<ILicenceIndexedProjectionReader>(),
+                () => DateTime.UtcNow));
 
         services.AddSingleton<IEntitlementProjectionStore>(sp =>
         {
@@ -289,21 +291,4 @@ public static class HushVotingLicenceCacheHostBuild
             (_configuration.CatalogueVersion, _configuration.ReleaseDigestSha256);
     }
 
-    private sealed class HostLicenceAuthorityResolver : IEntitlementAuthorityResolver
-    {
-        private readonly Func<LicenceEntitlementService> _serviceFactory;
-
-        public HostLicenceAuthorityResolver(Func<LicenceEntitlementService> serviceFactory)
-        {
-            _serviceFactory = serviceFactory ?? throw new ArgumentNullException(nameof(serviceFactory));
-        }
-
-        public async Task<LicenceResolutionResult> ResolveEffectiveEntitlementAsync(
-            AuthenticatedIdentitySubject subject,
-            CancellationToken cancellationToken)
-        {
-            var service = _serviceFactory();
-            return await service.GetOrProvisionAsync(subject, cancellationToken).ConfigureAwait(false);
-        }
-    }
 }

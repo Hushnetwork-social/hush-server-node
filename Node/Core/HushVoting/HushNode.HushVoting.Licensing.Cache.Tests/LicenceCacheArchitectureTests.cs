@@ -60,6 +60,7 @@ public sealed class LicenceCacheArchitectureTests
             "HushNode.HushVoting.Licensing.Cache.LicenceCacheTtlResult",
             "HushNode.HushVoting.Licensing.Cache.LicenceCacheValueValidator",
             "HushNode.HushVoting.Licensing.Cache.LicenceEntitlementCachedReader",
+            "HushNode.HushVoting.Licensing.Cache.LicenceIndexedEntitlementAuthorityResolver",
             "HushNode.HushVoting.Licensing.Cache.ProjectionWriteOutcome",
             "HushNode.HushVoting.Licensing.Cache.RedisEntitlementProjectionStore",
             "HushNode.HushVoting.Licensing.Cache.StoreReadResult",

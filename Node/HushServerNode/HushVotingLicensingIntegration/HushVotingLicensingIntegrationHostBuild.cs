@@ -48,6 +48,8 @@ public static class HushVotingLicensingIntegrationHostBuild
             TimeProvider.System,
             sp.GetService<LicenceTelemetry>(),
             sp.GetService<LicenceCacheOutboxPolicy>()));
+        services.AddSingleton<ILicenceIndexedProjectionReader>(sp =>
+            new LicenceIndexedProjectionReader(() => CreateFreshDbContext(sp)));
         services.AddSingleton<HushVotingLicenceRolloutReadinessBootstrapper>();
         services.AddSingleton<Olimpo.IBootstrapper, HushVotingLicenceRolloutReadinessBootstrapper>(
             sp => sp.GetRequiredService<HushVotingLicenceRolloutReadinessBootstrapper>());

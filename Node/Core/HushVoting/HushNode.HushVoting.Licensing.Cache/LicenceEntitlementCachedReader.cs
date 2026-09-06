@@ -473,6 +473,15 @@ public sealed class LicenceEntitlementCachedReader : ICachedEntitlementReader
 
         if (!resolution.IsSuccess || resolution.Entitlement is null)
         {
+            // FEAT-015: verified indexed absence is success-with-no-entitlement and must not be
+            // reported as authority unavailability (infrastructure failure is never absence).
+            if (resolution.IsSuccess && resolution.Outcome == LicenceResolutionOutcome.NoActiveEntitlement)
+            {
+                return (
+                    CachedEntitlementReadResult.NoActive(),
+                    null);
+            }
+
             return (
                 CachedEntitlementReadResult.Failure(
                     EntitlementCacheReadOutcome.AuthorityUnavailable,

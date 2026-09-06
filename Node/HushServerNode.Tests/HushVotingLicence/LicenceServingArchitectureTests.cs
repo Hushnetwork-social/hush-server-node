@@ -19,12 +19,15 @@ public sealed class LicenceServingArchitectureTests
     public void Serving_authority_resolver_never_depends_on_the_direct_write_service()
     {
         var hostAssembly = typeof(HushVotingLicenceCacheHostBuild).Assembly;
+        var cacheAssembly = typeof(IEntitlementAuthorityResolver).Assembly;
         var resolverInterface = typeof(IEntitlementAuthorityResolver);
         var directWriteService = typeof(LicenceEntitlementService);
         var serviceFactoryType = typeof(Func<>).MakeGenericType(directWriteService);
 
-        var violations = hostAssembly
-            .GetTypes()
+        var candidateAssemblies = new[] { hostAssembly, cacheAssembly };
+
+        var violations = candidateAssemblies
+            .SelectMany(assembly => assembly.GetTypes())
             .Where(type => resolverInterface.IsAssignableFrom(type))
             .Where(type => type is { IsAbstract: false, IsInterface: false })
             .SelectMany(type => type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))

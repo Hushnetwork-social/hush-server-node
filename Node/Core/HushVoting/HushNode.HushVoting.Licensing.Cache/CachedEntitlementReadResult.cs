@@ -18,6 +18,9 @@ public enum EntitlementCacheReadOutcome
 
     /// <summary>The licence cache is intentionally disabled; FEAT-013 resolved the read directly.</summary>
     CacheDisabled = 3,
+
+    /// <summary>FEAT-015: verified indexed absence. Never cached and never confused with unavailability.</summary>
+    AuthorityNoActive = 4,
 }
 
 /// <summary>
@@ -61,6 +64,11 @@ public sealed record CachedEntitlementReadResult
         ArgumentNullException.ThrowIfNull(projection);
         return new CachedEntitlementReadResult(true, outcome, projection, null, null);
     }
+
+    /// <summary>FEAT-015: verified no-active entitlement (indexed absence). Success with no projection
+    /// and no cache entry — absence is never negative-cached and is distinct from unavailability.</summary>
+    public static CachedEntitlementReadResult NoActive() =>
+        new(true, EntitlementCacheReadOutcome.AuthorityNoActive, null, null, null);
 
     public static CachedEntitlementReadResult Failure(
         EntitlementCacheReadOutcome outcome,
