@@ -1,15 +1,17 @@
 // FEAT-015 Phase 6.3/6.5 — host adapter implementing the licence validation context source.
 //
 // Resolves the dependency-safe inputs the licence validator needs:
-//   - exact indexed licence subject for a canonical signatory (the subject row is created only by
-//     block indexing, so its presence proves an indexed identity with creation-block provenance);
-//   - the current immutable FEAT-012 catalogue snapshot (already composed as
-//     LicenceServiceConfiguration);
+//   - exact indexed HushNetwork identity for a canonical signatory (IIdentityStorageService:
+//     Profile with authoritative creation BlockIndex provenance) — NEVER the licence subject
+//     table, which is only created once a licence indexes;
+//   - the current immutable FEAT-012 catalogue snapshot (LicenceServiceConfiguration);
 //   - the current indexed effective state (ILicenceIndexedProjectionReader — never a direct write).
 // Authentication happens before this adapter is ever called (signed metadata gate).
 
 using HushNode.HushVoting.Licence.Transactions;
 using HushNode.HushVoting.Licensing.Storage;
+using HushNode.Identity.Storage;
+using HushShared.Identity.Model;
 using HushShared.HushVoting.Licensing.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +34,39 @@ public sealed class HostLicenceValidationContextSource : IHushVotingLicenceValid
     }
 
     public async Task<HushVotingLicenceSignatoryContext?> ResolveIdentityAsync(
+        string canonicalPublicSigningAddress,
+        CancellationToken cancellationToken)
+    {
+        // The licence subject table is NOT the identity authority. Resolve the exact indexed
+        // HushNetwork identity (Profile) and its authoritative creation-block provenance.
+        IIdentityStorageService identityStorage;
+        try
+        {
+            identityStorage = _services.GetRequiredService<IIdentityStorageService>();
+        }
+        catch (InvalidOperationException)
+        {
+            // Identity storage not composed in this host variant (unit-style hosts): fall back to
+            // the licence subject anchor only when it exists (post-index host tests).
+            return await ResolveFromLicenceSubjectAsync(canonicalPublicSigningAddress, cancellationToken);
+        }
+
+        var profileBase = await identityStorage.RetrieveIdentityAsync(canonicalPublicSigningAddress);
+        if (profileBase is not Profile profile)
+        {
+            return null;
+        }
+
+        var canonical = AuthenticatedIdentitySubject.NormalizeCanonicalAddress(profile.PublicSigningAddress);
+        if (canonical is null || !string.Equals(canonical, canonicalPublicSigningAddress, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return new HushVotingLicenceSignatoryContext(canonical, profile.BlockIndex.Value);
+    }
+
+    private async Task<HushVotingLicenceSignatoryContext?> ResolveFromLicenceSubjectAsync(
         string canonicalPublicSigningAddress,
         CancellationToken cancellationToken)
     {

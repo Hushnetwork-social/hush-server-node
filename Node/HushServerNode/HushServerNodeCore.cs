@@ -30,6 +30,7 @@ using HushNode.Feeds;
 using HushNode.Feeds.gRPC;
 using HushNode.Elections;
 using HushNode.Elections.gRPC;
+using HushNode.HushVoting.Licence.gRPC;
 using HushNode.HushVoting.Licensing.Storage;
 using HushNode.Reactions;
 using HushNode.Reactions.gRPC;
@@ -728,7 +729,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                     new IndexingDispatcherService(
                         sp.GetRequiredService<IEnumerable<IIndexStrategy>>(),
                         sp.GetRequiredService<IEventAggregator>(),
-                        onBlockFinalized)));
+                        onBlockFinalized,
+                        sp.GetServices<IBlockContextIndexStrategy>())));
             });
 
             // Add diagnostic logger provider if supplied
@@ -755,6 +757,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         app.MapGrpcService<MembershipGrpcService>();
         app.MapGrpcService<NotificationGrpcService>();
         app.MapGrpcService<UrlMetadataGrpcService>();
+        app.MapGrpcService<HushNode.HushVoting.Licence.gRPC.HushVotingLicenceGrpcService>();
 
         app.MapGrpcReflectionService();
     }

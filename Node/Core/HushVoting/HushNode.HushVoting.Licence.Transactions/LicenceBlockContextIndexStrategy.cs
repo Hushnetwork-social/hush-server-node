@@ -74,7 +74,7 @@ public sealed class LicenceBlockContextIndexStrategy(
                 $"Licence signatory subject construction failed: {stableError}");
         }
 
-        await LicenceBlockIndexWriter.IndexAsync(
+        var indexResult = await LicenceBlockIndexWriter.IndexAsync(
             _contextFactory,
             _configuration,
             subject,
@@ -83,5 +83,14 @@ public sealed class LicenceBlockContextIndexStrategy(
             blockContext.BlockCreationTimeUtc,
             _cacheOutbox,
             CancellationToken.None);
+
+        // A licence transaction that is no longer valid at block time (stale/lower/same) or that
+        // failed to write must never silently pass as indexed: deterministic replay requires a
+        // visible, typed failure at the indexing boundary.
+        if (!indexResult.Indexed)
+        {
+            throw new InvalidOperationException(
+                $"Licence block index did not activate the transaction: {indexResult.StableErrorCode}");
+        }
     }
 }
