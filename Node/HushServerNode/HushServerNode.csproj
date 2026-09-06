@@ -45,6 +45,7 @@
     <ProjectReference Include="..\Core\Elections\HushNode.Elections.gRPC\HushNode.Elections.gRPC.csproj" />
     <ProjectReference Include="..\Core\HushVoting\HushNode.HushVoting.Licensing.Storage\HushNode.HushVoting.Licensing.Storage.csproj" />
     <ProjectReference Include="..\Core\HushVoting\HushNode.HushVoting.Licence.Transactions\HushNode.HushVoting.Licence.Transactions.csproj" />
+    <ProjectReference Include="..\Core\HushVoting\HushNode.HushVoting.Licence.gRPC\HushNode.HushVoting.Licence.gRPC.csproj" />
     <ProjectReference Include="..\Core\HushVoting\HushNode.HushVoting.Licensing.Cache\HushNode.HushVoting.Licensing.Cache.csproj" />
     <ProjectReference Include="..\Core\Reactions\HushNode.Reactions.gRPC\HushNode.Reactions.gRPC.csproj" />
     <ProjectReference Include="..\Infrastructure\HushNode.Notifications.gRPC\HushNode.Notifications.gRPC.csproj" />

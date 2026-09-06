@@ -59,6 +59,20 @@ public static class HushVotingLicensingIntegrationHostBuild
         // gate, block-context index strategy, content handler). The validation context source
         // resolves the signatory's exact indexed identity + current catalogue + indexed state.
         RegisterLicenceTransactionPipeline(services);
+
+        // FEAT-015: additive signed GetMyEntitlement query RPC.
+        RegisterLicenceQuerySurface(services);
+    }
+
+    /// <summary>Registers the additive licence query gRPC surface.</summary>
+    public static void RegisterLicenceQuerySurface(IServiceCollection services)
+    {
+        services.AddSingleton<HushNode.HushVoting.Licence.gRPC.ILicenceEntitlementQueryApplicationService>(sp =>
+            new HushNode.HushVoting.Licence.gRPC.LicenceEntitlementQueryApplicationService(
+                sp.GetRequiredService<ILicenceIndexedProjectionReader>(),
+                sp.GetRequiredService<LicenceServiceConfiguration>()));
+        HushNode.HushVoting.Licence.gRPC.HushVotingLicencegRPCHostBuild
+            .RegisterHushVotingLicenceQueryServices(services);
     }
 
     /// <summary>Registers the FEAT-015 licence transaction pipeline components.</summary>
