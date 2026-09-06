@@ -18,25 +18,34 @@ public sealed class HushVotingLicenceTransitionMatrixTests
     private static readonly Guid BaselineTx = HushVotingLicenceTestData.BaselineTransactionId;
     private static readonly Guid DirectFreeCurrentTx = Guid.Parse("11111111-2222-4333-8444-555555555555");
 
+    private static readonly DateTime EffectiveFrom =
+        DateTime.Parse("2026-01-01T00:00:00Z", null, System.Globalization.DateTimeStyles.AssumeUniversal).ToUniversalTime();
+
     private static HushVotingLicenceCurrentState NoActive() => new HushVotingLicenceCurrentState.NoActive();
 
     private static HushVotingLicenceCurrentState ActiveDirectFree() =>
         new HushVotingLicenceCurrentState.Active(
             HushVotingLicencePlanId.DirectFree,
             DirectFreeCurrentTx,
-            HushVotingLicenceCatalogueVersion.V1Value);
+            HushVotingLicenceCatalogueVersion.V1Value,
+            EffectiveFrom,
+            null);
 
     private static HushVotingLicenceCurrentState ActiveVeritas500() =>
         new HushVotingLicenceCurrentState.Active(
             HushVotingLicencePlanId.Veritas500,
             Guid.Parse("22222222-3333-4444-8555-666666666666"),
-            HushVotingLicenceCatalogueVersion.V1Value);
+            HushVotingLicenceCatalogueVersion.V1Value,
+            EffectiveFrom,
+            EffectiveFrom.AddYears(1));
 
     private static HushVotingLicenceCurrentState ActiveVeritas2000() =>
         new HushVotingLicenceCurrentState.Active(
             HushVotingLicencePlanId.Veritas2000,
             Guid.Parse("33333333-4444-4555-8666-777777777777"),
-            HushVotingLicenceCatalogueVersion.V1Value);
+            HushVotingLicenceCatalogueVersion.V1Value,
+            EffectiveFrom,
+            EffectiveFrom.AddYears(1));
 
     private static HushVotingLicenceAssignmentPayload Baseline(string planId = HushVotingLicenceTestData.DirectFree) =>
         new(HushVotingLicenceTransitionIntent.BaselineFree, planId, HushVotingLicenceCatalogueVersion.V1Value);
@@ -223,6 +232,9 @@ public sealed class HushVotingLicenceTransitionMatrixTests
 
 public sealed class HushVotingLicenceCompositeValidatorTests
 {
+    private static readonly DateTime CompositeEffectiveFrom =
+        DateTime.Parse("2026-01-01T00:00:00Z", null, System.Globalization.DateTimeStyles.AssumeUniversal).ToUniversalTime();
+
     private readonly HushVotingLicenceCanonicalSerializer _serializer = new();
     private readonly HushVotingLicenceSignatureVerifier _verifier = new();
     private readonly FakeContextSource _context = new();
@@ -273,7 +285,11 @@ public sealed class HushVotingLicenceCompositeValidatorTests
     {
         var currentTx = Guid.Parse("11111111-2222-4333-8444-555555555555");
         _context.State = new HushVotingLicenceCurrentState.Active(
-            HushVotingLicencePlanId.DirectFree, currentTx, HushVotingLicenceCatalogueVersion.V1Value);
+            HushVotingLicencePlanId.DirectFree,
+            currentTx,
+            HushVotingLicenceCatalogueVersion.V1Value,
+            CompositeEffectiveFrom,
+            null);
         var tx = HushVotingLicenceTestData.BuildSigned(
             new HushVotingLicenceAssignmentPayload(
                 HushVotingLicenceTransitionIntent.ConfirmedUpgrade,

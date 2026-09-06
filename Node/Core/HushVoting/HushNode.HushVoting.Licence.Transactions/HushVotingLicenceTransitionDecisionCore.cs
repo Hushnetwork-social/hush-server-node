@@ -22,7 +22,9 @@ public abstract record HushVotingLicenceCurrentState
     public sealed record Active(
         HushVotingLicencePlanId CurrentPlanId,
         Guid? CurrentLicenceTransactionId,
-        string CurrentCatalogueVersion) : HushVotingLicenceCurrentState;
+        string CurrentCatalogueVersion,
+        DateTime EffectiveFromUtc,
+        DateTime? ExpiresAtUtc) : HushVotingLicenceCurrentState;
 }
 
 /// <summary>Server-derived operative facts the index writer persists (never client-authored).</summary>
