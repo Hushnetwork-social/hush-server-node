@@ -275,6 +275,8 @@ public sealed class HushVotingLicensingEntitlementTwinTests
     // ------------------------------------------------------------------ existing resolution & expiry
 
     [Fact]
+    [Trait("Category", "FEAT-017")]
+    [Trait("AcceptanceId", "AT-LIC-001")] // FEAT-017 TwinTest pair (EPIC-002): Account popup shows the exact indexed plan and licence reference
     public async Task Existing_unexpired_assignment_resolves_without_mutation()
     {
         var databaseName = await NewDatabaseAsync();

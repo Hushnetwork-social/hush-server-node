@@ -154,6 +154,8 @@ public sealed class HushVotingLicenceVerticalSmokeTwinTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "FEAT-017")]
+    [Trait("AcceptanceId", "AT-LIC-006")] // FEAT-017 TwinTest pair (EPIC-002): strictly higher Veritas activates only after indexed confirmation through the real pipeline
     public async Task UpgradeTraversesTheRealPipeline_AfterDirectFree()
     {
         await StartNodeAsync();
