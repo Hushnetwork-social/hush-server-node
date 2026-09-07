@@ -357,6 +357,8 @@ public sealed class HushVotingLicensingActivationTwinTests
     // ------------------------------------------------------------------ idempotency semantics
 
     [Fact]
+    [Trait("Category", "FEAT-016")]
+    [Trait("AcceptanceId", "AT-LIC-007")] // FEAT-016 TwinTest pair (EPIC-002): exact transaction retry/ambiguity is idempotent
     public async Task Identical_command_replay_returns_the_original_outcome_without_mutation()
     {
         var databaseName = await NewDatabaseAsync();

@@ -110,6 +110,8 @@ public sealed class HushVotingLicenceVerticalSmokeTwinTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "FEAT-016")]
+    [Trait("AcceptanceId", "AT-LIC-012")] // FEAT-016 TwinTest pair (EPIC-002): unknown/retired catalogue data cannot activate or render
     public async Task ClientAuthoredCatalogue_IsRejected_ByRealValidator()
     {
         await StartNodeAsync();
@@ -256,6 +258,8 @@ public sealed class HushVotingLicenceVerticalSmokeTwinTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "FEAT-016")]
+    [Trait("AcceptanceId", "AT-LIC-002")] // FEAT-016 TwinTest pair (EPIC-002): no-active -> one client-signed, indexed Direct Free
     public async Task DirectFree_TraversesTheRealPipeline()
     {
         await StartNodeAsync();

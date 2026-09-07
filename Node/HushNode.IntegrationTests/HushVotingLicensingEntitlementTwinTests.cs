@@ -311,6 +311,8 @@ public sealed class HushVotingLicensingEntitlementTwinTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-016")]
+    [Trait("AcceptanceId", "AT-LIC-010")] // FEAT-016 TwinTest pair (EPIC-002): annual upper-exclusive expiry -> no-active -> Direct Free
     public async Task Annual_assignment_at_upper_exclusive_boundary_expires_to_direct_free_atomically()
     {
         var databaseName = await NewDatabaseAsync();
@@ -492,6 +494,8 @@ public sealed class HushVotingLicensingEntitlementTwinTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-016")]
+    [Trait("AcceptanceId", "AT-LIC-003")] // FEAT-016 TwinTest pair (EPIC-002): authority unavailable never invents/remembers entitlement
     public async Task Database_outage_returns_storage_unavailable_and_never_invents_entitlement()
     {
         var databaseName = await NewDatabaseAsync();

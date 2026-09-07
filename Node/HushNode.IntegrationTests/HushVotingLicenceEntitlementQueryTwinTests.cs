@@ -153,6 +153,48 @@ public sealed class HushVotingLicenceEntitlementQueryTwinTests : IAsyncLifetime
         (await context.Set<LicenceCacheOutboxEntity>().CountAsync()).Should().Be(0);
     }
 
+    [Fact]
+    [Trait("Category", "FEAT-016")]
+    [Trait("AcceptanceId", "AT-LIC-011")] // FEAT-016 TwinTest pair (EPIC-002): Lock/identity replacement cannot leak entitlement
+    public async Task Another_actor_never_observes_the_first_actors_entitlement()
+    {
+        // Actor A is an indexed identity holding an active Direct Free assignment.
+        var (actorA, trustedA) = await InsertIndexedSubjectAsync();
+        var baselineTx = Guid.Parse("7f3d2c11-4b4e-4a81-b8e7-6b2f1a0c9d3e");
+        var blockTime = DateTime.Parse("2026-01-01T00:00:00Z").ToUniversalTime();
+        await LicenceBlockIndexWriter.IndexAsync(
+            () => _fixture.CreateContext(_databaseName),
+            Configuration,
+            trustedA,
+            BuildValidated(baselineTx, new HushVotingLicenceAssignmentPayload(
+                HushVotingLicenceTransitionIntent.BaselineFree,
+                "hushvoting.direct.free",
+                Catalogue.Version.Value)),
+            1,
+            blockTime,
+            null,
+            CancellationToken.None);
+
+        // Actor B is a separate indexed identity with no licence (the
+        // replacement/later identity on the same device).
+        var (actorB, _) = await InsertIndexedSubjectAsync();
+        var service = NewService();
+
+        var resultForB = await service.GetMyEntitlementAsync(actorB, CancellationToken.None);
+
+        // B sees its own no-active state with the Direct Free template only —
+        // never A's active assignment, plan, or licence reference.
+        resultForB.State.Should().Be(HushVotingLicenceEntitlementQueryState.NoActive);
+        resultForB.DirectFreeTemplate.Should().NotBeNull();
+        resultForB.Active.Should().BeNull();
+
+        var resultForA = await service.GetMyEntitlementAsync(actorA, CancellationToken.None);
+        resultForA.State.Should().Be(HushVotingLicenceEntitlementQueryState.Active);
+        resultForA.Active.Should().NotBeNull();
+        resultForA.Active!.PlanId.Should().Be("hushvoting.direct.free");
+        resultForA.Active!.LicenceReference.Should().Be(baselineTx.ToString());
+    }
+
     private static HushShared.Blockchain.TransactionModel.States.ValidatedTransaction<HushVotingLicenceAssignmentPayload>
         BuildValidated(Guid txId, HushVotingLicenceAssignmentPayload payload)
     {
