@@ -42,8 +42,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-047 Push Tokens Cache", "  As the push delivery service\r\n  I want device tokens cached\r\n  So that push not" +
-                    "ifications are delivered faster", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-047 Push Tokens Cache", "  As the push delivery service\n  I want device tokens cached\n  So that push notif" +
+                    "ications are delivered faster", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

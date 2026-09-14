@@ -42,8 +42,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-049 User Feeds List Cache", "  As the sync endpoint\r\n  I want user feed lists cached\r\n  So that idle sync cycl" +
-                    "es don\'t hit the database", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-049 User Feeds List Cache", "  As the sync endpoint\n  I want user feed lists cached\n  So that idle sync cycles" +
+                    " don\'t hit the database", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

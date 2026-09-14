@@ -46,7 +46,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.x
 
     - name: Setup Rust
       working-directory: .
@@ -57,7 +57,7 @@ jobs:
     - name: Setup Node
       uses: actions/setup-node@v5
       with:
-        node-version: 22
+        node-version: 24
         cache: npm
         cache-dependency-path: hush-web-client/package-lock.json
 
@@ -85,3 +85,45 @@ jobs:
         HUSH_WEB_CLIENT_ROOT: ${{ github.workspace }}/hush-web-client
         HUSH_SP07_RUST_WORKER_PATH: ${{ github.workspace }}/Tools/HushSp07RustWorker/target/release/hush-sp07-rust-worker
       run: bash ../.github/scripts/run-dotnet-test-projects.sh
+
+  hushvoting-server-twins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: hush-server-node
+    env:
+      HUSHVOTING_E2E_CLIENT_ROOT: ${{ github.workspace }}/hush-voting-web-client
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        path: hush-server-node
+    - name: Checkout HushVoting client
+      uses: actions/checkout@v5
+      with:
+        repository: Hushnetwork-social/hush-voting-web-client
+        # Validated companion revision for this migration; keep CI reproducible
+        # while the two independently versioned repositories are published.
+        ref: 3667e6a7c77057d7d8f72fa5aa30a14044330c25
+        path: hush-voting-web-client
+    - uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 10.0.x
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: hush-voting-web-client/package-lock.json
+    - name: Install HushVoting dependencies
+      working-directory: hush-voting-web-client
+      run: npm ci
+    - name: Build Rust worker
+      working-directory: hush-server-node/Tools/HushSp07RustWorker
+      run: cargo build --release --locked
+    - name: Restore integration projects
+      run: dotnet restore Node/HushNode.IntegrationTests/HushNode.IntegrationTests.csproj
+    - name: Run supervised HushVoting Server Twin groups
+      run: bash .github/scripts/run-hushvoting-server-twins.sh
+    - name: Shut down build servers
+      if: always()
+      run: dotnet build-server shutdown

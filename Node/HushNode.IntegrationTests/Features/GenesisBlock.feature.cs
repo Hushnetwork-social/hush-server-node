@@ -42,8 +42,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Genesis Block Creation", "  As the network operator\r\n  I want the genesis block to be created correctly\r\n  " +
-                    "So that the blockchain has a valid starting point", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Genesis Block Creation", "  As the network operator\n  I want the genesis block to be created correctly\n  So" +
+                    " that the blockchain has a valid starting point", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

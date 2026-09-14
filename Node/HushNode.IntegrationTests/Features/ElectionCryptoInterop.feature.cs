@@ -50,9 +50,9 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Election crypto cross-repo interop", "  As a FEAT-107 maintainer\r\n  I want a narrow non-E2E client/server interop slice" +
-                    "\r\n  So that deterministic election crypto fixtures can move across the web and s" +
-                    "erver boundary safely", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Election crypto cross-repo interop", "  As a FEAT-107 maintainer\n  I want a narrow non-E2E client/server interop slice\n" +
+                    "  So that deterministic election crypto fixtures can move across the web and ser" +
+                    "ver boundary safely", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

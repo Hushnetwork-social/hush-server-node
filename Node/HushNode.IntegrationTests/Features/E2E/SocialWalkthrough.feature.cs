@@ -44,9 +44,9 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Social Walkthrough", "    As five users on HushNetwork\r\n    I want to create multiple chats, public and" +
-                    " private groups, exchange messages, and manage feeds\r\n    So that multi-user soc" +
-                    "ial interactions work end-to-end", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Social Walkthrough", "    As five users on HushNetwork\n    I want to create multiple chats, public and " +
+                    "private groups, exchange messages, and manage feeds\n    So that multi-user socia" +
+                    "l interactions work end-to-end", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

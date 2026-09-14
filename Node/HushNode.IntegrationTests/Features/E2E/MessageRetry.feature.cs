@@ -46,8 +46,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Message Retry Functionality", "    As a user sending messages\r\n    I want to see visual feedback on message deli" +
-                    "very status\r\n    So that I know if my messages were delivered successfully", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Message Retry Functionality", "    As a user sending messages\n    I want to see visual feedback on message deliv" +
+                    "ery status\n    So that I know if my messages were delivered successfully", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

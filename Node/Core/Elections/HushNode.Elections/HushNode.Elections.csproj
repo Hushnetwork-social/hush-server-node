@@ -8,6 +8,7 @@
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.HushVoting.Licensing.Model\HushShared.HushVoting.Licensing.Model.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Elections.PublicationProof\HushShared.Elections.PublicationProof.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Elections.Verification.Model\HushShared.Elections.Verification.Model.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Reactions.Model\HushShared.Reactions.Model.csproj" />
@@ -20,11 +21,11 @@
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.KeyManagementService" Version="4.0.10" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
     <PackageReference Include="System.Reactive" Version="6.0.1" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.2" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
   </ItemGroup>
 
 </Project>

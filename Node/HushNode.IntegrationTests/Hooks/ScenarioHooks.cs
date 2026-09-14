@@ -116,12 +116,12 @@ internal sealed class ScenarioHooks
     /// <summary>
     /// Starts PostgreSQL and Redis containers once before any tests run.
     /// </summary>
-    [BeforeTestRun]
-    public static async Task BeforeTestRun()
-    {
-        _fixture = new HushTestFixture();
-        await _fixture.InitializeAsync();
-    }
+    // Initialise only when a legacy scenario is selected. HushVoting has its
+    // own lifecycle and must not start these containers or browser fixtures.
+    private bool IsHushVoting => _featureContext.FeatureInfo.Tags
+        .Concat(_scenarioContext.ScenarioInfo.Tags)
+        .Any(tag => tag.Equals("HV-E2E", StringComparison.OrdinalIgnoreCase)
+            || tag.Equals("HV-SERVER-TWIN", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Stops all containers and disposes Playwright after all tests complete.
@@ -157,12 +157,14 @@ internal sealed class ScenarioHooks
     [BeforeScenario]
     public async Task BeforeScenario()
     {
+        if (IsHushVoting) return;
         // Ensure only one scenario runs at a time
         await _scenarioLock.WaitAsync();
 
         if (_fixture == null)
         {
-            throw new InvalidOperationException("Test fixture not initialized. BeforeTestRun may not have executed.");
+            _fixture = new HushTestFixture();
+            await _fixture.InitializeAsync();
         }
 
         // Reset data stores for clean slate
@@ -230,6 +232,7 @@ internal sealed class ScenarioHooks
     [Scope(Tag = "E2E")]
     public async Task BeforeE2EScenario()
     {
+        if (IsHushVoting) return;
         // Record scenario start time
         _scenarioContext[ScenarioStartTimeKey] = DateTime.Now;
 
@@ -325,6 +328,7 @@ internal sealed class ScenarioHooks
     [AfterScenario]
     public async Task AfterScenario()
     {
+        if (IsHushVoting) return;
         try
         {
             // For E2E tests, close browser contexts first (ensures videos are saved)
@@ -386,6 +390,7 @@ internal sealed class ScenarioHooks
     [Scope(Tag = "E2E")]
     public void BeforeStep()
     {
+        if (IsHushVoting) return;
         _scenarioContext["CurrentStepStartTime"] = DateTime.Now;
     }
 
@@ -398,6 +403,7 @@ internal sealed class ScenarioHooks
     [Scope(Tag = "E2E")]
     public async Task AfterStep()
     {
+        if (IsHushVoting) return;
         if (!_scenarioContext.TryGetValue(ExecutedStepsKey, out var stepsObj)
             || stepsObj is not List<StepExecutionInfo> steps)
         {

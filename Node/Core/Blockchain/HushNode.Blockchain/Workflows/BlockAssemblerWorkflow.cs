@@ -19,18 +19,20 @@ public class BlockAssemblerWorkflow(
     IBlockchainStorageService blockchainStorageService,
     IBlockchainCache blockchainCache,
     IEventAggregator eventAggregator,
-    ILogger<BlockAssemblerWorkflow> logger) : IBlockAssemblerWorkflow
+    ILogger<BlockAssemblerWorkflow> logger,
+    TimeProvider? timeProvider = null) : IBlockAssemblerWorkflow
 {
     private readonly ICredentialsProvider _credentialsProvider = credentialsProvider;
     private readonly IBlockchainStorageService _blockchainStorageService = blockchainStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly ILogger<BlockAssemblerWorkflow> _logger = logger;
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     public async Task AssembleGenesisBlockAsync()
     {
         var genesisUnsignedBlock = UnsignedBlockHandler.CreateGenesis(
-            Timestamp.Current,
+            new Timestamp(this._timeProvider.GetUtcNow().UtcDateTime),
             this._blockchainCache.NextBlockId);
 
         var blockProducerCredentials = this._credentialsProvider.GetCredentials();
@@ -64,7 +66,7 @@ public class BlockAssemblerWorkflow(
         var unsignedBlock = UnsignedBlockHandler.CreateNew(
             this._blockchainCache.CurrentBlockId,
             this._blockchainCache.LastBlockIndex,
-            Timestamp.Current, 
+            new Timestamp(this._timeProvider.GetUtcNow().UtcDateTime),
             this._blockchainCache.PreviousBlockId,
             this._blockchainCache.NextBlockId);
 

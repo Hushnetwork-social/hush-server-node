@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "hushvoting-licence-transaction-vectors/v1",
+  "artifactVersion": "1.0.0",
+  "kind": "HushVotingLicenceAssignmentPayload",
+  "payloadKindGuid": "71370664-5eb4-4ce9-b96a-d7e7ffe53db5",
+  "publisher": "FEAT-015 (hush-server-node) synthetic cross-runtime fixture corpus",
+  "description": "Byte-exact public synthetic canonical vectors for the sole HushVoting licence assignment transaction. Canonical unsigned JSON follows the established Hush producer: {\"TransactionId\",\"PayloadKind\",\"TransactionTimeStamp\",\"Payload\",\"PayloadSize\"} with JS JSON.stringify escaping, 3-digit-millisecond UTC timestamps, lowercase canonical D UUIDs, and PayloadSize equal to the UTF-8 byte length of the payload JSON. Fixture files are immutable; consumers (TS/Rust/.NET) must reproduce these bytes and digests exactly.",
+  "fixedInputs": {
+    "catalogueVersion": "hushvoting-licence-catalogue/v1.0.0",
+    "planIds": {
+      "directFree": "hushvoting.direct.free",
+      "veritas2000": "hushvoting.veritas.2000"
+    },
+    "timestamps": {
+      "canonicalTransactionTimeStampUtc": "2026-09-06T00:00:00.000Z"
+    },
+    "transactionIds": {
+      "baselineTransactionId": "5f2d9e11-3c44-4a80-b8e7-6b2f1a0c9d3e",
+      "upgradeTransactionId": "8c6a1b77-4d2e-4f91-a4c0-9e7b2d8f1a55"
+    }
+  },
+  "vectors": [
+    {
+      "id": "LIC-FIX-001",
+      "case": "baseline_direct_free",
+      "intent": "baseline_free",
+      "transactionId": "5f2d9e11-3c44-4a80-b8e7-6b2f1a0c9d3e",
+      "payload": {
+        "TransitionIntent": "baseline_free",
+        "RequestedPlanId": "hushvoting.direct.free",
+        "ObservedCatalogueVersion": "hushvoting-licence-catalogue/v1.0.0"
+      },
+      "expected": {
+        "payloadSizeBytes": 144,
+        "canonicalUnsignedJson": "{\"TransactionId\":\"5f2d9e11-3c44-4a80-b8e7-6b2f1a0c9d3e\",\"PayloadKind\":\"71370664-5eb4-4ce9-b96a-d7e7ffe53db5\",\"TransactionTimeStamp\":\"2026-09-06T00:00:00.000Z\",\"Payload\":{\"TransitionIntent\":\"baseline_free\",\"RequestedPlanId\":\"hushvoting.direct.free\",\"ObservedCatalogueVersion\":\"hushvoting-licence-catalogue/v1.0.0\"},\"PayloadSize\":144}",
+        "utf8Bytes": 332,
+        "sha256Hex": "a7e344b590e2eebc8b29d3b09fba0178e66e61a810756ae50a7942f4a76cd993",
+        "expectedResult": "valid canonical baseline vector; digest must match exactly"
+      }
+    },
+    {
+      "id": "LIC-FIX-002",
+      "case": "confirmed_upgrade_veritas2000",
+      "intent": "confirmed_upgrade",
+      "transactionId": "8c6a1b77-4d2e-4f91-a4c0-9e7b2d8f1a55",
+      "payload": {
+        "TransitionIntent": "confirmed_upgrade",
+        "RequestedPlanId": "hushvoting.veritas.2000",
+        "ObservedCatalogueVersion": "hushvoting-licence-catalogue/v1.0.0",
+        "ExpectedCurrentLicenceTransactionId": "5f2d9e11-3c44-4a80-b8e7-6b2f1a0c9d3e",
+        "ExpectedCurrentPlanId": "hushvoting.direct.free"
+      },
+      "expected": {
+        "payloadSizeBytes": 275,
+        "canonicalUnsignedJson": "{\"TransactionId\":\"8c6a1b77-4d2e-4f91-a4c0-9e7b2d8f1a55\",\"PayloadKind\":\"71370664-5eb4-4ce9-b96a-d7e7ffe53db5\",\"TransactionTimeStamp\":\"2026-09-06T00:00:00.000Z\",\"Payload\":{\"TransitionIntent\":\"confirmed_upgrade\",\"RequestedPlanId\":\"hushvoting.veritas.2000\",\"ObservedCatalogueVersion\":\"hushvoting-licence-catalogue/v1.0.0\",\"ExpectedCurrentLicenceTransactionId\":\"5f2d9e11-3c44-4a80-b8e7-6b2f1a0c9d3e\",\"ExpectedCurrentPlanId\":\"hushvoting.direct.free\"},\"PayloadSize\":275}",
+        "utf8Bytes": 463,
+        "sha256Hex": "27a380b4242bb06d3c6068953fff31f0a6179c0b80e73631e3b47b9ddcbe2cd0",
+        "expectedResult": "valid canonical upgrade vector; digest must match exactly"
+      }
+    },
+    {
+      "id": "LIC-FIX-003",
+      "case": "one_byte_tamper_baseline",
+      "intent": "baseline_free",
+      "transactionId": "5f2d9e11-3c44-4a80-b8e7-6b2f1a0c9d3e",
+      "payload": {
+        "TransitionIntent": "baseline_free",
+        "RequestedPlanId": "hushvoting.direct.fred",
+        "ObservedCatalogueVersion": "hushvoting-licence-catalogue/v1.0.0"
+      },
+      "expected": {
+        "payloadSizeBytes": 144,
+        "canonicalUnsignedJson": "{\"TransactionId\":\"5f2d9e11-3c44-4a80-b8e7-6b2f1a0c9d3e\",\"PayloadKind\":\"71370664-5eb4-4ce9-b96a-d7e7ffe53db5\",\"TransactionTimeStamp\":\"2026-09-06T00:00:00.000Z\",\"Payload\":{\"TransitionIntent\":\"baseline_free\",\"RequestedPlanId\":\"hushvoting.direct.fred\",\"ObservedCatalogueVersion\":\"hushvoting-licence-catalogue/v1.0.0\"},\"PayloadSize\":144}",
+        "utf8Bytes": 332,
+        "sha256Hex": "901d5b8b377d2c3def446d2bff22ccc224e91242df3875d384bf313a9ab548aa",
+        "expectedResult": "one-byte tamper of LIC-FIX-001 (single byte differs at canonical index 245); digest differs; signature over the true baseline must NOT verify against this digest"
+      }
+    }
+  ]
+}

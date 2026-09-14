@@ -1,6 +1,7 @@
 using HushNode.Caching;
 using HushNode.Credentials;
 using HushNode.Identity.Storage;
+using HushNode.Elections.HushVotingLicence;
 using HushNode.Elections.Storage;
 using HushNode.Indexing.Interfaces;
 using HushShared.Blockchain.TransactionModel;
@@ -41,6 +42,7 @@ public static class ElectionsHostBuild
             services.AddSingleton<IBootstrapper, ElectionBallotPublicationBootstrapper>();
             services.RegisterElectionsStorageServices(hostContext);
             services.RegisterElectionsCoreServices();
+            services.AddHushVotingLicenceCatalogue(hostContext.Configuration);
         });
 
         return builder;

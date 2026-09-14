@@ -361,7 +361,7 @@ public sealed partial class VerifierCorpusGenerator
                 ["status"] = options.WindowsReviewerReplayValidated
                     ? "pass"
                     : "command_documented_not_run_in_current_environment",
-                ["runtime"] = ".NET 9",
+                ["runtime"] = ".NET 10",
                 ["commandShape"] = "PowerShell dotnet run command documented in README.md",
                 ["validated"] = options.WindowsReviewerReplayValidated,
                 ["claimImpact"] = options.WindowsReviewerReplayValidated
@@ -373,7 +373,7 @@ public sealed partial class VerifierCorpusGenerator
                 ["status"] = options.LinuxReviewerReplayValidated
                     ? "pass"
                     : "command_documented_not_run_in_current_environment",
-                ["runtime"] = ".NET 9",
+                ["runtime"] = ".NET 10",
                 ["commandShape"] = "Bash dotnet run command documented in README.md",
                 ["validated"] = options.LinuxReviewerReplayValidated,
                 ["claimImpact"] = options.LinuxReviewerReplayValidated
@@ -549,7 +549,7 @@ public sealed partial class VerifierCorpusGenerator
                 ["repository"] = options.VerifierRepository,
                 ["sourceRef"] = options.VerifierSourceRef,
                 ["projectPath"] = options.VerifierProjectPath,
-                ["runtime"] = ".NET 9",
+                ["runtime"] = ".NET 10",
                 ["profileId"] = VerificationProfileIds.PublicAnonymousV1,
                 ["binaryRelease"] = options.VerifierHash,
             },
@@ -1053,7 +1053,7 @@ public sealed partial class VerifierCorpusGenerator
 
         Requirements:
 
-        - .NET 9 SDK
+        - .NET 10 SDK
         - A local checkout of `{{options.VerifierRepository}}`
         - This corpus checkout
 

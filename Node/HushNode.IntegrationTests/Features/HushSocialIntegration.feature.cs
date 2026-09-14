@@ -46,9 +46,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "HushSocial server integration rules", "  As the HushSocial backend\r\n  I want audience, privacy, interaction, and notific" +
-                    "ation contracts enforced\r\n  So that EPIC-008 behavior is deterministic and secur" +
-                    "e", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "HushSocial server integration rules", "  As the HushSocial backend\n  I want audience, privacy, interaction, and notifica" +
+                    "tion contracts enforced\n  So that EPIC-008 behavior is deterministic and secure", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

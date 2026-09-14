@@ -6,29 +6,58 @@ using HushShared.Identity.Model;
 namespace HushNode.Identity;
 
 public class FullIdentityContentHandler(
-    ICredentialsProvider credentialProvider) : ITransactionContentHandler
+    ICredentialsProvider credentialProvider,
+    IFullIdentityValidator validator) : ITransactionContentHandler, ITransactionValidationFailureReporter
 {
     private readonly ICredentialsProvider _credentialProvider = credentialProvider;
+    private readonly IFullIdentityValidator _validator = validator;
+    private TransactionValidationFailure? _pendingFailure;
 
-    public bool CanValidate(Guid transactionKind) => 
+    public bool CanValidate(Guid transactionKind) =>
         FullIdentityPayloadHandler.FullIdentityPayloadKind == transactionKind;
 
     public AbstractTransaction? ValidateAndSign(AbstractTransaction transaction)
     {
-        var fullIdentityPayload = transaction as SignedTransaction<FullIdentityPayload>;
+        _pendingFailure = null;
 
-        if (fullIdentityPayload == null)
+        if (transaction is not SignedTransaction<FullIdentityPayload> fullIdentityTransaction)
         {
-            // throw new InvalidOperationException("Something went wrong and should never reach here. Some of the previous validation failed.");
-            return null;    // <-- TODO [AboimPinto] Don't like to return null but for now works.
+            _pendingFailure = new TransactionValidationFailure(
+                FullIdentityValidationCodes.UnsupportedKind,
+                "Transaction kind does not match the FullIdentity payload.");
+            return null;
         }
 
-        var blockProducerCredentials = this._credentialProvider.GetCredentials();
+        var validation = _validator.Validate(fullIdentityTransaction);
+        if (!validation.IsValid)
+        {
+            // Expected validation failures are typed data (stable code), never
+            // exceptions and never null-as-success without a reported code.
+            _pendingFailure = new TransactionValidationFailure(
+                validation.ValidationCode ?? FullIdentityValidationCodes.UnsupportedKind,
+                validation.Message ?? "FullIdentity validation failed.");
+            return null;
+        }
 
-        var signedByValidationTransaction = fullIdentityPayload.SignByValidator(
-            blockProducerCredentials.PublicSigningAddress, 
+        var blockProducerCredentials = _credentialProvider.GetCredentials();
+
+        var signedByValidationTransaction = fullIdentityTransaction.SignByValidator(
+            blockProducerCredentials.PublicSigningAddress,
             blockProducerCredentials.PrivateSigningKey);
 
         return signedByValidationTransaction;
+    }
+
+    public bool TryTakeValidationFailure(Guid transactionId, out TransactionValidationFailure failure)
+    {
+        if (_pendingFailure is not null)
+        {
+            failure = _pendingFailure;
+            _pendingFailure = null;
+            return true;
+        }
+
+        failure = null!;
+        return false;
     }
 }

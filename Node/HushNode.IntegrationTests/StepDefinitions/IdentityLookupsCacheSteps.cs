@@ -17,8 +17,7 @@ public sealed class IdentityLookupsCacheSteps
 {
     private readonly ScenarioContext _scenarioContext;
 
-    // Test public encrypt address (130 chars hex format)
-    private const string TestPublicEncryptAddress = "04encrypt1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678";
+    private static string TestPublicEncryptAddress => TestIdentities.Alice.PublicEncryptAddress;
 
     public IdentityLookupsCacheSteps(ScenarioContext scenarioContext)
     {
@@ -202,11 +201,15 @@ public sealed class IdentityLookupsCacheSteps
 
     private string GenerateFullAddress(string shortAddress)
     {
-        // Generate a valid 130-character public signing address
-        // Format: 04 + 128 hex chars
-        var baseHex = shortAddress.Replace("-", "").PadRight(128, '0');
-        if (baseHex.Length > 128) baseHex = baseHex.Substring(0, 128);
-        return "04" + baseHex;
+        var key = $"FullAddress_{shortAddress}";
+        if (_scenarioContext.TryGetValue(key, out var existing) && existing is string address)
+        {
+            return address;
+        }
+
+        var identity = TestIdentities.GenerateFromSeed(shortAddress, "Cache lookup fixture");
+        _scenarioContext[key] = identity.PublicSigningAddress;
+        return identity.PublicSigningAddress;
     }
 
     private string GetFullAddress(string shortAddress)

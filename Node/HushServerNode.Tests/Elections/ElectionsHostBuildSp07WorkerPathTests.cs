@@ -15,7 +15,7 @@ public sealed class ElectionsHostBuildSp07WorkerPathTests
         var temp = CreateTempDirectory();
         try
         {
-            var startDirectory = Path.Combine(temp, "Node", "HushServerNode", "bin", "Debug", "net9.0");
+            var startDirectory = Path.Combine(temp, "Node", "HushServerNode", "bin", "Debug", "net10.0");
             Directory.CreateDirectory(startDirectory);
             var releaseWorkerPath = CreateWorker(temp, "release");
             CreateWorker(temp, "debug");
@@ -36,7 +36,7 @@ public sealed class ElectionsHostBuildSp07WorkerPathTests
         var temp = CreateTempDirectory();
         try
         {
-            var startDirectory = Path.Combine(temp, "Node", "HushServerNode", "bin", "Debug", "net9.0");
+            var startDirectory = Path.Combine(temp, "Node", "HushServerNode", "bin", "Debug", "net10.0");
             Directory.CreateDirectory(startDirectory);
             var debugWorkerPath = CreateWorker(temp, "debug");
 

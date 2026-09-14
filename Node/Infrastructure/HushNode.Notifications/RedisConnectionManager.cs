@@ -104,9 +104,10 @@ public class RedisConnectionManager : IDisposable
 
     private ConnectionMultiplexer CreateConnection()
     {
-        _logger.LogInformation("Connecting to Redis at {ConnectionString}", _settings.ConnectionString);
-
         var options = ConfigurationOptions.Parse(_settings.ConnectionString);
+        var endpoints = string.Join(",", options.EndPoints.Select(endpoint => endpoint.ToString()));
+        _logger.LogInformation("Connecting to Redis at {Endpoints}", endpoints);
+
         options.ConnectRetry = _settings.ConnectRetry;
         options.ConnectTimeout = _settings.ConnectTimeout;
         options.SyncTimeout = _settings.SyncTimeout;

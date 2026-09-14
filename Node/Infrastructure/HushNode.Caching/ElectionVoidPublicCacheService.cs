@@ -69,7 +69,7 @@ public sealed class ElectionVoidPublicCacheService : IElectionVoidPublicCacheSer
             }
 
             await _database.KeyExpireAsync(key, ElectionVoidPublicCacheConstants.CacheTtl);
-            return JsonSerializer.Deserialize<ElectionVoidPublicCacheEnvelope>(value!, JsonOptions);
+            return JsonSerializer.Deserialize<ElectionVoidPublicCacheEnvelope>(value.ToString(), JsonOptions);
         }
         catch (Exception ex)
         {

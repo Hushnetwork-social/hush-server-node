@@ -168,10 +168,14 @@ public class OpenGraphParser : IOpenGraphParser
             totalRead += bytesRead;
         }
 
-        // Check if there's more content (exceeded limit)
-        if (!reader.EndOfStream)
+        // Read one additional character to determine whether the response exceeded the limit.
+        if (totalRead == MaxResponseSizeBytes)
         {
-            return null;
+            var overflowBuffer = new char[1];
+            if (await reader.ReadAsync(overflowBuffer.AsMemory(), cancellationToken) > 0)
+            {
+                return null;
+            }
         }
 
         return new string(buffer, 0, totalRead);

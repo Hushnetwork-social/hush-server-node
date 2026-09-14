@@ -44,8 +44,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Cross-Device Read Sync", "  As a user with multiple devices\r\n  I want read status to sync with upToBlockInd" +
-                    "ex watermark\r\n  So that receiving devices can calculate correct unread counts", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Cross-Device Read Sync", "  As a user with multiple devices\n  I want read status to sync with upToBlockInde" +
+                    "x watermark\n  So that receiving devices can calculate correct unread counts", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

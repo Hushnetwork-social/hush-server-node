@@ -31,15 +31,14 @@ internal sealed class WebClientFixture : IAsyncDisposable
     public WebClientFixture()
     {
         // Find docker-compose.e2e.yml relative to the test project
-        // AppContext.BaseDirectory is bin/Debug/ (no net9.0 subfolder in this project)
-        // Go up to HushNode.IntegrationTests, then look for docker-compose.e2e.yml
+        // AppContext.BaseDirectory is usually bin/Debug/ because Node projects suppress the
+        // target-framework output segment. Keep the standard net10.0 layout as a fallback.
         var baseDir = AppContext.BaseDirectory;
 
-        // Try different relative paths depending on whether we're in bin/Debug or bin/Debug/net9.0
         var possiblePaths = new[]
         {
-            Path.Combine(baseDir, "..", "..", "docker-compose.e2e.yml"),       // bin/Debug -> project root
-            Path.Combine(baseDir, "..", "..", "..", "docker-compose.e2e.yml"), // bin/Debug/net9.0 -> project root
+            Path.Combine(baseDir, "..", "..", "docker-compose.e2e.yml"),        // bin/Debug -> project root
+            Path.Combine(baseDir, "..", "..", "..", "docker-compose.e2e.yml"), // bin/Debug/net10.0 -> project root
         };
 
         _composeFilePath = possiblePaths

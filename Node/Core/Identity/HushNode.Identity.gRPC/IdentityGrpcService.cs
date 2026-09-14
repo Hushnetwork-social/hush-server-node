@@ -10,8 +10,26 @@ public class IdentityGrpcService(IIdentityService identityService, IIdentityStor
     private readonly IIdentityService _identityService = identityService;
     private readonly IIdentityStorageService _identityStorageService = identityStorageService;
 
+    /// <summary>
+    /// Bounded lookup request: Approved secp256k1 address encodings only
+    /// (66-char compressed or 130-char uncompressed hex). Anything else is a
+    /// transport rejection (InvalidArgument), never authoritative absence.
+    /// </summary>
+    private static bool IsBoundedAddress(string? address) =>
+        !string.IsNullOrEmpty(address) &&
+        address.Length is 66 or 130 &&
+        address.All(Uri.IsHexDigit);
+
     public override async Task<GetIdentityReply> GetIdentity(GetIdentityRequest request, ServerCallContext context)
     {
+        // FEAT-011: bounded request — invalid input is rejected at the transport
+        // level (InvalidArgument) so the client never mistakes a defect for
+        // authoritative absence (Successfull=false is the not-found contract).
+        if (!IsBoundedAddress(request.PublicSigningAddress))
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "PublicSigningAddress is not a bounded approved address."));
+        }
+
         // Use IIdentityService which includes cache-aside pattern (FEAT-048)
         var profileBase = await this._identityService.RetrieveIdentityAsync(request.PublicSigningAddress);
         

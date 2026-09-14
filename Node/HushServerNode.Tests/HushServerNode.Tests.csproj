@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -25,9 +25,9 @@
     <PackageReference Include="Moq.AutoMock" Version="3.5.0" />
 
     <!-- Explicit EF Core version to resolve version conflicts with HushServerNode -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>
@@ -40,6 +40,7 @@
     <ProjectReference Include="..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
     <ProjectReference Include="..\..\Shared\HushShared.Elections.Verification.Model\HushShared.Elections.Verification.Model.csproj" />
     <ProjectReference Include="..\..\Shared\HushShared.Elections.PublicationProof\HushShared.Elections.PublicationProof.csproj" />
+    <ProjectReference Include="..\..\Shared\HushShared.HushVoting.Licensing.Model\HushShared.HushVoting.Licensing.Model.csproj" />
     <ProjectReference Include="..\scripts\ReadinessRegisterPromoter\ReadinessRegisterPromoter.csproj" />
     <ProjectReference Include="..\scripts\DeploymentProofPackagePromoter\DeploymentProofPackagePromoter.csproj" />
     <ProjectReference Include="..\scripts\OperationalEvidencePromoter\OperationalEvidencePromoter.csproj" />

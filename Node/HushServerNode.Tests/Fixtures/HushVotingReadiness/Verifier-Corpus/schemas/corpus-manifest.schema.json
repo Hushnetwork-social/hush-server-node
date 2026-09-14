@@ -81,7 +81,7 @@
           }
         },
         "projectPath": { "type": "string", "const": "Tools/HushVotingVerifier/HushVotingVerifier.csproj" },
-        "runtime": { "type": "string", "const": ".NET 9" },
+        "runtime": { "type": "string", "const": ".NET 10" },
         "profileId": { "type": "string", "const": "public_anonymous_v1" },
         "binaryRelease": {
           "type": "object",

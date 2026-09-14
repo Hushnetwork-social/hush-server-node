@@ -44,8 +44,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Own messages should not be counted as unread", "    As a user\r\n    I want my own sent messages to not appear as unread\r\n    So th" +
-                    "at the unread badge only reflects messages from others", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Own messages should not be counted as unread", "    As a user\n    I want my own sent messages to not appear as unread\n    So that" +
+                    " the unread badge only reflects messages from others", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

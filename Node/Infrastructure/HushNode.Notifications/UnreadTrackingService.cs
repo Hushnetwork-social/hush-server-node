@@ -79,7 +79,7 @@ public class UnreadTrackingService : IUnreadTrackingService
             await foreach (var key in server.KeysAsync(pattern: pattern))
             {
                 var value = await _redis.Database.StringGetAsync(key);
-                if (value.HasValue && int.TryParse(value, out var count) && count > 0)
+                if (value.HasValue && int.TryParse(value.ToString(), out var count) && count > 0)
                 {
                     // Extract feedId from key: "HushFeeds:unread:{userId}:{feedId}"
                     var keyString = key.ToString();
@@ -111,7 +111,7 @@ public class UnreadTrackingService : IUnreadTrackingService
             var key = _redis.GetUnreadKey(userId, feedId);
             var value = await _redis.Database.StringGetAsync(key);
 
-            if (value.HasValue && int.TryParse(value, out var count))
+            if (value.HasValue && int.TryParse(value.ToString(), out var count))
             {
                 return count;
             }

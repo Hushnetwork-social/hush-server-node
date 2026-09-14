@@ -44,8 +44,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Group Title Change via Group Settings", "    As a group admin\r\n    I want to change the group title through the Group Sett" +
-                    "ings panel\r\n    So that all participants see the updated group name", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Group Title Change via Group Settings", "    As a group admin\n    I want to change the group title through the Group Setti" +
+                    "ngs panel\n    So that all participants see the updated group name", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

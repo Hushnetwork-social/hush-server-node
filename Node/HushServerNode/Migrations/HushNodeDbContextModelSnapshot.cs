@@ -16,7 +16,7 @@ namespace HushServerNode.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.2")
+                .HasAnnotation("ProductVersion", "10.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -90,6 +90,517 @@ namespace HushServerNode.Migrations
                     b.HasKey("BlockchainStateId");
 
                     b.ToTable("BlockchainState", "Blockchain");
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicenceActivationOperationEntity", b =>
+                {
+                    b.Property<Guid>("LicenceActivationOperationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CanonicalPayloadFingerprintSha256")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DurableResult")
+                        .HasColumnType("varchar(48)");
+
+                    b.Property<string>("EvaluatedCatalogueVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("ExpectedCurrentPlanId")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<long>("ExpectedEntitlementRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("LicenceSubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestCorrelationId")
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("RequestedTargetPlanId")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<Guid?>("ResultingAssignmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("ResultingEntitlementRevision")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("LicenceActivationOperationId");
+
+                    b.HasIndex("LicenceSubjectId")
+                        .HasDatabaseName("IX_LicenceActivationOperation_Subject");
+
+                    b.HasIndex("ResultingAssignmentId")
+                        .IsUnique();
+
+                    b.HasIndex("LicenceSubjectId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LicenceActivationOperation_Subject_IdempotencyKey");
+
+                    b.ToTable("LicenceActivationOperation", "HushVoting", t =>
+                        {
+                            t.HasCheckConstraint("CK_LicenceActivationOperation_CompletedPair", "((\"DurableResult\" IS NULL AND \"CompletedAtUtc\" IS NULL AND \"ResultingAssignmentId\" IS NULL AND \"ResultingEntitlementRevision\" IS NULL) OR (\"DurableResult\" IS NOT NULL AND \"CompletedAtUtc\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_LicenceActivationOperation_DurableResult", "\"DurableResult\" IS NULL OR \"DurableResult\" IN ('activated', 'transition_unchanged', 'transition_not_higher', 'plan_unknown', 'plan_unavailable', 'precondition_conflict', 'entitlement_not_initialized')");
+
+                            t.HasCheckConstraint("CK_LicenceActivationOperation_ExpectedRevisionNonNegative", "\"ExpectedEntitlementRevision\" >= 0");
+
+                            t.HasCheckConstraint("CK_LicenceActivationOperation_FingerprintFormat", "char_length(\"CanonicalPayloadFingerprintSha256\") = 64");
+
+                            t.HasCheckConstraint("CK_LicenceActivationOperation_ResultingOnlyWhenActivated", "\"ResultingAssignmentId\" IS NULL OR \"DurableResult\" = 'activated'");
+                        });
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicenceAssignmentEntity", b =>
+                {
+                    b.Property<Guid>("LicenceAssignmentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<string[]>("AllowedGovernanceOptionIds")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("AssignedCatalogueDigestSha256")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("AssignedCatalogueVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<Guid?>("CreatedByOperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreationCorrelationId")
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<DateTime>("EffectiveFromUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("EligibleVoterCap")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("LicenceSubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LifecycleChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LifecycleReason")
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("LifecycleStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<long?>("OriginatingBlockIndex")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("OriginatingBlockTimeStampUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("OriginatingTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PlanFamily")
+                        .IsRequired()
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("PlanId")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<Guid?>("SupersededByAssignmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TermKind")
+                        .IsRequired()
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<int>("TermYears")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("UnlimitedElectionPolicy")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("UpgradeRank")
+                        .HasColumnType("integer");
+
+                    b.HasKey("LicenceAssignmentId");
+
+                    b.HasIndex("CreatedByOperationId");
+
+                    b.HasIndex("LicenceSubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LicenceAssignment_SingleActivePerSubject")
+                        .HasFilter("\"LifecycleStatus\" = 'active'");
+
+                    b.HasIndex("OriginatingBlockIndex")
+                        .HasDatabaseName("IX_LicenceAssignment_OriginatingBlockIndex");
+
+                    b.HasIndex("OriginatingTransactionId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LicenceAssignment_OriginatingTransactionId");
+
+                    b.HasIndex("SupersededByAssignmentId");
+
+                    b.HasIndex("LicenceSubjectId", "LifecycleStatus")
+                        .HasDatabaseName("IX_LicenceAssignment_Subject_Lifecycle");
+
+                    b.HasIndex("LifecycleStatus", "ExpiresAtUtc")
+                        .HasDatabaseName("IX_LicenceAssignment_DueExpiry");
+
+                    b.ToTable("LicenceAssignment", "HushVoting", t =>
+                        {
+                            t.HasCheckConstraint("CK_LicenceAssignment_AnnualHasExpiry", "\"TermKind\" <> 'annual' OR \"ExpiresAtUtc\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_CapPositive", "\"EligibleVoterCap\" IS NULL OR \"EligibleVoterCap\" > 0");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_EffectiveFromNotBackdated", "\"EffectiveFromUtc\" >= '2020-01-01T00:00:00Z'");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_IndexOriginAllOrNone", "((\"OriginatingTransactionId\" IS NULL AND \"OriginatingBlockIndex\" IS NULL AND \"OriginatingBlockTimeStampUtc\" IS NULL) OR (\"OriginatingTransactionId\" IS NOT NULL AND \"OriginatingBlockIndex\" IS NOT NULL AND \"OriginatingBlockTimeStampUtc\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_IntervalOrder", "\"ExpiresAtUtc\" IS NULL OR \"EffectiveFromUtc\" < \"ExpiresAtUtc\"");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_LifecycleChangedPair", "((\"LifecycleStatus\" = 'active' AND \"LifecycleChangedAtUtc\" IS NULL AND \"LifecycleReason\" IS NULL) OR (\"LifecycleStatus\" IN ('superseded', 'expired') AND \"LifecycleChangedAtUtc\" IS NOT NULL AND \"LifecycleReason\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_LifecycleStatus", "\"LifecycleStatus\" IN ('active', 'superseded', 'expired')");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_OriginatingBlockNonNegative", "\"OriginatingBlockIndex\" IS NULL OR \"OriginatingBlockIndex\" >= 0");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_PerpetualNoExpiry", "\"TermKind\" <> 'perpetual' OR \"ExpiresAtUtc\" IS NULL");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_PlanFamily", "\"PlanFamily\" IN ('direct', 'veritas', 'enterprise')");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_Source", "\"Source\" IN ('default_free', 'migration_lazy_default', 'automatic_upgrade', 'automatic_expiry', 'baseline_free', 'confirmed_upgrade')");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_SupersessionPair", "((\"SupersededByAssignmentId\" IS NULL) OR (\"LifecycleStatus\" = 'superseded'))");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_TermKind", "\"TermKind\" IN ('perpetual', 'annual')");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_TermYears", "((\"TermKind\" = 'perpetual' AND \"TermYears\" = 0) OR (\"TermKind\" = 'annual' AND \"TermYears\" = 1))");
+
+                            t.HasCheckConstraint("CK_LicenceAssignment_UpgradeRankNonNegative", "\"UpgradeRank\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicenceCacheOutboxEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("AvailableAfterUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ChangeKind")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<long>("CommittedRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeliveredUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastAttemptUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastSafeErrorCode")
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime?>("LeaseExpiresUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LeaseOwnerToken")
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<Guid>("LicenceSubjectId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeliveredUtc")
+                        .HasDatabaseName("IX_LicenceCacheOutbox_DeliveredCleanup")
+                        .HasFilter("\"DeliveredUtc\" IS NOT NULL");
+
+                    b.HasIndex("LicenceSubjectId")
+                        .HasDatabaseName("IX_LicenceCacheOutbox_Subject");
+
+                    b.HasIndex("DeliveredUtc", "AvailableAfterUtc", "CreatedUtc", "Id")
+                        .HasDatabaseName("IX_LicenceCacheOutbox_PendingClaimOrder")
+                        .HasFilter("\"DeliveredUtc\" IS NULL");
+
+                    b.ToTable("LicenceCacheOutbox", "HushVoting", t =>
+                        {
+                            t.HasCheckConstraint("CK_LicenceCacheOutbox_AttemptNonNegative", "\"AttemptCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_LicenceCacheOutbox_AvailableAfterCreated", "\"AvailableAfterUtc\" >= \"CreatedUtc\"");
+
+                            t.HasCheckConstraint("CK_LicenceCacheOutbox_ChangeKind", "\"ChangeKind\" IN ('provisioned_default', 'provisioned_migration_default', 'activated_higher_plan', 'expired_to_default')");
+
+                            t.HasCheckConstraint("CK_LicenceCacheOutbox_ErrorCodeBounded", "\"LastSafeErrorCode\" IS NULL OR char_length(\"LastSafeErrorCode\") BETWEEN 1 AND 64");
+
+                            t.HasCheckConstraint("CK_LicenceCacheOutbox_LeaseConsistent", "(\"LeaseOwnerToken\" IS NULL AND \"LeaseExpiresUtc\" IS NULL) OR (\"LeaseOwnerToken\" IS NOT NULL AND \"LeaseExpiresUtc\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_LicenceCacheOutbox_RevisionNonNegative", "\"CommittedRevision\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicenceCatalogueReleaseEntity", b =>
+                {
+                    b.Property<Guid>("LicenceCatalogueReleaseId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CatalogueVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<DateTime>("InstalledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InstalledByServerHost")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("InstalledByServerRelease")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<bool>("IsCurrent")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ReleaseDigestSha256")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<long?>("RolloutWatermarkBlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SchemaVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("LicenceCatalogueReleaseId");
+
+                    b.HasIndex("IsCurrent")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LicenceCatalogueRelease_SingleCurrent")
+                        .HasFilter("\"IsCurrent\" = TRUE");
+
+                    b.HasIndex("CatalogueVersion", "ReleaseDigestSha256")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LicenceCatalogueRelease_Version_Digest");
+
+                    b.ToTable("LicenceCatalogueRelease", "HushVoting", t =>
+                        {
+                            t.HasCheckConstraint("CK_LicenceCatalogueRelease_DigestFormat", "char_length(\"ReleaseDigestSha256\") = 64");
+
+                            t.HasCheckConstraint("CK_LicenceCatalogueRelease_WatermarkNonNegative", "\"RolloutWatermarkBlockHeight\" IS NULL OR \"RolloutWatermarkBlockHeight\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicencePendingReservationEntity", b =>
+                {
+                    b.Property<Guid>("LicencePendingReservationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CanonicalPayloadFingerprintSha256")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ExpectedCurrentLicenceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExpectedCurrentPlanId")
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<Guid>("LicenceSubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LifecycleStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("ObservedCatalogueVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<Guid>("OriginatingTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestedPlanId")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<int>("RequestedUpgradeRank")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TransitionIntent")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.HasKey("LicencePendingReservationId");
+
+                    b.HasIndex("LicenceSubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LicencePendingReservation_Subject")
+                        .HasFilter("\"LifecycleStatus\" = 'pending'");
+
+                    b.HasIndex("OriginatingTransactionId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LicencePendingReservation_OriginatingTransactionId");
+
+                    b.ToTable("LicencePendingReservation", "HushVoting", t =>
+                        {
+                            t.HasCheckConstraint("CK_LicencePendingReservation_BaselineNoExpectedCurrent", "((\"TransitionIntent\" = 'baseline_free' AND \"ExpectedCurrentLicenceTransactionId\" IS NULL AND \"ExpectedCurrentPlanId\" IS NULL) OR (\"TransitionIntent\" = 'confirmed_upgrade' AND \"ExpectedCurrentLicenceTransactionId\" IS NOT NULL AND \"ExpectedCurrentPlanId\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_LicencePendingReservation_FingerprintFormat", "char_length(\"CanonicalPayloadFingerprintSha256\") = 64");
+
+                            t.HasCheckConstraint("CK_LicencePendingReservation_Intent", "\"TransitionIntent\" IN ('baseline_free', 'confirmed_upgrade')");
+
+                            t.HasCheckConstraint("CK_LicencePendingReservation_Lifecycle", "\"LifecycleStatus\" IN ('pending', 'superseded', 'resolved')");
+
+                            t.HasCheckConstraint("CK_LicencePendingReservation_RankNonNegative", "\"RequestedUpgradeRank\" >= 0");
+
+                            t.HasCheckConstraint("CK_LicencePendingReservation_ResolvedPair", "((\"LifecycleStatus\" = 'pending' AND \"ResolvedAtUtc\" IS NULL) OR (\"LifecycleStatus\" IN ('superseded', 'resolved') AND \"ResolvedAtUtc\" IS NOT NULL))");
+                        });
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicenceSubjectEntity", b =>
+                {
+                    b.Property<Guid>("LicenceSubjectId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CanonicalPublicSigningAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("EntitlementRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("IdentityCreationBlockIndex")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.HasKey("LicenceSubjectId");
+
+                    b.HasIndex("SubjectType", "CanonicalPublicSigningAddress")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LicenceSubject_Type_CanonicalAddress");
+
+                    b.ToTable("LicenceSubject", "HushVoting", t =>
+                        {
+                            t.HasCheckConstraint("CK_LicenceSubject_AddressNotEmpty", "char_length(\"CanonicalPublicSigningAddress\") > 0");
+
+                            t.HasCheckConstraint("CK_LicenceSubject_CreationBlockNonNegative", "\"IdentityCreationBlockIndex\" >= 0");
+
+                            t.HasCheckConstraint("CK_LicenceSubject_RevisionNonNegative", "\"EntitlementRevision\" >= 0");
+
+                            t.HasCheckConstraint("CK_LicenceSubject_SubjectType", "\"SubjectType\" IN ('Identity')");
+                        });
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicenceTransitionEventEntity", b =>
+                {
+                    b.Property<Guid>("LicenceTransitionEventId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssignmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CatalogueDecisionVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<long>("EventSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<Guid>("LicenceSubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("OperationReferenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PlanId")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("SourceOrReason")
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<long>("SubjectRevision")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("LicenceTransitionEventId");
+
+                    b.HasIndex("AssignmentId");
+
+                    b.HasIndex("LicenceSubjectId", "EventSequence")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LicenceTransitionEvent_Subject_Sequence");
+
+                    b.ToTable("LicenceTransitionEvent", "HushVoting", t =>
+                        {
+                            t.HasCheckConstraint("CK_LicenceTransitionEvent_EventType", "\"EventType\" IN ('created', 'superseded', 'expired')");
+
+                            t.HasCheckConstraint("CK_LicenceTransitionEvent_RevisionNonNegative", "\"SubjectRevision\" >= 0");
+
+                            t.HasCheckConstraint("CK_LicenceTransitionEvent_SequencePositive", "\"EventSequence\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("HushNode.Interfaces.Models.DeviceToken", b =>
@@ -5358,6 +5869,89 @@ namespace HushServerNode.Migrations
                     b.ToTable("ReactionTransaction", "Reactions");
                 });
 
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicenceActivationOperationEntity", b =>
+                {
+                    b.HasOne("HushNode.HushVoting.Licensing.Storage.LicenceSubjectEntity", "LicenceSubject")
+                        .WithMany("ActivationOperations")
+                        .HasForeignKey("LicenceSubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HushNode.HushVoting.Licensing.Storage.LicenceAssignmentEntity", "ResultingAssignment")
+                        .WithOne()
+                        .HasForeignKey("HushNode.HushVoting.Licensing.Storage.LicenceActivationOperationEntity", "ResultingAssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("LicenceSubject");
+
+                    b.Navigation("ResultingAssignment");
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicenceAssignmentEntity", b =>
+                {
+                    b.HasOne("HushNode.HushVoting.Licensing.Storage.LicenceActivationOperationEntity", "CreatedByOperation")
+                        .WithMany()
+                        .HasForeignKey("CreatedByOperationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("HushNode.HushVoting.Licensing.Storage.LicenceSubjectEntity", "LicenceSubject")
+                        .WithMany("Assignments")
+                        .HasForeignKey("LicenceSubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HushNode.HushVoting.Licensing.Storage.LicenceAssignmentEntity", "SupersededByAssignment")
+                        .WithMany()
+                        .HasForeignKey("SupersededByAssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByOperation");
+
+                    b.Navigation("LicenceSubject");
+
+                    b.Navigation("SupersededByAssignment");
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicenceCacheOutboxEntity", b =>
+                {
+                    b.HasOne("HushNode.HushVoting.Licensing.Storage.LicenceSubjectEntity", "Subject")
+                        .WithMany()
+                        .HasForeignKey("LicenceSubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Subject");
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicencePendingReservationEntity", b =>
+                {
+                    b.HasOne("HushNode.HushVoting.Licensing.Storage.LicenceSubjectEntity", "LicenceSubject")
+                        .WithMany("PendingReservations")
+                        .HasForeignKey("LicenceSubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("LicenceSubject");
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicenceTransitionEventEntity", b =>
+                {
+                    b.HasOne("HushNode.HushVoting.Licensing.Storage.LicenceAssignmentEntity", "Assignment")
+                        .WithMany()
+                        .HasForeignKey("AssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("HushNode.HushVoting.Licensing.Storage.LicenceSubjectEntity", "LicenceSubject")
+                        .WithMany("TransitionEvents")
+                        .HasForeignKey("LicenceSubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Assignment");
+
+                    b.Navigation("LicenceSubject");
+                });
+
             modelBuilder.Entity("HushShared.Feeds.Model.FeedParticipant", b =>
                 {
                     b.HasOne("HushShared.Feeds.Model.Feed", "Feed")
@@ -5411,6 +6005,17 @@ namespace HushServerNode.Migrations
                         .IsRequired();
 
                     b.Navigation("Post");
+                });
+
+            modelBuilder.Entity("HushNode.HushVoting.Licensing.Storage.LicenceSubjectEntity", b =>
+                {
+                    b.Navigation("ActivationOperations");
+
+                    b.Navigation("Assignments");
+
+                    b.Navigation("PendingReservations");
+
+                    b.Navigation("TransitionEvents");
                 });
 
             modelBuilder.Entity("HushShared.Feeds.Model.Feed", b =>

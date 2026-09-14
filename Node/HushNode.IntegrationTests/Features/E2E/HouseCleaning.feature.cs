@@ -48,9 +48,9 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "House-cleaning on Feed Close", "    As a user navigating between feeds\r\n    I want the previous feed\'s data to be" +
-                    " cleaned up automatically\r\n    So that the app remains performant and memory usa" +
-                    "ge stays controlled", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "House-cleaning on Feed Close", "    As a user navigating between feeds\n    I want the previous feed\'s data to be " +
+                    "cleaned up automatically\n    So that the app remains performant and memory usage" +
+                    " stays controlled", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

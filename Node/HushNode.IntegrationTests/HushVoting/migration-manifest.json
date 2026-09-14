@@ -1,0 +1,3607 @@
+{
+  "schema": "hushvoting-dotnet-e2e-migration-v1",
+  "sourceScenarioCount": 280,
+  "files": [
+    {
+      "source": "features/auth-lifecycle/web-matrix.feature",
+      "sourceSha256": "8c4ead17c9d117b77bb91dc7845fed4e1fef48389180c7ca39a3e90a7e64ded6",
+      "destination": "Features/auth-lifecycle/web-matrix.feature",
+      "group": "auth-lifecycle",
+      "scenarios": [
+        {
+          "title": "The real root mounts the real composition and shows exactly three first-run choices",
+          "tags": [
+            "@FEAT-010",
+            "@AC-010-001",
+            "@AC-010-002",
+            "@AC-010-003",
+            "@AC-010-007",
+            "@HV-AUTH-ROOT-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-AUTH-LIFECYCLE/HV-AUTH-LIFECYCLE.trx"
+        },
+        {
+          "title": "A child flow cannot grant protected access without fresh exact verification",
+          "tags": [
+            "@FEAT-010",
+            "@AC-010-012",
+            "@AC-010-013",
+            "@HV-AUTH-ROOT-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-AUTH-LIFECYCLE/HV-AUTH-LIFECYCLE.trx"
+        },
+        {
+          "title": "Returning unlock shows the locked preview and a combined credential error",
+          "tags": [
+            "@FEAT-010",
+            "@AC-010-029",
+            "@AC-010-036",
+            "@HV-AUTH-PASSWORD-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-AUTH-LIFECYCLE/HV-AUTH-LIFECYCLE.trx"
+        },
+        {
+          "title": "A persistent user always starts locked after a restart",
+          "tags": [
+            "@FEAT-010",
+            "@AC-010-027",
+            "@AC-010-028",
+            "@HV-AUTH-START-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-AUTH-LIFECYCLE/HV-AUTH-LIFECYCLE.trx"
+        },
+        {
+          "title": "Global Lock revokes capability and unmounts protected content",
+          "tags": [
+            "@FEAT-010",
+            "@AC-010-062",
+            "@HV-AUTH-LOCK-001",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-AUTH-LIFECYCLE/HV-AUTH-LIFECYCLE.trx"
+        },
+        {
+          "title": "Removal verifies absence before first-run returns",
+          "tags": [
+            "@FEAT-010",
+            "@AC-010-073",
+            "@AC-010-074",
+            "@AC-010-075",
+            "@HV-AUTH-REMOVE-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-AUTH-LIFECYCLE/HV-AUTH-LIFECYCLE.trx"
+        },
+        {
+          "title": "Back from a selected flow returns to first-run without leaving root",
+          "tags": [
+            "@FEAT-010",
+            "@AC-010-083",
+            "@AC-010-084",
+            "@AC-010-085",
+            "@HV-AUTH-NAV-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-AUTH-LIFECYCLE/HV-AUTH-LIFECYCLE.trx"
+        },
+        {
+          "title": "A server outage is typed and retryable, never fabricated success",
+          "tags": [
+            "@FEAT-010",
+            "@AC-010-047",
+            "@AC-010-048",
+            "@HV-AUTH-OFFLINE-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-AUTH-LIFECYCLE/HV-AUTH-LIFECYCLE.trx"
+        },
+        {
+          "title": "Evidence capture stays disabled for secret-bearing flows",
+          "tags": [
+            "@FEAT-010",
+            "@AC-010-089",
+            "@AC-010-097",
+            "@HV-AUTH-SECURITY-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-AUTH-LIFECYCLE/HV-AUTH-LIFECYCLE.trx",
+          "artifactEvidence": "TestResults/HushVoting/aud126-current-serial/HV-AUTH-LIFECYCLE/HV-AUTH-LIFECYCLE.artifacts.json"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-source-retired",
+        "replacementValidation": "TestResults/HushVoting/506ca46f-075b-40e2-9007-a82327ebf59e/HV-AUTH-LIFECYCLE.trx",
+        "runner": "hush-voting-web-client/package.json#test:auth-lifecycle:bdd",
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "postRetirementCommandValidation": "TestResults/HushVoting/7435811e-c60b-4596-8d47-afff63211f61/HV-AUTH-LIFECYCLE.trx"
+      }
+    },
+    {
+      "source": "features/credential-file-restore/entry-picker-read.feature",
+      "sourceSha256": "ea97872b3f3ed470323edf2d193e865505e217640786a03e71ead8c0eca52b14",
+      "destination": "Features/credential-file-restore/entry-picker-read.feature",
+      "group": "credential-file-restore",
+      "scenarios": [
+        {
+          "title": "AC-009-001 — HV-DAT-ENTRY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-001",
+            "@HV-DAT-ENTRY-AC001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-002 — HV-DAT-ENTRY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-002",
+            "@HV-DAT-ENTRY-AC002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-003 — HV-DAT-ENTRY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-003",
+            "@HV-DAT-ENTRY-AC003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-004 — HV-DAT-PICKER",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-004",
+            "@HV-DAT-PICKER-AC004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-005 — HV-DAT-PICKER",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-005",
+            "@HV-DAT-PICKER-AC005"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-006 — HV-DAT-PICKER",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-006",
+            "@HV-DAT-PICKER-AC006"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-007 — HV-DAT-READ",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-007",
+            "@HV-DAT-READ-AC007"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-008 — HV-DAT-PICKER",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-008",
+            "@HV-DAT-PICKER-AC008"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/entry-picker-read.feature"
+        },
+        {
+          "title": "AC-009-009 — HV-DAT-PICKER",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-009",
+            "@HV-DAT-PICKER-AC009"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/entry-picker-read.feature"
+        },
+        {
+          "title": "AC-009-010 — HV-DAT-READ",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-010",
+            "@HV-DAT-READ-AC010"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-011 — HV-DAT-READ",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-011",
+            "@HV-DAT-READ-AC011"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-012 — HV-DAT-TEMP",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-012",
+            "@HV-DAT-TEMP-AC012"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/entry-picker-read.feature"
+        },
+        {
+          "title": "AC-009-035 — HV-DAT-SOURCE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-035",
+            "@HV-DAT-SOURCE-AC035"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-036 — HV-DAT-SOURCE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-036",
+            "@HV-DAT-SOURCE-AC036"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-037 — HV-DAT-SOURCE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-037",
+            "@HV-DAT-SOURCE-AC037"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-scenarios-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "retiredScenarioIds": [
+          "HV-DAT-ENTRY-AC001",
+          "HV-DAT-ENTRY-AC002",
+          "HV-DAT-ENTRY-AC003",
+          "HV-DAT-PICKER-AC004",
+          "HV-DAT-PICKER-AC005",
+          "HV-DAT-PICKER-AC006",
+          "HV-DAT-READ-AC007",
+          "HV-DAT-READ-AC010",
+          "HV-DAT-READ-AC011",
+          "HV-DAT-SOURCE-AC035",
+          "HV-DAT-SOURCE-AC036",
+          "HV-DAT-SOURCE-AC037"
+        ],
+        "remainingSourceSha256": "e9ad3200c217b719066adf615ba41ca62849ad4b31580670cf371247dd9e5d4c",
+        "replacementValidation": "TestResults/HushVoting/340c7457-9334-44fe-8aca-8591c8d0ea8b/HV-DAT-ENTRY-MIGRATED.trx",
+        "runner": "hush-voting-web-client/package.json#test:credential-entry:bdd",
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "postRetirementCommandValidation": "TestResults/HushVoting/a1a36eb9-8fab-49a6-8171-e4d8095f4e0b/HV-DAT-ENTRY-MIGRATED.trx"
+      }
+    },
+    {
+      "source": "features/credential-file-restore/envelope-password-auth.feature",
+      "sourceSha256": "93ee23b162ea91bb7f03664693c81c8d73467625088ae33b010f587ccfa0efba",
+      "destination": "Features/credential-file-restore/envelope-password-auth.feature",
+      "group": "credential-file-restore",
+      "scenarios": [
+        {
+          "title": "AC-009-013 — HV-DAT-ENVELOPE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-013",
+            "@HV-DAT-ENVELOPE-AC013"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
+        },
+        {
+          "title": "AC-009-014 — HV-DAT-ENVELOPE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-014",
+            "@HV-DAT-ENVELOPE-AC014"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
+        },
+        {
+          "title": "AC-009-015 — HV-DAT-ENVELOPE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-015",
+            "@HV-DAT-ENVELOPE-AC015"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
+        },
+        {
+          "title": "AC-009-016 — HV-DAT-PASSWORD",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-016",
+            "@HV-DAT-PASSWORD-AC016"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
+        },
+        {
+          "title": "AC-009-017 — HV-DAT-PASSWORD",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-017",
+            "@HV-DAT-PASSWORD-AC017"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
+        },
+        {
+          "title": "AC-009-018 — HV-DAT-PASSWORD",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-018",
+            "@HV-DAT-PASSWORD-AC018"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
+        },
+        {
+          "title": "AC-009-019 — HV-DAT-AUTH",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-019",
+            "@HV-DAT-AUTH-AC019"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
+        },
+        {
+          "title": "AC-009-020 — HV-DAT-BACKOFF",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-020",
+            "@HV-DAT-BACKOFF-AC020"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
+        },
+        {
+          "title": "AC-009-021 — HV-DAT-BACKOFF",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-021",
+            "@HV-DAT-BACKOFF-AC021"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
+        },
+        {
+          "title": "AC-009-022 — HV-DAT-AUTH",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-022",
+            "@HV-DAT-AUTH-AC022"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-source-retired",
+        "runner": "hush-voting-web-client/package.json#test:credential-envelope-auth:bdd",
+        "retiredExclusiveTypeScriptBindings": 12,
+        "acceptanceReview": "open; bounded Web/protocol and isolated crypto-buffer evidence do not prove garbage collection or universal process-memory erasure",
+        "postRetirementCommandValidation": "TestResults/HushVoting/322d7173-86ba-4ea0-8ff5-b8dfe46c7d27/HV-DAT-ENVELOPE-AUTH.trx"
+      }
+    },
+    {
+      "source": "features/credential-file-restore/lookup-profile-protection.feature",
+      "sourceSha256": "51f9fd35ae8f6978d5b72160a6d5ba54438a5f67bd88e407a5401473ddba619c",
+      "destination": "Features/credential-file-restore/lookup-profile-protection.feature",
+      "group": "credential-file-restore",
+      "scenarios": [
+        {
+          "title": "AC-009-038 — HV-DAT-LOOKUP",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-038",
+            "@HV-DAT-LOOKUP-AC038"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-039 — HV-DAT-LOOKUP",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-039",
+            "@HV-DAT-LOOKUP-AC039"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-040 — HV-DAT-LOOKUP",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-040",
+            "@HV-DAT-LOOKUP-AC040"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-041 — HV-DAT-LOOKUP",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-041",
+            "@HV-DAT-LOOKUP-AC041"
+          ],
+          "status": "pending-implementation",
+          "evidence": "TestResults/HushVoting/ababc295-1179-42ed-8df1-94cf554d54ee/HV-DAT-HISTORICAL-ALIAS.trx",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
+        },
+        {
+          "title": "AC-009-042 — HV-DAT-LOOKUP",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-042",
+            "@HV-DAT-LOOKUP-AC042"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-043 — HV-DAT-RESET",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-043",
+            "@HV-DAT-RESET-AC043"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-044 — HV-DAT-RESET",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-044",
+            "@HV-DAT-RESET-AC044"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-045 — HV-DAT-RESET",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-045",
+            "@HV-DAT-RESET-AC045"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-046 — HV-DAT-SIGNATURE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-046",
+            "@HV-DAT-SIGNATURE-AC046"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-047 — HV-DAT-SIGNATURE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-047",
+            "@HV-DAT-SIGNATURE-AC047"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-048 — HV-DAT-SIGNATURE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-048",
+            "@HV-DAT-SIGNATURE-AC048"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-049 — HV-DAT-SEPARATION",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-049",
+            "@HV-DAT-SEPARATION-AC049"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-050 — HV-DAT-SEPARATION",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-050",
+            "@HV-DAT-SEPARATION-AC050"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-051 — HV-DAT-PROTECT",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-051",
+            "@HV-DAT-PROTECT-AC051"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-052 — HV-DAT-PROTECT",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-052",
+            "@HV-DAT-PROTECT-AC052"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
+        },
+        {
+          "title": "AC-009-053 — HV-DAT-PROTECT",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-053",
+            "@HV-DAT-PROTECT-AC053"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
+        },
+        {
+          "title": "AC-009-054 — HV-DAT-SESSION",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-054",
+            "@HV-DAT-SESSION-AC054"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
+        },
+        {
+          "title": "AC-009-055 — HV-DAT-PROTECT",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-055",
+            "@HV-DAT-PROTECT-AC055"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-056 — HV-DAT-STAGE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-056",
+            "@HV-DAT-STAGE-AC056"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-057 — HV-DAT-STAGE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-057",
+            "@HV-DAT-STAGE-AC057"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-058 — HV-DAT-STAGE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-058",
+            "@HV-DAT-STAGE-AC058"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-059 — HV-DAT-STAGE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-059",
+            "@HV-DAT-STAGE-AC059"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-060 — HV-DAT-SESSION",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-060",
+            "@HV-DAT-SESSION-AC060"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
+        },
+        {
+          "title": "AC-009-061 — HV-DAT-STAGE",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-061",
+            "@HV-DAT-STAGE-AC061"
+          ],
+          "status": "pending-implementation",
+          "evidence": "TestResults/HushVoting/a3b841ab-cf44-4290-b51e-0d14a9695d36/HV-STAGED-RESUME.trx",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
+        },
+        {
+          "title": "AC-009-062 — HV-DAT-RESUME",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-062",
+            "@HV-DAT-RESUME-AC062"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-063 — HV-DAT-RESUME",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-063",
+            "@HV-DAT-RESUME-AC063"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-scenarios-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "retiredScenarioIds": [
+          "HV-DAT-LOOKUP-AC038",
+          "HV-DAT-LOOKUP-AC039",
+          "HV-DAT-LOOKUP-AC040",
+          "HV-DAT-LOOKUP-AC042",
+          "HV-DAT-RESET-AC043",
+          "HV-DAT-RESET-AC044",
+          "HV-DAT-RESET-AC045",
+          "HV-DAT-SIGNATURE-AC046",
+          "HV-DAT-SIGNATURE-AC047",
+          "HV-DAT-SIGNATURE-AC048",
+          "HV-DAT-SEPARATION-AC049",
+          "HV-DAT-SEPARATION-AC050",
+          "HV-DAT-PROTECT-AC051",
+          "HV-DAT-PROTECT-AC055",
+          "HV-DAT-STAGE-AC056",
+          "HV-DAT-STAGE-AC057",
+          "HV-DAT-STAGE-AC058",
+          "HV-DAT-STAGE-AC059",
+          "HV-DAT-RESUME-AC062",
+          "HV-DAT-RESUME-AC063"
+        ],
+        "remainingSourceSha256": "d0d791af6d5ed16433b73720381bdcfd7fc2708102b86bcf29b57a4c9ac8d59f",
+        "replacementValidation": [
+          "TestResults/HushVoting/eb84c739-b8e8-4f01-a505-4238284bc738/HV-DAT-LOOKUP-MIGRATED.trx",
+          "TestResults/HushVoting/3675f5c4-7473-4096-9d7d-3d3a8e28efc0/HV-DAT-PROTECTION-MIGRATED.trx"
+        ],
+        "runner": "hush-voting-web-client/package.json",
+        "commands": [
+          "npm run test:credential-lookup:bdd",
+          "npm run test:credential-protection:bdd"
+        ],
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "postRetirementCommandValidation": [
+          "TestResults/HushVoting/b2bfb016-14c1-49a8-b494-80c8b9c38632/HV-DAT-LOOKUP-MIGRATED.trx",
+          "TestResults/HushVoting/ac6d656b-0201-45b2-b79b-8d8bc6ee4e80/HV-DAT-PROTECTION-MIGRATED.trx"
+        ]
+      }
+    },
+    {
+      "source": "features/credential-file-restore/nav-owner-cleanup-security.feature",
+      "sourceSha256": "b5c040facc9bdd715ca6374b38a2ca702e11d10082eaa28c1b05fa9e1f45637f",
+      "destination": "Features/credential-file-restore/nav-owner-cleanup-security.feature",
+      "group": "credential-file-restore",
+      "scenarios": [
+        {
+          "title": "AC-009-064 — HV-DAT-NAV",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-064",
+            "@HV-DAT-NAV-AC064"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-065 — HV-DAT-NAV",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-065",
+            "@HV-DAT-NAV-AC065"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-066 — HV-DAT-NAV",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-066",
+            "@HV-DAT-NAV-AC066"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-067 — HV-DAT-NAV",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-067",
+            "@HV-DAT-NAV-AC067"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-068 — HV-DAT-NAV",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-068",
+            "@HV-DAT-NAV-AC068"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-069 — HV-DAT-NAV",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-069",
+            "@HV-DAT-NAV-AC069"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
+        },
+        {
+          "title": "AC-009-070 — HV-DAT-OWNER",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-070",
+            "@HV-DAT-OWNER-AC070"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
+        },
+        {
+          "title": "AC-009-071 — HV-DAT-CLEANUP",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-071",
+            "@HV-DAT-CLEANUP-AC071"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-072 — HV-DAT-CLEANUP",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-072",
+            "@HV-DAT-CLEANUP-AC072"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-073 — HV-DAT-EXTERNAL",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-073",
+            "@HV-DAT-EXTERNAL-AC073"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PUBLIC-CONFORMANCE/HV-DAT-PUBLIC-CONFORMANCE.trx"
+        },
+        {
+          "title": "AC-009-074 — HV-DAT-EXTERNAL",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-074",
+            "@HV-DAT-EXTERNAL-AC074"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-GENERATED-CORPUS/HV-GENERATED-CORPUS.trx",
+          "note": "AUD-115: user-approved generated Web corpus with known test-only password, P-01/P-02 and both mnemonic shapes. Real browser/node activation, all-source/representative coverage, local fixture refusal and unchanged bytes pass. Generated fixtures are retained as test artifacts. No historical-user-backup or native-device qualification is claimed."
+        },
+        {
+          "title": "AC-009-075 — HV-DAT-EXTERNAL",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-075",
+            "@HV-DAT-EXTERNAL-AC075"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-GENERATED-CORPUS/HV-GENERATED-CORPUS.trx",
+          "note": "AUD-115: user-approved generated Web corpus with known test-only password, P-01/P-02 and both mnemonic shapes. Real browser/node activation, all-source/representative coverage, local fixture refusal and unchanged bytes pass. Generated fixtures are retained as test artifacts. No historical-user-backup or native-device qualification is claimed."
+        },
+        {
+          "title": "AC-009-076 — HV-DAT-EXTERNAL",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-076",
+            "@HV-DAT-EXTERNAL-AC076"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-GENERATED-CORPUS/HV-GENERATED-CORPUS.trx",
+          "note": "AUD-115: user-approved generated Web corpus with known test-only password, P-01/P-02 and both mnemonic shapes. Real browser/node activation, all-source/representative coverage, local fixture refusal and unchanged bytes pass. Generated fixtures are retained as test artifacts. No historical-user-backup or native-device qualification is claimed."
+        },
+        {
+          "title": "AC-009-077 — HV-DAT-EXTERNAL",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-077",
+            "@HV-DAT-EXTERNAL-AC077"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-GENERATED-CORPUS/HV-GENERATED-CORPUS.trx",
+          "note": "AUD-115: user-approved generated Web corpus with known test-only password, P-01/P-02 and both mnemonic shapes. Real browser/node activation, all-source/representative coverage, local fixture refusal and unchanged bytes pass. Generated fixtures are retained as test artifacts. No historical-user-backup or native-device qualification is claimed."
+        },
+        {
+          "title": "AC-009-078 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-078",
+            "@HV-DAT-SECURITY-AC078"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
+        },
+        {
+          "title": "AC-009-079 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-079",
+            "@HV-DAT-SECURITY-AC079"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
+        },
+        {
+          "title": "AC-009-080 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-080",
+            "@HV-DAT-SECURITY-AC080"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
+        },
+        {
+          "title": "AC-009-081 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-081",
+            "@HV-DAT-SECURITY-AC081"
+          ],
+          "status": "passed",
+          "evidenceLayer": "backend-twin",
+          "note": "Original criterion explicitly requires HushServerNode TwinTests; direct real RPC/indexing/reset replacement, not EPIC browser acceptance. AUD-099.",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ORIGINAL-IDENTITY-TWIN/HV-ORIGINAL-IDENTITY-TWIN.trx"
+        },
+        {
+          "title": "AC-009-082 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-082",
+            "@HV-DAT-SECURITY-AC082"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx",
+          "artifactEvidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.artifacts.json"
+        },
+        {
+          "title": "AC-009-083 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-083",
+            "@HV-DAT-SECURITY-AC083"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
+        },
+        {
+          "title": "AC-009-084 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-084",
+            "@HV-DAT-SECURITY-AC084"
+          ],
+          "status": "pending-implementation",
+          "evidence": "TestResults/HushVoting/480af110-22a1-4629-b85e-f5f4776d5de8/HV-ACCESSIBILITY.trx",
+          "note": "AUD-109: all three real keyboard/browser/server journeys pass 28 checkpoints in three display modes, adding profile required/length errors, three-failure challenge closure and same-candidate review, and structural file error correction. No production changes. Full focus, zoom/reflow, assistive-technology, forced-colour contrast and remaining branch qualification stay pending; TypeScript original retained.",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
+        },
+        {
+          "title": "AC-009-085 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-085",
+            "@HV-DAT-SECURITY-AC085"
+          ],
+          "status": "pending-implementation",
+          "note": "AUD-112: original TS artifact-scanning steps did not test this performance AC. The .NET declaration now preserves the full numerical performance/resource requirement. Five new App Twins and live lookup/read/full-journey regressions fix and verify the 150ms lookup/read progress subset only. Full qualification, including the approved minimum Web hardware/workload and other matrix obligations, remains pending; no TypeScript retirement. See Architecture/PERFORMANCE_ACCEPTANCE_MATRIX.md in the canonical HushVoting MemoryBank.",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
+        },
+        {
+          "title": "AC-009-086 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-086",
+            "@HV-DAT-SECURITY-AC086"
+          ],
+          "status": "pending-implementation",
+          "note": "AUD-113: submitted FEAT-036 owns user-assisted refinement of historical/current vault versions, global no-mnemonic replacement, exact creation network/staging boundary, historical unlock, verified conversion and rollback/deletion. Aggregate replacement-contract gates require complete cross-feature qualification, not artifact scans or one current-format success. Source findings only; no legacy migration runtime pass. Preserve pending status and TypeScript original.",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
+        },
+        {
+          "title": "AC-009-087 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-087",
+            "@HV-DAT-SECURITY-AC087"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-BACKEND-RELEASE/HV-BACKEND-RELEASE.trx",
+          "note": "AUD-119: complete named backend TwinTest prerequisite verified by exact ID/title/outcome/provenance/artifact evidence, followed by this real Web missing-profile identity/protection/indexing/licence journey. Whole-product release and other native/external criteria are not evaluated. TypeScript original retired."
+        },
+        {
+          "title": "AC-009-088 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-088",
+            "@HV-DAT-SECURITY-AC088"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RELEASE-PINS/HV-RELEASE-PINS.trx",
+          "note": "AUD-110: real Web/node journey followed by content-addressed exact input pins, manifest-member verification, independent reread and mutation canaries. This pin-recording criterion does not assert release admission or handoff semantic qualification; external states remain unchanged. TypeScript original retired."
+        },
+        {
+          "title": "AC-009-089 — HV-DAT-SECURITY",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-089",
+            "@HV-DAT-SECURITY-AC089"
+          ],
+          "status": "pending-external-qualification",
+          "externalQualification": {
+            "kind": "independent-security-review",
+            "status": "NOT_SUPPLIED"
+          }
+        }
+      ],
+      "retirement": {
+        "state": "typescript-scenarios-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "retiredScenarioIds": [
+          "HV-DAT-NAV-AC064",
+          "HV-DAT-NAV-AC065",
+          "HV-DAT-NAV-AC066",
+          "HV-DAT-NAV-AC067",
+          "HV-DAT-NAV-AC068",
+          "HV-DAT-CLEANUP-AC071",
+          "HV-DAT-CLEANUP-AC072",
+          "HV-DAT-SECURITY-AC082",
+          "HV-DAT-EXTERNAL-AC073",
+          "HV-DAT-SECURITY-AC081",
+          "HV-DAT-SECURITY-AC088",
+          "HV-DAT-EXTERNAL-AC074",
+          "HV-DAT-EXTERNAL-AC075",
+          "HV-DAT-EXTERNAL-AC076",
+          "HV-DAT-EXTERNAL-AC077",
+          "HV-DAT-SECURITY-AC087"
+        ],
+        "remainingSourceSha256": "42f3c4ae2344f65a8808096f051df8f16f04d29cc7e811f9c61503101d5fd134",
+        "replacementValidation": [
+          "TestResults/HushVoting/94bcd5d1-b235-4cc3-ad66-7cf593da37d5/HV-DAT-NAVIGATION-MIGRATED.trx",
+          "TestResults/HushVoting/1aa1d3f9-db6c-4929-816d-15c56ef39251/HV-DAT-PUBLIC-CONFORMANCE.trx",
+          "TestResults/HushVoting/cee4f64c-1ca4-47d4-9577-9c6629ce88aa/HV-ORIGINAL-IDENTITY-TWIN.trx",
+          "TestResults/HushVoting/8ba436e3-1e6b-49df-a77d-585584f424db/HV-RELEASE-PINS.trx",
+          "TestResults/HushVoting/5c2021ab-db10-40fd-980f-bfb979368d86/HV-GENERATED-CORPUS.trx",
+          "TestResults/HushVoting/aud119-release-verified/HV-BACKEND-RELEASE/HV-BACKEND-RELEASE.trx"
+        ],
+        "runner": "hush-voting-web-client/package.json",
+        "commands": [
+          "npm run test:credential-navigation:bdd",
+          "npm run test:credential-public-conformance:bdd",
+          "npm run test:identity-acceptance-server-twins",
+          "npm run test:release-pins:bdd",
+          "npm run test:generated-corpus:bdd",
+          "npm run test:backend-release:bdd"
+        ],
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "postRetirementCommandValidation": [
+          "TestResults/HushVoting/aeba7a68-65cd-4623-8a26-e925cf651dd4/HV-DAT-NAVIGATION-MIGRATED.trx",
+          "TestResults/HushVoting/78262ebe-a444-473d-a09d-3c38e8934625/HV-DAT-PUBLIC-CONFORMANCE.trx",
+          "TestResults/HushVoting/6fc101ae-a31c-4ee3-8735-fda01c02044a/HV-ORIGINAL-IDENTITY-TWIN.trx",
+          "TestResults/HushVoting/e2a215a9-25fa-4aac-b39b-9952b6743a65/HV-RELEASE-PINS.trx",
+          "TestResults/HushVoting/100f03d8-ec7d-472a-a4f9-f6a99c7d6873/HV-GENERATED-CORPUS.trx",
+          "TestResults/HushVoting/aud119-release-post/HV-BACKEND-RELEASE/HV-BACKEND-RELEASE.trx"
+        ],
+        "bindingNote": " AUD-110 retires its release-pin original after live browser/server pin validation. The dedicated command passes 3/3 again after retirement; other incomplete qualification handlers are retained. AUD-115 retires AC074–AC077 using the user-approved generated Web corpus and removes their three exclusive no-op TypeScript handlers; historical/native qualification is not claimed. AUD-119 retires the backend release-prerequisite original only after all owned backend cases and its actual missing-profile Web consumer pass; other criteria remain pending."
+      }
+    },
+    {
+      "source": "features/credential-file-restore/schema-keys-mnemonic.feature",
+      "sourceSha256": "47705be08ead95ea784e0339ad0be1bbbf6da97ccd3a3f89d479dc9852cc7ae9",
+      "destination": "Features/credential-file-restore/schema-keys-mnemonic.feature",
+      "group": "credential-file-restore",
+      "scenarios": [
+        {
+          "title": "AC-009-023 — HV-DAT-SCHEMA",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-023",
+            "@HV-DAT-SCHEMA-AC023"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-024 — HV-DAT-KEYS",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-024",
+            "@HV-DAT-KEYS-AC024"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-025 — HV-DAT-KEYS",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-025",
+            "@HV-DAT-KEYS-AC025"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-026 — HV-DAT-KEYS",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-026",
+            "@HV-DAT-KEYS-AC026"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/credential-file-restore/schema-keys-mnemonic.feature"
+        },
+        {
+          "title": "AC-009-027 — HV-DAT-MNEMONIC",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-027",
+            "@HV-DAT-MNEMONIC-AC027"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-028 — HV-DAT-MNEMONIC",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-028",
+            "@HV-DAT-MNEMONIC-AC028"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-029 — HV-DAT-KEYS",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-029",
+            "@HV-DAT-KEYS-AC029"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-030 — HV-DAT-KEYS",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-030",
+            "@HV-DAT-KEYS-AC030"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-031 — HV-DAT-SCHEMA",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-031",
+            "@HV-DAT-SCHEMA-AC031"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-032 — HV-DAT-KEYS",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-032",
+            "@HV-DAT-KEYS-AC032"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-033 — HV-DAT-MNEMONIC",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-033",
+            "@HV-DAT-MNEMONIC-AC033"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
+        },
+        {
+          "title": "AC-009-034 — HV-DAT-MNEMONIC",
+          "tags": [
+            "@FEAT-009",
+            "@AC-009-034",
+            "@HV-DAT-MNEMONIC-AC034"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-scenarios-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "retiredScenarioIds": [
+          "HV-DAT-SCHEMA-AC023",
+          "HV-DAT-KEYS-AC024",
+          "HV-DAT-KEYS-AC025",
+          "HV-DAT-MNEMONIC-AC027",
+          "HV-DAT-MNEMONIC-AC028",
+          "HV-DAT-KEYS-AC029",
+          "HV-DAT-KEYS-AC030",
+          "HV-DAT-SCHEMA-AC031",
+          "HV-DAT-KEYS-AC032",
+          "HV-DAT-MNEMONIC-AC033",
+          "HV-DAT-MNEMONIC-AC034"
+        ],
+        "remainingSourceSha256": "b3dccb7f2ff5bc4c2e5e818ea1b7d09885e21546f3f5399baf81dad4055a038b",
+        "replacementValidation": "TestResults/HushVoting/ca78cc82-2305-4a7f-9e6d-ff5ffcfeb7e8/HV-DAT-VALIDATION-MIGRATED.trx",
+        "runner": "hush-voting-web-client/package.json#test:credential-validation:bdd",
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "postRetirementCommandValidation": "TestResults/HushVoting/9027e2b9-6061-4961-8c25-4f29abf4cfc6/HV-DAT-VALIDATION-MIGRATED.trx"
+      }
+    },
+    {
+      "source": "features/identity-create/entry-profile-generate.feature",
+      "sourceSha256": "d98e9b68028facfdca77ea005d5e3700b17051dd5de3984672b708fc8f413a2a",
+      "destination": "Features/identity-create/entry-profile-generate.feature",
+      "group": "identity-create",
+      "scenarios": [
+        {
+          "title": "The no-local-user entry offers exactly three equal primary choices",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-001",
+            "@HV-ID-CREATE-ENTRY-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-ENTRY-MIGRATED/HV-ID-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "Create User runs the platform security preflight before collecting anything",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-002",
+            "@HV-ID-CREATE-ENTRY-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-ENTRY-MIGRATED/HV-ID-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "The browser adapter is the only web storage authority",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-063",
+            "@HV-ID-CREATE-ENTRY-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CREATE-ENTRY-003/HV-ID-CREATE-ENTRY-003.trx"
+        },
+        {
+          "title": "Entry and profile surfaces meet WCAG 2.2 AA and responsive rules",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-068",
+            "@HV-ID-CREATE-ENTRY-004"
+          ],
+          "status": "pending-implementation",
+          "evidence": "TestResults/HushVoting/480af110-22a1-4629-b85e-f5f4776d5de8/HV-ACCESSIBILITY.trx",
+          "note": "AUD-109: all three real keyboard/browser/server journeys pass 28 checkpoints in three display modes, adding profile required/length errors, three-failure challenge closure and same-candidate review, and structural file error correction. No production changes. Full focus, zoom/reflow, assistive-technology, forced-colour contrast and remaining branch qualification stay pending; TypeScript original retained.",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/entry-profile-generate.feature"
+        },
+        {
+          "title": "Alias normalization follows the exact profile contract",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-003",
+            "@HV-ID-CREATE-PROFILE-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-ENTRY-MIGRATED/HV-ID-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "Private is the default and Public requires acknowledgement",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-004",
+            "@HV-ID-CREATE-PROFILE-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-ENTRY-MIGRATED/HV-ID-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "Initial visibility is immutable through the current interface",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-051",
+            "@HV-ID-CREATE-PROFILE-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-ENTRY-MIGRATED/HV-ID-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "No password participates in identity derivation",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-005",
+            "@HV-ID-CREATE-GENERATE-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-ENTRY-MIGRATED/HV-ID-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "The authority creates exactly one valid P-01 candidate",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-006",
+            "@HV-ID-CREATE-GENERATE-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-ENTRY-MIGRATED/HV-ID-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "Hidden invalid candidates are destroyed before display",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-007",
+            "@HV-ID-CREATE-GENERATE-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-ENTRY-MIGRATED/HV-ID-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "Regeneration requires destructive confirmation and never substitutes silently",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-008",
+            "@HV-ID-CREATE-GENERATE-004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-ENTRY-MIGRATED/HV-ID-ENTRY-MIGRATED.trx"
+        },
+        {
+          "title": "Generation timing meets the documented budgets",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-009",
+            "@HV-ID-CREATE-GENERATE-005"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/entry-profile-generate.feature"
+        },
+        {
+          "title": "Performance budgets never weaken cryptography or skip validation",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-074",
+            "@HV-ID-CREATE-GENERATE-006"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/entry-profile-generate.feature"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-scenarios-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "retiredScenarioIds": [
+          "HV-ID-CREATE-ENTRY-001",
+          "HV-ID-CREATE-ENTRY-002",
+          "HV-ID-CREATE-PROFILE-001",
+          "HV-ID-CREATE-PROFILE-002",
+          "HV-ID-CREATE-PROFILE-003",
+          "HV-ID-CREATE-GENERATE-001",
+          "HV-ID-CREATE-GENERATE-002",
+          "HV-ID-CREATE-GENERATE-003",
+          "HV-ID-CREATE-GENERATE-004",
+          "HV-ID-CREATE-ENTRY-003"
+        ],
+        "remainingSourceSha256": "46d6275e464b494bafd5dfb8ae7e1c6fff3c3c811492bf89437f955d647d6ff8",
+        "replacementValidation": [
+          "TestResults/HushVoting/96d16423-4f73-44d9-b6a9-a428c018f2b8/HV-ID-ENTRY-MIGRATED.trx",
+          "TestResults/HushVoting/c2c81d06-672b-43a0-a8d0-8e4c5f587eaa/HV-ID-CREATE-ENTRY-003.trx"
+        ],
+        "runner": "hush-voting-web-client/package.json",
+        "commands": [
+          "npm run test:identity-entry:bdd",
+          "npm run test:web-creation-authority:bdd"
+        ],
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance"
+      }
+    },
+    {
+      "source": "features/identity-create/nav-multi-cancel-secure-native.feature",
+      "sourceSha256": "65c26a47e5c09d4734fdc1d43343d2f92b2d80e25d0fe07076d5465936aaefee",
+      "destination": "Features/identity-create/nav-multi-cancel-secure-native.feature",
+      "group": "identity-create",
+      "scenarios": [
+        {
+          "title": "Browser, Android, and in-app Back share one typed authority",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-058",
+            "@HV-ID-CREATE-NAV-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CREATE-NAV-001/HV-ID-CREATE-NAV-001.trx"
+        },
+        {
+          "title": "After provisional persistence, stale history cannot reopen creation",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-059",
+            "@HV-ID-CREATE-NAV-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-LIFECYCLE-MIGRATED/HV-ID-LIFECYCLE-MIGRATED.trx"
+        },
+        {
+          "title": "Forged, stale, or restored onboarding tokens are rejected",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-060",
+            "@HV-ID-CREATE-NAV-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-LIFECYCLE-MIGRATED/HV-ID-LIFECYCLE-MIGRATED.trx"
+        },
+        {
+          "title": "A non-secret cross-tab event invalidates stale onboarding authorities",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-061",
+            "@HV-ID-CREATE-MULTI-002"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "Single-owner authority prevents competing candidates",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-062",
+            "@HV-ID-CREATE-MULTI-003"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "Concurrent triggers coalesce into one reconciliation cycle",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-031",
+            "@HV-ID-CREATE-MULTI-001"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "Pre-submit cancellation verifies rollback before restoring first-run",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-055",
+            "@HV-ID-CREATE-CANCEL-001"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "Post-submit cancellation warns that blockchain creation cannot be cancelled",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-056",
+            "@HV-ID-CREATE-CANCEL-002"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "Rollback failure quarantines the authority",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-057",
+            "@HV-ID-CREATE-CANCEL-003"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "Secrets never enter React, XState, history, logs, or plaintext storage",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-016",
+            "@HV-ID-CREATE-SECURITY-001"
+          ],
+          "status": "pending-implementation",
+          "evidence": "TestResults/HushVoting/1a29b3e0-ce7a-4612-b177-b1833dce276d/HV-ID-CREATE-SECURITY-001.trx",
+          "note": "AUD-100: original Web scenario fails at actual React ancestor props containing the complete recovery phrase, confirmed by a focused App Twin. FEAT-034 records the proposed substantial display/projection correction for refinement. Full XState/history/log/analytics/storage assertions remain pending; TypeScript retained.",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "Each platform uses only its sealed operation seams",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-024",
+            "@HV-ID-CREATE-SECURITY-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-LIFECYCLE-MIGRATED/HV-ID-LIFECYCLE-MIGRATED.trx"
+        },
+        {
+          "title": "No social or feed state is initialized during onboarding",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-067",
+            "@HV-ID-CREATE-SECURITY-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-LIFECYCLE-MIGRATED/HV-ID-LIFECYCLE-MIGRATED.trx"
+        },
+        {
+          "title": "Secret-bearing scenarios disable capture and artifact scanning finds nothing",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-069",
+            "@HV-ID-CREATE-SECURITY-004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-LIFECYCLE-MIGRATED/HV-ID-LIFECYCLE-MIGRATED.trx",
+          "artifactEvidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-LIFECYCLE-MIGRATED/HV-ID-LIFECYCLE-MIGRATED.artifacts.json"
+        },
+        {
+          "title": "Server TwinTests prove rejection and confirmation semantics",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-071",
+            "@HV-ID-CREATE-SECURITY-005"
+          ],
+          "status": "passed",
+          "evidenceLayer": "backend-twin",
+          "note": "Original criterion explicitly requires HushServerNode TwinTests; direct real RPC/indexing/reset replacement, not EPIC browser acceptance. AUD-099.",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ORIGINAL-IDENTITY-TWIN/HV-ORIGINAL-IDENTITY-TWIN.trx"
+        },
+        {
+          "title": "Concurrent admission produces exactly one ACCEPTED",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-072",
+            "@HV-ID-CREATE-SECURITY-006"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-LIFECYCLE-MIGRATED/HV-ID-LIFECYCLE-MIGRATED.trx"
+        },
+        {
+          "title": "The fault matrix converges safely",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-073",
+            "@HV-ID-CREATE-SECURITY-007"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "The external hardening blocker is green before completion",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-076",
+            "@HV-ID-CREATE-SECURITY-008"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-BACKEND-RELEASE/HV-BACKEND-RELEASE.trx",
+          "note": "AUD-119: complete named backend TwinTest prerequisite verified by exact ID/title/outcome/provenance/artifact evidence, followed by this real Web missing-profile identity/protection/indexing/licence journey. Whole-product release and other native/external criteria are not evaluated. TypeScript original retired."
+        },
+        {
+          "title": "Ubuntu uses native custody and never exposes credentials to the WebView",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-064",
+            "@HV-ID-CREATE-NATIVE-001"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "Android requires hardware-backed protection with no fallback",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-065",
+            "@HV-ID-CREATE-NATIVE-002"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "Adapters observe the same server reply equivalently",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-066",
+            "@HV-ID-CREATE-NATIVE-003"
+          ],
+          "status": "pending-implementation",
+          "evidence": "TestResults/HushVoting/8e72873e-0736-4100-be32-355946bb3c01/HV-WEB-TRANSPORT-CONFORMANCE.trx",
+          "note": "AUD-111: Web portion passes real BFF/worker Accepted, Pending, AlreadyExists and invalid-signature Rejected mappings, exact lookup, promotion and licence indexing. Full AC-007-066 still requires independent Ubuntu/Android adapter equivalence under FEAT-007 Phase 6 Tasks 6.3/6.4; native qualification is unproven. Preserve pending status and TypeScript original; this is not an additional completed migration.",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "Every acceptance criterion maps to executable Gherkin",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-070",
+            "@HV-ID-CREATE-NATIVE-004"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/nav-multi-cancel-secure-native.feature"
+        },
+        {
+          "title": "Release evidence pins immutable digests",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-075",
+            "@HV-ID-CREATE-NATIVE-005"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RELEASE-PINS/HV-RELEASE-PINS.trx",
+          "note": "AUD-110: real Web/node journey followed by content-addressed exact input pins, manifest-member verification, independent reread and mutation canaries. This pin-recording criterion does not assert release admission or handoff semantic qualification; external states remain unchanged. TypeScript original retired."
+        }
+      ],
+      "retirement": {
+        "state": "typescript-scenarios-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "retiredScenarioIds": [
+          "HV-ID-CREATE-NAV-001",
+          "HV-ID-CREATE-NAV-002",
+          "HV-ID-CREATE-NAV-003",
+          "HV-ID-CREATE-SECURITY-002",
+          "HV-ID-CREATE-SECURITY-003",
+          "HV-ID-CREATE-SECURITY-004",
+          "HV-ID-CREATE-SECURITY-006",
+          "HV-ID-CREATE-SECURITY-005",
+          "HV-ID-CREATE-NATIVE-005",
+          "HV-ID-CREATE-SECURITY-008"
+        ],
+        "remainingSourceSha256": "1d3eeae57671ca9037e38b1302eafc607c3ec9d517db49fe28128b45c4a25367",
+        "replacementValidation": [
+          "TestResults/HushVoting/24136314-b8ae-438c-86e9-aaaa9457897e/HV-ID-LIFECYCLE-MIGRATED.trx",
+          "TestResults/HushVoting/3fa7c0d4-e8b1-4822-9335-1ebd9e8d1c49/HV-ID-CREATE-NAV-001.trx",
+          "TestResults/HushVoting/cee4f64c-1ca4-47d4-9577-9c6629ce88aa/HV-ORIGINAL-IDENTITY-TWIN.trx",
+          "TestResults/HushVoting/8ba436e3-1e6b-49df-a77d-585584f424db/HV-RELEASE-PINS.trx",
+          "TestResults/HushVoting/aud119-release-verified/HV-BACKEND-RELEASE/HV-BACKEND-RELEASE.trx"
+        ],
+        "runner": "hush-voting-web-client/package.json",
+        "commands": [
+          "npm run test:identity-lifecycle:bdd",
+          "npm run test:creation-back:bdd",
+          "npm run test:identity-acceptance-server-twins",
+          "npm run test:release-pins:bdd",
+          "npm run test:backend-release:bdd"
+        ],
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "bindingNote": " AUD-110 retires its release-pin original after live browser/server pin validation. The dedicated command passes 3/3 again after retirement; other incomplete qualification handlers are retained. AUD-119 retires the backend release-prerequisite original only after all owned backend cases and its actual missing-profile Web consumer pass; other criteria remain pending.",
+        "postRetirementCommandValidation": [
+          "TestResults/HushVoting/24136314-b8ae-438c-86e9-aaaa9457897e/HV-ID-LIFECYCLE-MIGRATED.trx",
+          "TestResults/HushVoting/3fa7c0d4-e8b1-4822-9335-1ebd9e8d1c49/HV-ID-CREATE-NAV-001.trx",
+          "TestResults/HushVoting/cee4f64c-1ca4-47d4-9577-9c6629ce88aa/HV-ORIGINAL-IDENTITY-TWIN.trx",
+          "TestResults/HushVoting/8ba436e3-1e6b-49df-a77d-585584f424db/HV-RELEASE-PINS.trx",
+          "TestResults/HushVoting/aud119-release-post/HV-BACKEND-RELEASE/HV-BACKEND-RELEASE.trx"
+        ]
+      }
+    },
+    {
+      "source": "features/identity-create/recovery-protect-review.feature",
+      "sourceSha256": "9c7c2eeb35bf25fe714ed6e690231d1819f1dd3d0a70a64eb6cf1ede23af30c3",
+      "destination": "Features/identity-create/recovery-protect-review.feature",
+      "group": "identity-create",
+      "scenarios": [
+        {
+          "title": "Recovery words are displayed only through the bounded exception",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-010",
+            "@HV-ID-CREATE-RECOVERY-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-RECOVERY-PROTECTION/HV-ID-RECOVERY-PROTECTION.trx"
+        },
+        {
+          "title": "Concealment removes visual and accessibility content",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-011",
+            "@HV-ID-CREATE-RECOVERY-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-RECOVERY-PROTECTION/HV-ID-RECOVERY-PROTECTION.trx"
+        },
+        {
+          "title": "Copy is secondary, explicit, warned, and bounded",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-012",
+            "@HV-ID-CREATE-RECOVERY-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-RECOVERY-PROTECTION/HV-ID-RECOVERY-PROTECTION.trx"
+        },
+        {
+          "title": "Six unpredictable distinct positions are requested in randomized order",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-013",
+            "@HV-ID-CREATE-RECOVERY-004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-RECOVERY-PROTECTION/HV-ID-RECOVERY-PROTECTION.trx"
+        },
+        {
+          "title": "A mismatch identifies only the requested position",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-014",
+            "@HV-ID-CREATE-RECOVERY-005"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-RECOVERY-PROTECTION/HV-ID-RECOVERY-PROTECTION.trx"
+        },
+        {
+          "title": "Three failed attempts invalidate the challenge without regenerating",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-015",
+            "@HV-ID-CREATE-RECOVERY-006"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-RECOVERY-PROTECTION/HV-ID-RECOVERY-PROTECTION.trx"
+        },
+        {
+          "title": "The Device password is collected only after recovery confirmation",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-017",
+            "@HV-ID-CREATE-PROTECT-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-RECOVERY-PROTECTION/HV-ID-RECOVERY-PROTECTION.trx"
+        },
+        {
+          "title": "Device and backup-file passwords are never confused or reused",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-018",
+            "@HV-ID-CREATE-PROTECT-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-RECOVERY-PROTECTION/HV-ID-RECOVERY-PROTECTION.trx"
+        },
+        {
+          "title": "Successful validation issues one one-use authorization",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-019",
+            "@HV-ID-CREATE-PROTECT-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-RECOVERY-PROTECTION/HV-ID-RECOVERY-PROTECTION.trx"
+        },
+        {
+          "title": "Final review contains safe fields only",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-020",
+            "@HV-ID-CREATE-REVIEW-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-RECOVERY-PROTECTION/HV-ID-RECOVERY-PROTECTION.trx"
+        },
+        {
+          "title": "Create binds the reviewed fields and prevents double dispatch",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-021",
+            "@HV-ID-CREATE-REVIEW-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-RECOVERY-PROTECTION/HV-ID-RECOVERY-PROTECTION.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-source-retired",
+        "runner": "hush-voting-web-client/package.json#test:identity-recovery-protection:bdd",
+        "acceptanceReview": "open; Web runtime replacement and scoped authority checks do not establish native qualification or universal privacy claims",
+        "retiredExclusiveTypeScriptBindings": 0,
+        "bindingNote": "No bindings for this feature existed in the original 75-line TypeScript common.ts; remaining entry/profile bindings are retained.",
+        "postRetirementCommandValidation": "TestResults/HushVoting/0ff38fc0-64b6-496d-a6b1-238bd6a8ae74/HV-ID-RECOVERY-PROTECTION.trx"
+      }
+    },
+    {
+      "source": "features/identity-create/stage-submit-confirm-delay.feature",
+      "sourceSha256": "adc3dfea0fa24c23de7289e5f7261981f296dea4971f988b2bb6a8e13a922955",
+      "destination": "Features/identity-create/stage-submit-confirm-delay.feature",
+      "group": "identity-create",
+      "scenarios": [
+        {
+          "title": "A sealed provisional record precedes any network call",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-022",
+            "@HV-ID-CREATE-STAGE-001"
+          ],
+          "status": "pending-implementation",
+          "note": "AUD-113: submitted FEAT-036 owns user-assisted refinement of historical/current vault versions, global no-mnemonic replacement, exact creation network/staging boundary, historical unlock, verified conversion and rollback/deletion. Aggregate replacement-contract gates require complete cross-feature qualification, not artifact scans or one current-format success. Source findings only; no legacy migration runtime pass. Preserve pending status and TypeScript original.",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/stage-submit-confirm-delay.feature"
+        },
+        {
+          "title": "A provisional identity is never authenticated and blocks first-run",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-023",
+            "@HV-ID-CREATE-STAGE-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-SUBMISSION-MIGRATED/HV-ID-SUBMISSION-MIGRATED.trx"
+        },
+        {
+          "title": "The exact signed transaction survives process death",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-027",
+            "@HV-ID-CREATE-STAGE-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-SUBMISSION-MIGRATED/HV-ID-SUBMISSION-MIGRATED.trx"
+        },
+        {
+          "title": "Restart with a provisional record resumes safely without mnemonic reveal",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-052",
+            "@HV-ID-CREATE-STAGE-004"
+          ],
+          "status": "pending-implementation",
+          "evidence": "TestResults/HushVoting/a3b841ab-cf44-4290-b51e-0d14a9695d36/HV-STAGED-RESUME.trx",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/stage-submit-confirm-delay.feature"
+        },
+        {
+          "title": "Promotion failure retries only the local transition",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-054",
+            "@HV-ID-CREATE-STAGE-005"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-SUBMISSION-MIGRATED/HV-ID-SUBMISSION-MIGRATED.trx"
+        },
+        {
+          "title": "The transaction is canonical",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-025",
+            "@HV-ID-CREATE-SUBMIT-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-SUBMISSION-MIGRATED/HV-ID-SUBMISSION-MIGRATED.trx"
+        },
+        {
+          "title": "Signatory, payload signing address, and signing key bind exactly",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-026",
+            "@HV-ID-CREATE-SUBMIT-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-SUBMISSION-MIGRATED/HV-ID-SUBMISSION-MIGRATED.trx"
+        },
+        {
+          "title": "Every cycle performs GetIdentity before submission",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-028",
+            "@HV-ID-CREATE-SUBMIT-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-SUBMISSION-MIGRATED/HV-ID-SUBMISSION-MIGRATED.trx"
+        },
+        {
+          "title": "Only authoritative absence permits submission",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-029",
+            "@HV-ID-CREATE-SUBMIT-004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-SUBMISSION-MIGRATED/HV-ID-SUBMISSION-MIGRATED.trx"
+        },
+        {
+          "title": "Exact keys confirm the same identity; encryption mismatch fails closed",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-030",
+            "@HV-ID-CREATE-SUBMIT-005"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-SUBMISSION-MIGRATED/HV-ID-SUBMISSION-MIGRATED.trx"
+        },
+        {
+          "title": "ACCEPTED promotes to saved-waiting without claiming confirmation",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-032",
+            "@HV-ID-CREATE-SUBMIT-006"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-SUBMISSION-MIGRATED/HV-ID-SUBMISSION-MIGRATED.trx"
+        },
+        {
+          "title": "PENDING waits without another submission",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-033",
+            "@HV-ID-CREATE-SUBMIT-007"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-SUBMISSION-MIGRATED/HV-ID-SUBMISSION-MIGRATED.trx"
+        },
+        {
+          "title": "ALREADY_EXISTS resolves by exact lookup only",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-034",
+            "@HV-ID-CREATE-SUBMIT-008"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-SUBMISSION-MIGRATED/HV-ID-SUBMISSION-MIGRATED.trx"
+        },
+        {
+          "title": "Status/code combinations use a closed allowlist",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-035",
+            "@HV-ID-CREATE-SUBMIT-009"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CONFIRMATION-MIGRATED/HV-ID-CONFIRMATION-MIGRATED.trx"
+        },
+        {
+          "title": "Transport ambiguity preserves the exact transaction",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-036",
+            "@HV-ID-CREATE-SUBMIT-010"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CONFIRMATION-MIGRATED/HV-ID-CONFIRMATION-MIGRATED.trx"
+        },
+        {
+          "title": "Ambiguous retries reuse exact signed bytes",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-045",
+            "@HV-ID-CREATE-SUBMIT-011"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CONFIRMATION-MIGRATED/HV-ID-CONFIRMATION-MIGRATED.trx"
+        },
+        {
+          "title": "A missing transaction can be rebuilt only after verified eligibility",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-048",
+            "@HV-ID-CREATE-SUBMIT-012"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/stage-submit-confirm-delay.feature"
+        },
+        {
+          "title": "The client never polls as retry or periodically replaces transactions",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-050",
+            "@HV-ID-CREATE-SUBMIT-013"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CONFIRMATION-MIGRATED/HV-ID-CONFIRMATION-MIGRATED.trx"
+        },
+        {
+          "title": "The waiting gate is accessible and explicit",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-037",
+            "@HV-ID-CREATE-CONFIRM-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CONFIRMATION-MIGRATED/HV-ID-CONFIRMATION-MIGRATED.trx"
+        },
+        {
+          "title": "GetIdentity polls every three seconds while eligible",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-038",
+            "@HV-ID-CREATE-CONFIRM-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CONFIRMATION-MIGRATED/HV-ID-CONFIRMATION-MIGRATED.trx"
+        },
+        {
+          "title": "Polling pauses on background, offline, Lock, or revocation",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-039",
+            "@HV-ID-CREATE-CONFIRM-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CONFIRMATION-MIGRATED/HV-ID-CONFIRMATION-MIGRATED.trx"
+        },
+        {
+          "title": "Check again performs lookup only",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-040",
+            "@HV-ID-CREATE-CONFIRM-004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CONFIRMATION-MIGRATED/HV-ID-CONFIRMATION-MIGRATED.trx"
+        },
+        {
+          "title": "Exact confirmation synchronizes and clears",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-042",
+            "@HV-ID-CREATE-CONFIRM-005"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CONFIRMATION-MIGRATED/HV-ID-CONFIRMATION-MIGRATED.trx"
+        },
+        {
+          "title": "A revoked, expired, or restarted authority requires ordinary unlock",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-043",
+            "@HV-ID-CREATE-CONFIRM-006"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/stage-submit-confirm-delay.feature"
+        },
+        {
+          "title": "Mempool acceptance alone never enters the authenticated shell",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-044",
+            "@HV-ID-CREATE-CONFIRM-007"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CONFIRMATION-MIGRATED/HV-ID-CONFIRMATION-MIGRATED.trx"
+        },
+        {
+          "title": "A lost acceptance response converges without another identity",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-053",
+            "@HV-ID-CREATE-CONFIRM-008"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-CONFIRMATION-MIGRATED/HV-ID-CONFIRMATION-MIGRATED.trx"
+        },
+        {
+          "title": "Three minutes without confirmation enters the delay state",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-041",
+            "@HV-ID-CREATE-DELAY-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-DELAY-MIGRATED/HV-ID-DELAY-MIGRATED.trx"
+        },
+        {
+          "title": "Editable alias rejection reopens Profile only",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-046",
+            "@HV-ID-CREATE-CORRECT-001"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/stage-submit-confirm-delay.feature"
+        },
+        {
+          "title": "Cryptographic and unknown rejections fail closed without retry",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-047",
+            "@HV-ID-CREATE-CORRECT-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ID-REJECTION-MIGRATED/HV-ID-REJECTION-MIGRATED.trx"
+        },
+        {
+          "title": "Blockchain reset re-registers the same identity",
+          "tags": [
+            "@FEAT-007",
+            "@AC-007-049",
+            "@HV-ID-CREATE-RESET-001"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/identity-create/stage-submit-confirm-delay.feature"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-scenarios-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "retiredScenarioIds": [
+          "HV-ID-CREATE-STAGE-002",
+          "HV-ID-CREATE-STAGE-003",
+          "HV-ID-CREATE-STAGE-005",
+          "HV-ID-CREATE-SUBMIT-001",
+          "HV-ID-CREATE-SUBMIT-002",
+          "HV-ID-CREATE-SUBMIT-003",
+          "HV-ID-CREATE-SUBMIT-004",
+          "HV-ID-CREATE-SUBMIT-005",
+          "HV-ID-CREATE-SUBMIT-006",
+          "HV-ID-CREATE-SUBMIT-007",
+          "HV-ID-CREATE-SUBMIT-008",
+          "HV-ID-CREATE-SUBMIT-009",
+          "HV-ID-CREATE-SUBMIT-010",
+          "HV-ID-CREATE-SUBMIT-011",
+          "HV-ID-CREATE-SUBMIT-013",
+          "HV-ID-CREATE-CONFIRM-001",
+          "HV-ID-CREATE-CONFIRM-002",
+          "HV-ID-CREATE-CONFIRM-003",
+          "HV-ID-CREATE-CONFIRM-004",
+          "HV-ID-CREATE-CONFIRM-005",
+          "HV-ID-CREATE-CONFIRM-007",
+          "HV-ID-CREATE-CONFIRM-008",
+          "HV-ID-CREATE-DELAY-001",
+          "HV-ID-CREATE-CORRECT-002"
+        ],
+        "remainingSourceSha256": "4216909238a97d080c277e44256692ca385241f6bdd5574ace1f6ca3eb4e9a3c",
+        "replacementValidation": [
+          "TestResults/HushVoting/2786f6b6-585a-427f-805c-9941c38c9e39/HV-ID-SUBMISSION-MIGRATED.trx",
+          "TestResults/HushVoting/05ce9848-41b9-4d5d-b6e8-c8d3869fe6bb/HV-ID-CONFIRMATION-MIGRATED.trx",
+          "TestResults/HushVoting/6d9cc8d1-54b2-4d01-8f39-af1e00681ea1/HV-ID-DELAY-MIGRATED.trx",
+          "TestResults/HushVoting/45e66325-d48f-4723-b8b3-a2e16c1fe616/HV-ID-REJECTION-MIGRATED.trx"
+        ],
+        "runner": "hush-voting-web-client/package.json",
+        "commands": [
+          "npm run test:identity-submission:bdd",
+          "npm run test:identity-confirmation:bdd",
+          "npm run test:identity-delay:bdd",
+          "npm run test:identity-rejection:bdd"
+        ],
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance"
+      }
+    },
+    {
+      "source": "features/licence-entitlements/direct-free-bootstrap.feature",
+      "sourceSha256": "0177a3accdfec03e4bd9f78b915faccb2cc811094b4ad4565990ea856c5f1573",
+      "destination": "Features/licence-entitlements/direct-free-bootstrap.feature",
+      "group": "licence-entitlements",
+      "scenarios": [
+        {
+          "title": "A no-active user enters only after signed Direct Free is indexed",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-002",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-DIRECT-FREE/HV-LIC-DIRECT-FREE.trx"
+        },
+        {
+          "title": "Existing active entitlement opens without extra confirmation",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-016-001",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-DIRECT-FREE/HV-LIC-DIRECT-FREE.trx"
+        },
+        {
+          "title": "One browser authority coordinates all tabs",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-016-002",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-DIRECT-FREE/HV-LIC-DIRECT-FREE.trx"
+        },
+        {
+          "title": "Restart queries before resubmitting pending Direct Free",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-016-003",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-DIRECT-FREE/HV-LIC-DIRECT-FREE.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-source-retired",
+        "replacementValidation": "TestResults/HushVoting/9b2dcc65-d92f-42a5-839b-40f40d456038/HV-LIC-DIRECT-FREE.trx",
+        "runner": "hush-voting-web-client/package.json#test:licence-direct-free:bdd",
+        "removedExclusiveBindings": 20,
+        "bindingSource": "browser/licence-entitlements/steps/common.ts",
+        "bindingSourceSha256": "9efc95aa77aacee24e42733352e14accb5fa9b9cc3dcd676eebb9dfba74c98b0",
+        "acceptanceReview": "open; runtime replacement does not close broader qualification or audit",
+        "postRetirementCommandValidation": "TestResults/HushVoting/5f9c0baa-a424-4962-98f2-78a48dc32ff3/HV-LIC-DIRECT-FREE.trx"
+      }
+    },
+    {
+      "source": "features/licence-entitlements/failure-recovery.feature",
+      "sourceSha256": "12af6d5f6633fa655206f24ffe7fe638e08ef775c50fb5990b8ae7de6c0d4509",
+      "destination": "Features/licence-entitlements/failure-recovery.feature",
+      "group": "licence-entitlements",
+      "scenarios": [
+        {
+          "title": "Entitlement authority failure never fabricates a plan",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-003",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx"
+        },
+        {
+          "title": "Delayed confirmation retries the exact licence transaction",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-007",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx"
+        },
+        {
+          "title": "Expiry triggers authoritative Direct Free bootstrap",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-010",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-EXPIRY/HV-LIC-EXPIRY.trx"
+        },
+        {
+          "title": "Paused chain exposes delayed recovery before 30 seconds",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-016-004",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx"
+        },
+        {
+          "title": "Temporary disconnection cannot use stale entitlement",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-016-005",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-source-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "replacementValidation": [
+          "TestResults/HushVoting/a3b901df-2501-421e-ab8c-cc91de8f41b2/HV-LIC-RECOVERY-MIGRATED.trx",
+          "TestResults/HushVoting/f099214d-45a7-4463-b69b-19a9ca44aa21/HV-LIC-EXPIRY.trx"
+        ],
+        "runner": "hush-voting-web-client/package.json",
+        "commands": [
+          "npm run test:licence-recovery:bdd",
+          "npm run test:licence-expiry:bdd"
+        ],
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "postRetirementCommandValidation": [
+          "TestResults/HushVoting/c2c1b3ea-0cf4-4c68-868c-897b445d5bd2/HV-LIC-RECOVERY-MIGRATED.trx",
+          "TestResults/HushVoting/e01f2171-4449-47f8-a9d5-3ff6275c50fa/HV-LIC-EXPIRY.trx"
+        ]
+      }
+    },
+    {
+      "source": "features/licence-entitlements/gate-safety-accessibility.feature",
+      "sourceSha256": "60be628dc2b33a07487b1d700d69c29da6665faf797744916be54edac58eb57b",
+      "destination": "Features/licence-entitlements/gate-safety-accessibility.feature",
+      "group": "licence-entitlements",
+      "scenarios": [
+        {
+          "title": "Lock prevents a late entitlement result from restoring access",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-011",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx"
+        },
+        {
+          "title": "Incompatible active projection cannot become Direct Free",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-012",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/AT-LIC-012/AT-LIC-012.trx"
+        },
+        {
+          "title": "Back cannot bypass or cancel the authenticated gate",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-016-006",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx"
+        },
+        {
+          "title": "Entitlement recovery is accessible",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-016-007",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-source-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "replacementValidation": [
+          "TestResults/HushVoting/aud122-current-serial/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx",
+          "TestResults/HushVoting/aud123-compatibility-fixed/HV-LIC-COMPATIBILITY.trx",
+          "TestResults/HushVoting/aud122-current-serial/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx",
+          "TestResults/HushVoting/aud122-current-serial/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx"
+        ],
+        "runner": "hush-voting-web-client/package.json#test:entitlement-bootstrap:bdd",
+        "commands": [
+          "npm run test:licence-compatibility:bdd",
+          "npm run test:entitlement-bootstrap:bdd"
+        ],
+        "acceptanceReview": "open; negative transport matrix passes; recognized historical retired/disabled positive examples remain pending",
+        "postRetirementCommandValidation": [
+          "TestResults/HushVoting/aud123-regressions/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx",
+          "TestResults/HushVoting/aud123-compatibility-post/HV-LIC-COMPATIBILITY.trx",
+          "TestResults/HushVoting/aud123-regressions/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx",
+          "TestResults/HushVoting/aud123-regressions/HV-LIC-RECOVERY-MIGRATED/HV-LIC-RECOVERY-MIGRATED.trx"
+        ]
+      }
+    },
+    {
+      "source": "features/licence-upgrade/account-licence-summary.feature",
+      "sourceSha256": "537071540e4f16533374cb52ed5d0edc5008d04f5b1079dc73cb31f7900b155c",
+      "destination": "Features/licence-upgrade/account-licence-summary.feature",
+      "group": "licence-upgrade",
+      "scenarios": [
+        {
+          "title": "Account popup shows the exact indexed plan, limits, and shortened public reference",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-001",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LICENCE-UPGRADE/HV-LICENCE-UPGRADE.trx"
+        },
+        {
+          "title": "The full-width licence page reflects the exact server catalogue in server order",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-004",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LICENCE-UPGRADE/HV-LICENCE-UPGRADE.trx"
+        },
+        {
+          "title": "Activation requires explicit informed confirmation and cancel commits nothing",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-005",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LICENCE-UPGRADE/HV-LICENCE-UPGRADE.trx"
+        },
+        {
+          "title": "Current lower and Enterprise actions cannot mutate the assignment",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-008",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LICENCE-UPGRADE/HV-LICENCE-UPGRADE.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-source-retired",
+        "replacementValidation": "TestResults/HushVoting/865a5b37-41d2-4fe9-b9c3-f3b022f40ab7/HV-LICENCE-UPGRADE.trx",
+        "runner": "hush-voting-web-client/package.json#test:licence-upgrade:bdd",
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "postRetirementCommandValidation": "TestResults/HushVoting/2562f553-33b8-4e73-85ec-0246071bc55b/HV-LICENCE-UPGRADE.trx"
+      }
+    },
+    {
+      "source": "features/licence-upgrade/upgrade-activation-progress.feature",
+      "sourceSha256": "98809e58e7994cadf44d4de103df1a9ff5c2fe57121bc69451e86dc94c1d3a40",
+      "destination": "Features/licence-upgrade/upgrade-activation-progress.feature",
+      "group": "licence-upgrade",
+      "scenarios": [
+        {
+          "title": "A strictly higher Veritas plan activates only after indexed confirmation",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-006",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LICENCE-UPGRADE/HV-LICENCE-UPGRADE.trx"
+        },
+        {
+          "title": "A stale current-plan or catalogue precondition refreshes and requires reselection",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-009",
+            "@TwinTest",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LICENCE-UPGRADE/HV-LICENCE-UPGRADE.trx"
+        },
+        {
+          "title": "Back and in-app navigation preserve coherent licence state",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-015",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LICENCE-UPGRADE/HV-LICENCE-UPGRADE.trx"
+        },
+        {
+          "title": "Licence surfaces are accessible and responsive across supported Web viewports",
+          "tags": [
+            "@EPIC-002",
+            "@AT-LIC-016",
+            "@Playwright",
+            "@server-fixture"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-LICENCE-UPGRADE/HV-LICENCE-UPGRADE.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-source-retired",
+        "replacementValidation": "TestResults/HushVoting/865a5b37-41d2-4fe9-b9c3-f3b022f40ab7/HV-LICENCE-UPGRADE.trx",
+        "runner": "hush-voting-web-client/package.json#test:licence-upgrade:bdd",
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "postRetirementCommandValidation": "TestResults/HushVoting/2562f553-33b8-4e73-85ec-0246071bc55b/HV-LICENCE-UPGRADE.trx"
+      }
+    },
+    {
+      "source": "features/recovery-words/custody-candidates.feature",
+      "sourceSha256": "41bebd246bbaf6b36f56598780a5d681f02d499aeb3c1a166036fe9716595625",
+      "destination": "Features/recovery-words/custody-candidates.feature",
+      "group": "recovery-words",
+      "scenarios": [
+        {
+          "title": "AC-008-016 — HV-RW-CUSTODY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-016",
+            "@HV-RW-CUSTODY-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-017 — HV-RW-CUSTODY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-017",
+            "@HV-RW-CUSTODY-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-002/HV-RW-CUSTODY-002.trx",
+          "artifactEvidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-002/HV-RW-CUSTODY-002.artifacts.json",
+          "note": "AUD-101: real Web recovery observes React props/hooks/context, allowed phrase handoff, worker replies, actual HTTP traffic, history, browser/worker storage and logs through typed input, replacement paste, candidate selection, protection and real identity/licence indexing. Detached inputs clear and independently decrypted retained slots contain only the expected concrete keys. A narrow pending-paste DOM-custody fix follows failing App and browser regressions. No native or whole-feature readiness claim."
+        },
+        {
+          "title": "AC-008-018 — HV-RW-CANDIDATES",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-018",
+            "@HV-RW-CANDIDATES-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-019 — HV-RW-CANDIDATES",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-019",
+            "@HV-RW-CANDIDATES-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-020 — HV-RW-CANDIDATES",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-020",
+            "@HV-RW-CANDIDATES-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-021 — HV-RW-CANDIDATES",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-021",
+            "@HV-RW-CANDIDATES-004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-022 — HV-RW-CONTROL",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-022",
+            "@HV-RW-CONTROL-001"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/custody-candidates.feature"
+        },
+        {
+          "title": "AC-008-023 — HV-RW-CUSTODY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-023",
+            "@HV-RW-CUSTODY-003"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/custody-candidates.feature"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-scenarios-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "retiredScenarioIds": [
+          "HV-RW-CUSTODY-001",
+          "HV-RW-CANDIDATES-001",
+          "HV-RW-CANDIDATES-002",
+          "HV-RW-CANDIDATES-003",
+          "HV-RW-CANDIDATES-004",
+          "HV-RW-CUSTODY-002"
+        ],
+        "remainingSourceSha256": "6dd7f0a7057df99c60c5c0c7683a63c667e89af73f2d62c7c7ca332415036fb3",
+        "replacementValidation": [
+          "TestResults/HushVoting/0dc57b12-1554-4e40-8709-4704fd492efe/HV-RW-CUSTODY-STAGING-MIGRATED.trx",
+          "TestResults/HushVoting/369cff75-0e9a-4adc-b4ae-5994e508c94c/HV-RW-CUSTODY-002.trx"
+        ],
+        "runner": "hush-voting-web-client/package.json",
+        "commands": [
+          "npm run test:recovery-custody-staging:bdd",
+          "npm run test:recovery-containment:bdd"
+        ],
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance"
+      }
+    },
+    {
+      "source": "features/recovery-words/entry-input-validation.feature",
+      "sourceSha256": "3ad365c454f649f34f70cf792836ce01fcaf3c63da2c5f8861f411cc87981a46",
+      "destination": "Features/recovery-words/entry-input-validation.feature",
+      "group": "recovery-words",
+      "scenarios": [
+        {
+          "title": "AC-008-001 — HV-RW-ENTRY-GUARD",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-001",
+            "@HV-RW-ENTRY-GUARD-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-002 — HV-RW-ENTRY-GUARD",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-002",
+            "@HV-RW-ENTRY-GUARD-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-003 — HV-RW-ENTRY-GUARD",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-003",
+            "@HV-RW-ENTRY-GUARD-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-004 — HV-RW-ENTRY-GUARD",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-004",
+            "@HV-RW-ENTRY-GUARD-004"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/entry-input-validation.feature"
+        },
+        {
+          "title": "AC-008-005 — HV-RW-INPUT",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-005",
+            "@HV-RW-INPUT-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-006 — HV-RW-VALIDATE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-006",
+            "@HV-RW-VALIDATE-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-007 — HV-RW-VALIDATE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-007",
+            "@HV-RW-VALIDATE-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-008 — HV-RW-PASTE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-008",
+            "@HV-RW-PASTE-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-009 — HV-RW-PASTE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-009",
+            "@HV-RW-PASTE-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-010 — HV-RW-PASTE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-010",
+            "@HV-RW-PASTE-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-011 — HV-RW-PASTE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-011",
+            "@HV-RW-PASTE-004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-012 — HV-RW-PASTE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-012",
+            "@HV-RW-PASTE-005"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-013 — HV-RW-INPUT",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-013",
+            "@HV-RW-INPUT-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-014 — HV-RW-INPUT",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-014",
+            "@HV-RW-INPUT-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-015 — HV-RW-VALIDATE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-015",
+            "@HV-RW-VALIDATE-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-scenarios-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "retiredScenarioIds": [
+          "HV-RW-ENTRY-GUARD-001",
+          "HV-RW-ENTRY-GUARD-002",
+          "HV-RW-ENTRY-GUARD-003",
+          "HV-RW-INPUT-001",
+          "HV-RW-VALIDATE-001",
+          "HV-RW-VALIDATE-002",
+          "HV-RW-PASTE-001",
+          "HV-RW-PASTE-002",
+          "HV-RW-PASTE-003",
+          "HV-RW-PASTE-004",
+          "HV-RW-PASTE-005",
+          "HV-RW-INPUT-002",
+          "HV-RW-INPUT-003",
+          "HV-RW-VALIDATE-003"
+        ],
+        "remainingSourceSha256": "220521bc8e32b264fd739a3682de2d3c89e890e856b469239292e40fd745e5f6",
+        "replacementValidation": "TestResults/HushVoting/792b540b-25e6-49e3-b31c-24ac80065cd5/HV-RECOVERY-INPUT-MIGRATED.trx",
+        "runner": "hush-voting-web-client/package.json#test:recovery-input:bdd",
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "postRetirementCommandValidation": "TestResults/HushVoting/e9588548-c516-48db-a4bf-17ca8635fc79/HV-RECOVERY-INPUT-MIGRATED.trx"
+      }
+    },
+    {
+      "source": "features/recovery-words/lookup-select-profile-recreate.feature",
+      "sourceSha256": "3f642dc55d8ee685d374feb6b13fbac860ce1afcf27b44010cc62f86bfa24a21",
+      "destination": "Features/recovery-words/lookup-select-profile-recreate.feature",
+      "group": "recovery-words",
+      "scenarios": [
+        {
+          "title": "AC-008-024 — HV-RW-LOOKUP",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-024",
+            "@HV-RW-LOOKUP-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-025 — HV-RW-LOOKUP",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-025",
+            "@HV-RW-LOOKUP-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-026 — HV-RW-LOOKUP",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-026",
+            "@HV-RW-LOOKUP-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-027 — HV-RW-LOOKUP",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-027",
+            "@HV-RW-LOOKUP-004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-028 — HV-RW-LOOKUP",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-028",
+            "@HV-RW-LOOKUP-005"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-029 — HV-RW-SELECT",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-029",
+            "@HV-RW-SELECT-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-030 — HV-RW-SELECT",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-030",
+            "@HV-RW-SELECT-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-031 — HV-RW-SELECT",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-031",
+            "@HV-RW-SELECT-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-032 — HV-RW-SELECT",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-032",
+            "@HV-RW-SELECT-004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-033 — HV-RW-SELECT",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-033",
+            "@HV-RW-SELECT-005"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-034 — HV-RW-PROFILE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-034",
+            "@HV-RW-PROFILE-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-035 — HV-RW-PROFILE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-035",
+            "@HV-RW-PROFILE-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-057 — HV-RW-RECREATE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-057",
+            "@HV-RW-RECREATE-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-058 — HV-RW-RECREATE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-058",
+            "@HV-RW-RECREATE-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-059 — HV-RW-RECREATE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-059",
+            "@HV-RW-RECREATE-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        },
+        {
+          "title": "AC-008-061 — HV-RW-RECREATE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-061",
+            "@HV-RW-RECREATE-004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
+        }
+      ],
+      "retirement": {
+        "state": "typescript-source-retired",
+        "replacementValidation": "TestResults/HushVoting/43266782-45d8-46a3-a6e7-0aeefb800965/HV-RW-PROFILES.trx",
+        "runner": "hush-voting-web-client/package.json#test:recovery-profiles:bdd",
+        "removedExclusiveBindings": 12,
+        "bindingSource": "browser/recovery-words/steps/common.ts",
+        "bindingSourceSha256": "d44cb68776378550175813a7df5e41a7f5e3a92a1bc5b8fc7ff999dbe5fa1834",
+        "acceptanceReview": "open; runtime replacement does not close broader qualification or semantic audit",
+        "postRetirementCommandValidation": "TestResults/HushVoting/266bad83-ffea-47e8-9d93-d0daa6ec65b5/HV-RW-PROFILES.trx"
+      }
+    },
+    {
+      "source": "features/recovery-words/protection-staging-session.feature",
+      "sourceSha256": "2edd61dd9b037832751d3796f517714010fe38ce3ccd222429a27e9ea15ed8d5",
+      "destination": "Features/recovery-words/protection-staging-session.feature",
+      "group": "recovery-words",
+      "scenarios": [
+        {
+          "title": "AC-008-036 — HV-RW-PASSWORD",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-036",
+            "@HV-RW-PASSWORD-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-037 — HV-RW-STAGE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-037",
+            "@HV-RW-STAGE-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-STAGE-001/HV-RW-STAGE-001.trx"
+        },
+        {
+          "title": "AC-008-038 — HV-RW-SESSION",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-038",
+            "@HV-RW-SESSION-001"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-040 — HV-RW-PASSWORD",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-040",
+            "@HV-RW-PASSWORD-002"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-041 — HV-RW-PASSWORD",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-041",
+            "@HV-RW-PASSWORD-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PASSWORD-003/HV-RW-PASSWORD-003.trx",
+          "acceptanceReview": "AUD-117 proves the Web device-password wrapping hierarchy, exact recovered keys, browser process loss and canonical-equivalent fresh unlock. Full shared password-policy inputs/strength integration and native sequential wrapping remain under FEAT-032 and the owning platform requirements; no whole-FEAT/EPIC readiness claim."
+        },
+        {
+          "title": "AC-008-042 — HV-RW-PASSKEY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-042",
+            "@HV-RW-PASSKEY-001"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-043 — HV-RW-PASSKEY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-043",
+            "@HV-RW-PASSKEY-002"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-044 — HV-RW-PASSKEY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-044",
+            "@HV-RW-PASSKEY-003"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-045 — HV-RW-PASSKEY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-045",
+            "@HV-RW-PASSKEY-004"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-046 — HV-RW-PASSKEY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-046",
+            "@HV-RW-PASSKEY-005"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-047 — HV-RW-PASSKEY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-047",
+            "@HV-RW-PASSKEY-006"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-048 — HV-RW-NATIVE-PASSWORDLESS",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-048",
+            "@HV-RW-NATIVE-PASSWORDLESS-001"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-049 — HV-RW-NATIVE-PASSWORDLESS",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-049",
+            "@HV-RW-NATIVE-PASSWORDLESS-002"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-050 — HV-RW-NATIVE-PASSWORDLESS",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-050",
+            "@HV-RW-NATIVE-PASSWORDLESS-003"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-051 — HV-RW-SESSION",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-051",
+            "@HV-RW-SESSION-002"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-053 — HV-RW-STAGE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-053",
+            "@HV-RW-STAGE-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-054 — HV-RW-STAGE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-054",
+            "@HV-RW-STAGE-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-055 — HV-RW-STAGE",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-055",
+            "@HV-RW-STAGE-004"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-060 — HV-RW-SESSION",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-060",
+            "@HV-RW-SESSION-003"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
+        },
+        {
+          "title": "AC-008-081 — HV-RW-PASSKEY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-081",
+            "@HV-RW-PASSKEY-007"
+          ],
+          "status": "pending-external-qualification",
+          "externalQualification": {
+            "kind": "physical-device-prf",
+            "status": "NOT_SUPPLIED"
+          }
+        }
+      ],
+      "retirement": {
+        "state": "typescript-scenarios-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "retiredScenarioIds": [
+          "HV-RW-STAGE-001",
+          "HV-RW-PASSWORD-001",
+          "HV-RW-STAGE-002",
+          "HV-RW-STAGE-003",
+          "HV-RW-STAGE-004",
+          "HV-RW-PASSWORD-003"
+        ],
+        "remainingSourceSha256": "5adbc5f990a2ea12e00105142a15278e00fb292688d58e3ada3c1413b35d6c15",
+        "replacementValidation": [
+          "TestResults/HushVoting/0dc57b12-1554-4e40-8709-4704fd492efe/HV-RW-CUSTODY-STAGING-MIGRATED.trx",
+          "TestResults/HushVoting/1a986e4e-353e-4e00-8715-e2c6d214b401/HV-RW-STAGE-001.trx",
+          "TestResults/HushVoting/d41b4abb-630f-43be-9ae5-d02e102722a8/HV-RW-PASSWORD-HIERARCHY.trx"
+        ],
+        "runner": "hush-voting-web-client/package.json",
+        "commands": [
+          "npm run test:recovery-custody-staging:bdd",
+          "npm run test:recovery-destruction:bdd",
+          "npm run test:recovery-password-hierarchy:bdd"
+        ],
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "bindingNote": "AUD-117 retires the passing Web password-hierarchy original. Shared TS protection handlers remain because pending HV-RW-PASSWORD-002 still uses them.",
+        "postRetirementCommandValidation": [
+          "TestResults/HushVoting/aud114-current/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx",
+          "TestResults/HushVoting/aud114-current/HV-RW-STAGE-001/HV-RW-STAGE-001.trx",
+          "TestResults/HushVoting/6e6d2be2-715f-4a72-9dfc-53edddaabc61/HV-RW-PASSWORD-HIERARCHY.trx"
+        ]
+      }
+    },
+    {
+      "source": "features/recovery-words/resume-nav-owner-cleanup-migration-security.feature",
+      "sourceSha256": "4135ca7a0ee5172ba51b271f88a115537966b2b4b2c134e8af951eebb40273b9",
+      "destination": "Features/recovery-words/resume-nav-owner-cleanup-migration-security.feature",
+      "group": "recovery-words",
+      "scenarios": [
+        {
+          "title": "AC-008-039 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-039",
+            "@HV-RW-SECURITY-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-052 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-052",
+            "@HV-RW-SECURITY-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-056 — HV-RW-RESUME",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-056",
+            "@HV-RW-RESUME-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-062 — HV-RW-RESUME",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-062",
+            "@HV-RW-RESUME-002"
+          ],
+          "status": "pending-implementation",
+          "evidence": "TestResults/HushVoting/a3b841ab-cf44-4290-b51e-0d14a9695d36/HV-STAGED-RESUME.trx",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-063 — HV-RW-RESUME",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-063",
+            "@HV-RW-RESUME-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-064 — HV-RW-NAV",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-064",
+            "@HV-RW-NAV-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-065 — HV-RW-NAV",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-065",
+            "@HV-RW-NAV-002"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-NAVIGATION/HV-RW-NAVIGATION.trx",
+          "acceptanceReview": "Web browser/in-app Back and stale/forged history replacement passes; Android Back qualification (FEAT-008 Phase 6 Tasks 6.5/6.6), persisted page-cache revalidation (FEAT-024), and full acceptance review remain open."
+        },
+        {
+          "title": "AC-008-066 — HV-RW-OWNER",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-066",
+            "@HV-RW-OWNER-001"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-067 — HV-RW-OWNER",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-067",
+            "@HV-RW-OWNER-002"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-068 — HV-RW-CLEANUP",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-068",
+            "@HV-RW-CLEANUP-001"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
+        },
+        {
+          "title": "AC-008-069 — HV-RW-CLEANUP",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-069",
+            "@HV-RW-CLEANUP-002"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-070 — HV-RW-CLEANUP",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-070",
+            "@HV-RW-CLEANUP-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CLEANUP-QUARANTINE/HV-RW-CLEANUP-QUARANTINE.trx"
+        },
+        {
+          "title": "AC-008-071 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-071",
+            "@HV-RW-SECURITY-003"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-SECURITY-003/HV-RW-SECURITY-003.trx"
+        },
+        {
+          "title": "AC-008-072 — HV-RW-MIGRATION",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-072",
+            "@HV-RW-MIGRATION-001"
+          ],
+          "status": "pending-implementation",
+          "note": "AUD-113: submitted FEAT-036 owns user-assisted refinement of historical/current vault versions, global no-mnemonic replacement, exact creation network/staging boundary, historical unlock, verified conversion and rollback/deletion. Aggregate replacement-contract gates require complete cross-feature qualification, not artifact scans or one current-format success. Source findings only; no legacy migration runtime pass. Preserve pending status and TypeScript original.",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-073 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-073",
+            "@HV-RW-SECURITY-004"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-074 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-074",
+            "@HV-RW-SECURITY-005"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-075 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-075",
+            "@HV-RW-SECURITY-006"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-076 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-076",
+            "@HV-RW-SECURITY-007"
+          ],
+          "status": "passed",
+          "evidenceLayer": "backend-twin",
+          "note": "Original criterion explicitly requires HushServerNode TwinTests; direct real RPC/indexing/reset replacement, not EPIC browser acceptance. AUD-099.",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ORIGINAL-IDENTITY-TWIN/HV-ORIGINAL-IDENTITY-TWIN.trx"
+        },
+        {
+          "title": "AC-008-077 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-077",
+            "@HV-RW-SECURITY-008"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx",
+          "artifactEvidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.artifacts.json"
+        },
+        {
+          "title": "AC-008-078 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-078",
+            "@HV-RW-SECURITY-009"
+          ],
+          "status": "pending-implementation",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-079 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-079",
+            "@HV-RW-SECURITY-010"
+          ],
+          "status": "pending-implementation",
+          "evidence": "TestResults/HushVoting/480af110-22a1-4629-b85e-f5f4776d5de8/HV-ACCESSIBILITY.trx",
+          "note": "AUD-109: all three real keyboard/browser/server journeys pass 28 checkpoints in three display modes, adding profile required/length errors, three-failure challenge closure and same-candidate review, and structural file error correction. No production changes. Full focus, zoom/reflow, assistive-technology, forced-colour contrast and remaining branch qualification stay pending; TypeScript original retained.",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-080 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-080",
+            "@HV-RW-SECURITY-011"
+          ],
+          "status": "pending-implementation",
+          "note": "AUD-112: original TS artifact-scanning steps did not test this performance AC. The .NET declaration now preserves the full numerical performance/resource requirement. Five new App Twins and live lookup/read/full-journey regressions fix and verify the 150ms lookup/read progress subset only. Full qualification, including the approved minimum Web hardware/workload and other matrix obligations, remains pending; no TypeScript retirement. See Architecture/PERFORMANCE_ACCEPTANCE_MATRIX.md in the canonical HushVoting MemoryBank.",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-082 — HV-RW-MIGRATION",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-082",
+            "@HV-RW-MIGRATION-002"
+          ],
+          "status": "pending-implementation",
+          "note": "AUD-113: submitted FEAT-036 owns user-assisted refinement of historical/current vault versions, global no-mnemonic replacement, exact creation network/staging boundary, historical unlock, verified conversion and rollback/deletion. Aggregate replacement-contract gates require complete cross-feature qualification, not artifact scans or one current-format success. Source findings only; no legacy migration runtime pass. Preserve pending status and TypeScript original.",
+          "migrationDisposition": "retained-typescript-frontend-twin",
+          "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
+        },
+        {
+          "title": "AC-008-083 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-083",
+            "@HV-RW-SECURITY-012"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-BACKEND-RELEASE/HV-BACKEND-RELEASE.trx",
+          "note": "AUD-119: complete named backend TwinTest prerequisite verified by exact ID/title/outcome/provenance/artifact evidence, followed by this real Web missing-profile identity/protection/indexing/licence journey. Whole-product release and other native/external criteria are not evaluated. TypeScript original retired."
+        },
+        {
+          "title": "AC-008-084 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-084",
+            "@HV-RW-SECURITY-013"
+          ],
+          "status": "passed",
+          "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RELEASE-PINS/HV-RELEASE-PINS.trx",
+          "note": "AUD-110: real Web/node journey followed by content-addressed exact input pins, manifest-member verification, independent reread and mutation canaries. This pin-recording criterion does not assert release admission or handoff semantic qualification; external states remain unchanged. TypeScript original retired."
+        },
+        {
+          "title": "AC-008-085 — HV-RW-SECURITY",
+          "tags": [
+            "@FEAT-008",
+            "@AC-008-085",
+            "@HV-RW-SECURITY-014"
+          ],
+          "status": "pending-external-qualification",
+          "externalQualification": {
+            "kind": "independent-security-review",
+            "status": "NOT_SUPPLIED"
+          }
+        }
+      ],
+      "retirement": {
+        "state": "typescript-scenarios-retired",
+        "originalSourceCommit": "2c14c219e038f248404a5d3fbb8612cf4369ecee",
+        "retiredScenarioIds": [
+          "HV-RW-SECURITY-001",
+          "HV-RW-SECURITY-002",
+          "HV-RW-RESUME-001",
+          "HV-RW-RESUME-003",
+          "HV-RW-NAV-001",
+          "HV-RW-CLEANUP-001",
+          "HV-RW-SECURITY-008",
+          "HV-RW-SECURITY-003",
+          "HV-RW-CLEANUP-003",
+          "HV-RW-NAV-002",
+          "HV-RW-SECURITY-007",
+          "HV-RW-SECURITY-013",
+          "HV-RW-SECURITY-012"
+        ],
+        "remainingSourceSha256": "3f524506bc7f0ec9205a0afc10dac73f5e2fac5fc71ef4d721d8925674bbe846",
+        "replacementValidation": [
+          "TestResults/HushVoting/4735e9af-8e70-40fb-a5c1-988738d46459/HV-RW-LIFECYCLE-MIGRATED.trx",
+          "TestResults/HushVoting/cc6ecbc7-4a1e-464a-8e90-514757cc17ed/HV-RW-SUCCESS.trx",
+          "TestResults/HushVoting/25e651be-8506-4c0a-9493-f373904dcdcd/HV-RW-CLEANUP-QUARANTINE.trx",
+          "TestResults/HushVoting/d5438c6d-254a-43e1-b39b-8f6098e9aced/HV-RW-NAVIGATION.trx",
+          "TestResults/HushVoting/cee4f64c-1ca4-47d4-9577-9c6629ce88aa/HV-ORIGINAL-IDENTITY-TWIN.trx",
+          "TestResults/HushVoting/8ba436e3-1e6b-49df-a77d-585584f424db/HV-RELEASE-PINS.trx",
+          "TestResults/HushVoting/aud119-release-verified/HV-BACKEND-RELEASE/HV-BACKEND-RELEASE.trx"
+        ],
+        "runner": "hush-voting-web-client/package.json",
+        "commands": [
+          "npm run test:recovery-lifecycle:bdd",
+          "npm run test:recovery-success:bdd",
+          "npm run test:recovery-cleanup-quarantine:bdd",
+          "npm run test:recovery-navigation:bdd",
+          "npm run test:identity-acceptance-server-twins",
+          "npm run test:release-pins:bdd",
+          "npm run test:backend-release:bdd"
+        ],
+        "acceptanceReview": "open; runtime replacement is not full criterion acceptance",
+        "bindingNote": "AUD-088 removes three TypeScript navigation handlers used only by HV-RW-NAV-002; remaining handlers are retained for their pending originals. AUD-110 retires its release-pin original after live browser/server pin validation. The dedicated command passes 3/3 again after retirement; other incomplete qualification handlers are retained. AUD-119 retires the backend release-prerequisite original only after all owned backend cases and its actual missing-profile Web consumer pass; other criteria remain pending.",
+        "postRetirementCommandValidation": [
+          "TestResults/HushVoting/4735e9af-8e70-40fb-a5c1-988738d46459/HV-RW-LIFECYCLE-MIGRATED.trx",
+          "TestResults/HushVoting/cc6ecbc7-4a1e-464a-8e90-514757cc17ed/HV-RW-SUCCESS.trx",
+          "TestResults/HushVoting/25e651be-8506-4c0a-9493-f373904dcdcd/HV-RW-CLEANUP-QUARANTINE.trx",
+          "TestResults/HushVoting/d5438c6d-254a-43e1-b39b-8f6098e9aced/HV-RW-NAVIGATION.trx",
+          "TestResults/HushVoting/cee4f64c-1ca4-47d4-9577-9c6629ce88aa/HV-ORIGINAL-IDENTITY-TWIN.trx",
+          "TestResults/HushVoting/8ba436e3-1e6b-49df-a77d-585584f424db/HV-RELEASE-PINS.trx",
+          "TestResults/HushVoting/aud119-release-post/HV-BACKEND-RELEASE/HV-BACKEND-RELEASE.trx"
+        ]
+      }
+    }
+  ]
+}

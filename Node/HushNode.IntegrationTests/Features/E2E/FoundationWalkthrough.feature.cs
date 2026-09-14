@@ -48,9 +48,9 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Foundation User Walkthrough", "    As a new user\r\n    I want to create my identity, send a message, and react to" +
-                    " another user\'s message\r\n    So that I can verify the full system works end-to-e" +
-                    "nd", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Foundation User Walkthrough", "    As a new user\n    I want to create my identity, send a message, and react to " +
+                    "another user\'s message\n    So that I can verify the full system works end-to-end" +
+                    "", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

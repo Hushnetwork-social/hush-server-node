@@ -206,13 +206,13 @@ Elections:Sp07PublicationProof:VerifyAfterProve
 
 Run the matching C# hot-path benchmark from the `hush-server-node` root:
 
-```powershell
-dotnet Tools\HushVotingPublicationProofPoc\bin\Release\net9.0\HushVotingPublicationProofPoc.dll hotbench `
-  --ballots 1000 `
-  --slots 8 `
-  --rounds 2 `
-  --mode pippenger `
-  --output artifacts\sp07-language-bench\csharp-n1000-k8.json
+```bash
+dotnet Tools/HushVotingPublicationProofPoc/bin/Release/net10.0/HushVotingPublicationProofPoc.dll hotbench \
+  --ballots 1000 \
+  --slots 8 \
+  --rounds 2 \
+  --mode pippenger \
+  --output artifacts/sp07-language-bench/csharp-n1000-k8.json
 ```
 
 The checksums must match for the same `N,K` pair. Matching checksums prove that both tools used the

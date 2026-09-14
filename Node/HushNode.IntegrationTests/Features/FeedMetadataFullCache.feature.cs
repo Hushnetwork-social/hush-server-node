@@ -42,9 +42,9 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-065 Feed Metadata Full Cache (E1 — 6-field Redis Hash)", "  As a feed list endpoint\r\n  I want full feed metadata stored in a per-user Redis" +
-                    " Hash\r\n  So that GetFeedsForAddress can serve the complete feed list from a sing" +
-                    "le HGETALL", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-065 Feed Metadata Full Cache (E1 — 6-field Redis Hash)", "  As a feed list endpoint\n  I want full feed metadata stored in a per-user Redis " +
+                    "Hash\n  So that GetFeedsForAddress can serve the complete feed list from a single" +
+                    " HGETALL", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

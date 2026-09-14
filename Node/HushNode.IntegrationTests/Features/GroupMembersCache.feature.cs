@@ -42,8 +42,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Group Members Cache with Display Names", "  As a client displaying group members\r\n  I want group members cached with displa" +
-                    "y names\r\n  So that GetGroupMembers doesn\'t make N+1 identity lookups", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Group Members Cache with Display Names", "  As a client displaying group members\n  I want group members cached with display" +
+                    " names\n  So that GetGroupMembers doesn\'t make N+1 identity lookups", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

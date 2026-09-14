@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HushNode.Identity;
 using HushShared.Blockchain.Model;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
@@ -37,13 +38,18 @@ internal static class TestTransactionFactory
             identity.PublicEncryptAddress,
             IsPublic: false);
 
-        var unsignedTransaction = UnsignedTransactionHandler.CreateNew(
+        var serializer = new FullIdentityCanonicalSerializer();
+        var unsignedTransaction = new UnsignedTransaction<FullIdentityPayload>(
+            TransactionId.NewTransactionId,
             FullIdentityPayloadHandler.FullIdentityPayloadKind,
             Timestamp.Current,
-            payload);
+            payload,
+            serializer.PayloadJsonUtf8Length(payload.IdentityAlias, payload.PublicSigningAddress,
+                payload.PublicEncryptAddress, payload.IsPublic));
 
         var signature = DigitalSignature.SignMessage(
-            unsignedTransaction.ToJson(),
+            serializer.SerializeCanonicalUnsignedJson(new SignedTransaction<FullIdentityPayload>(
+                unsignedTransaction, new SignatureInfo(identity.PublicSigningAddress, string.Empty))),
             identity.PrivateSigningKey);
 
         var signedTransaction = new SignedTransaction<FullIdentityPayload>(

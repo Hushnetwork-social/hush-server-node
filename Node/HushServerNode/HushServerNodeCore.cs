@@ -30,6 +30,8 @@ using HushNode.Feeds;
 using HushNode.Feeds.gRPC;
 using HushNode.Elections;
 using HushNode.Elections.gRPC;
+using HushNode.HushVoting.Licence.gRPC;
+using HushNode.HushVoting.Licensing.Storage;
 using HushNode.Reactions;
 using HushNode.Reactions.gRPC;
 using HushNode.Caching;
@@ -40,6 +42,7 @@ using StackExchange.Redis;
 using HushNode.UrlMetadata.gRPC;
 using HushNode.Events;
 using HushNode.Indexing.Interfaces;
+using HushServerNode.HushVotingLicensingIntegration;
 using HushServerNode.Testing;
 
 namespace HushServerNode;
@@ -102,7 +105,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         string? redisConnectionString = null,
         ILoggerProvider? diagnosticLoggerProvider = null,
         IReadOnlyDictionary<string, string?>? configurationOverrides = null,
-        Action<IServiceCollection>? configureTestServices = null)
+        Action<IServiceCollection>? configureTestServices = null,
+        bool resetDatabase = true)
     {
         var testConfig = new TestConfiguration(
             blockProductionControl,
@@ -110,7 +114,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             redisConnectionString,
             diagnosticLoggerProvider,
             ConfigurationOverrides: configurationOverrides,
-            ConfigureTestServices: configureTestServices);
+            ConfigureTestServices: configureTestServices,
+            ResetDatabase: resetDatabase);
         var app = BuildApplication(Array.Empty<string>(), testConfig);
         return new HushServerNodeCore(app, blockProductionControl, isTestMode: true);
     }
@@ -467,7 +472,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
 
-            if (testConfig != null)
+            if (testConfig is { ResetDatabase: true })
             {
                 // In test mode: ensure a clean database by deleting everything first
                 // This handles any leftover state from previous test runs
@@ -564,7 +569,10 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             .RegisterInternalModuleIdentity()
             .RegisterNotificationGrpc()
             .RegisterPushNotificationsModule()
-            .RegisterCoreModuleUrlMetadata();
+            .RegisterCoreModuleUrlMetadata()
+            .RegisterHushVotingLicensing()
+            .RegisterHushVotingLicensingIntegration()
+            .RegisterHushVotingLicenceCache();
 
         if (testConfig != null)
         {
@@ -723,7 +731,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                     new IndexingDispatcherService(
                         sp.GetRequiredService<IEnumerable<IIndexStrategy>>(),
                         sp.GetRequiredService<IEventAggregator>(),
-                        onBlockFinalized)));
+                        onBlockFinalized,
+                        sp.GetServices<IBlockContextIndexStrategy>())));
             });
 
             // Add diagnostic logger provider if supplied
@@ -750,6 +759,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         app.MapGrpcService<MembershipGrpcService>();
         app.MapGrpcService<NotificationGrpcService>();
         app.MapGrpcService<UrlMetadataGrpcService>();
+        app.MapGrpcService<HushNode.HushVoting.Licence.gRPC.HushVotingLicenceGrpcService>();
 
         app.MapGrpcReflectionService();
     }
@@ -786,5 +796,6 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         IReadOnlyDictionary<string, string?>? ConfigurationOverrides = null,
         Action<IServiceCollection>? ConfigureTestServices = null,
         int? FixedGrpcPort = null,
-        int? FixedGrpcWebPort = null);
+        int? FixedGrpcWebPort = null,
+        bool ResetDatabase = true);
 }

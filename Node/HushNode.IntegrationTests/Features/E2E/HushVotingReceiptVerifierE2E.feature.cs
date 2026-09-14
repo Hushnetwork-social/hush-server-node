@@ -48,9 +48,9 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "HushVoting Receipt Verifier", "    As a public HushVoting verifier\r\n    I want to verify a receipt against a fin" +
-                    "alized package in the browser\r\n    So that receipt inclusion does not depend on " +
-                    "the original device or session", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "HushVoting Receipt Verifier", "    As a public HushVoting verifier\n    I want to verify a receipt against a fina" +
+                    "lized package in the browser\n    So that receipt inclusion does not depend on th" +
+                    "e original device or session", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

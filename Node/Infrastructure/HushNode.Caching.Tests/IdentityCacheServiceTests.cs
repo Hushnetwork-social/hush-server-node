@@ -22,6 +22,34 @@ public class IdentityCacheServiceTests
 
     #region GetIdentityAsync Tests
 
+    // FEAT-011 Phase 3 Tasks 3.5/3.6, 3.7/3.8; shared FEAT-048 fallback.
+    [Theory]
+    [InlineData("wrong-signing-address")]
+    [InlineData("null-signing-address")]
+    [InlineData("null-encryption-address")]
+    [InlineData("null-alias")]
+    public async Task GetIdentityAsync_UnusableCachedProfile_ReturnsMissWithoutRefreshingTtl(string defect)
+    {
+        var (sut, databaseMock, _) = CreateCacheService();
+        var valid = CreateTestProfile();
+        var corrupted = defect switch
+        {
+            "wrong-signing-address" => valid with { PublicSigningAddress = "another-public-address" },
+            "null-signing-address" => valid with { PublicSigningAddress = null! },
+            "null-encryption-address" => valid with { PublicEncryptAddress = null! },
+            "null-alias" => valid with { Alias = null! },
+            _ => throw new InvalidOperationException("Unknown test case")
+        };
+        databaseMock.Setup(x => x.StringGetAsync(ExpectedKey, CommandFlags.None)).ReturnsAsync(SerializeProfile(corrupted));
+
+        var result = await sut.GetIdentityAsync(TestAddress);
+
+        result.Should().BeNull();
+        sut.CacheMisses.Should().Be(1);
+        sut.CacheHits.Should().Be(0);
+        databaseMock.Verify(x => x.KeyExpireAsync(ExpectedKey, IdentityCacheConstants.CacheTtl, ExpireWhen.Always, CommandFlags.None), Times.Never);
+    }
+
     [Fact]
     public async Task GetIdentityAsync_CacheMiss_ReturnsNull()
     {

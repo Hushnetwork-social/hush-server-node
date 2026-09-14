@@ -270,6 +270,54 @@ public class BlockProductionSchedulerServiceTests
         receivedValues.Should().HaveCount(1);
     }
 
+    [Fact]
+    public async Task DisposeAsync_ShouldWaitForActiveBlockProductionAndRejectNewTriggers()
+    {
+        // Arrange
+        var mocks = CreateMocks();
+        var testSubject = new Subject<long>();
+        var blockStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseBlock = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Mock.Get(mocks.BlockchainCache)
+            .SetupGet(cache => cache.BlockchainStateInDatabase)
+            .Returns(true);
+        Mock.Get(mocks.BlockAssembler)
+            .Setup(assembler => assembler.AssembleBlockAsync(It.IsAny<IEnumerable<AbstractTransaction>>()))
+            .Returns(async () =>
+            {
+                blockStarted.TrySetResult();
+                await releaseBlock.Task;
+            });
+
+        var service = new BlockProductionSchedulerService(
+            mocks.BlockAssembler,
+            mocks.MemPool,
+            mocks.BlockchainStorage,
+            mocks.BlockchainCache,
+            mocks.EventAggregator,
+            mocks.BlockchainSettings,
+            mocks.Logger,
+            () => testSubject.AsObservable());
+        service.Handle(new BlockchainInitializedEvent());
+        testSubject.OnNext(1);
+        await blockStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        // Act
+        var disposeTask = service.DisposeAsync().AsTask();
+
+        // Assert
+        disposeTask.IsCompleted.Should().BeFalse("shutdown must wait for active indexing to finish");
+        releaseBlock.TrySetResult();
+        await disposeTask;
+
+        testSubject.OnNext(2);
+        Mock.Get(mocks.BlockAssembler).Verify(
+            assembler => assembler.AssembleBlockAsync(It.IsAny<IEnumerable<AbstractTransaction>>()),
+            Times.Once);
+        Mock.Get(mocks.EventAggregator).Verify(aggregator => aggregator.Unsubscribe(service), Times.Once);
+    }
+
     #endregion
 
     #region Helper Methods

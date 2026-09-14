@@ -46,8 +46,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "HushSocial end-to-end walkthrough", "  As a Hush user\r\n  I want to use HushSocial from navigation through posting and " +
-                    "interactions\r\n  So that EPIC-008 behavior works in real user flows", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "HushSocial end-to-end walkthrough", "  As a Hush user\n  I want to use HushSocial from navigation through posting and i" +
+                    "nteractions\n  So that EPIC-008 behavior works in real user flows", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         
