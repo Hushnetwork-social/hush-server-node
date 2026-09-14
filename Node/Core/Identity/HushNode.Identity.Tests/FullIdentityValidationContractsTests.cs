@@ -103,16 +103,16 @@ public sealed class FullIdentityValidationContractsTests
     [Fact]
     public void SignatureEncodingClassifier_RecognizesApprovedDerHex()
     {
-        // DER ECDSA: 30 45 | 02 21 <32> | 02 20 <32>  → 70 bytes, 0x30 tag.
+        // DER ECDSA: sequence containing two positive 32-byte integers.
         var der = new byte[70];
         der[0] = 0x30;
-        der[1] = 0x45;
+        der[1] = 0x44;
         der[2] = 0x02;
-        der[3] = 0x21;
+        der[3] = 0x20;
         der[4] = 0x01; // first r byte (nonzero by construction)
-        der[37] = 0x02;
-        der[38] = 0x20;
-        der[39] = 0x01;
+        der[36] = 0x02;
+        der[37] = 0x20;
+        der[38] = 0x01;
 
         SignatureEncodingClassifier.Classify(Convert.ToHexString(der))
             .Should()

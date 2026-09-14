@@ -161,12 +161,12 @@ public sealed record FullIdentityDiagnostic(string ValidationCode);
 /// <summary>
 /// Pure signature-encoding classification (compact base64 r||s vs Approved
 /// historical DER hex). Unknown/ambiguous input classifies as null and fails
-/// closed; classification never decodes or verifies.
+/// closed; classification checks the encoding without verifying the signature.
 /// </summary>
 public static class SignatureEncodingClassifier
 {
     public const int CompactSignatureByteLength = 64;
-    public const int DerMinimumByteLength = 70;
+    public const int DerMinimumByteLength = 8;
     public const int DerMaximumByteLength = 72;
 
     public static ApprovedSignatureEncoding? Classify(string signature)
@@ -190,15 +190,40 @@ public static class SignatureEncodingClassifier
             // Not base64 — try the Approved DER hex form.
         }
 
-        // Approved historical DER: hex, 70–72 bytes, sequence tag 0x30.
+        // DER integers have variable width. A valid nonce can produce a
+        // shorter scalar; 70–72 bytes is common, not a minimum contract.
         if (TryParseHex(signature, out byte[] der) &&
-            der.Length is >= DerMinimumByteLength and <= DerMaximumByteLength &&
-            der[0] == 0x30)
+            IsCanonicalDer(der))
         {
             return ApprovedSignatureEncoding.Der;
         }
 
         return null;
+    }
+
+    private static bool IsCanonicalDer(ReadOnlySpan<byte> der)
+    {
+        if (der.Length is < DerMinimumByteLength or > DerMaximumByteLength ||
+            der[0] != 0x30 || der[1] != der.Length - 2)
+        {
+            return false;
+        }
+
+        var offset = 2;
+        return ReadPositiveInteger(der, ref offset) &&
+            ReadPositiveInteger(der, ref offset) && offset == der.Length;
+    }
+
+    private static bool ReadPositiveInteger(ReadOnlySpan<byte> der, ref int offset)
+    {
+        if (offset + 2 > der.Length || der[offset++] != 0x02) return false;
+        var length = der[offset++];
+        if (length is < 1 or > 33 || offset + length > der.Length) return false;
+        var first = der[offset];
+        if ((first & 0x80) != 0 || (length == 33 && first != 0)) return false;
+        if (length > 1 && first == 0 && (der[offset + 1] & 0x80) == 0) return false;
+        offset += length;
+        return true;
     }
 
     private static bool TryParseHex(string text, out byte[] bytes)
