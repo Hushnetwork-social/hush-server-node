@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-test_filter='Category!=Performance&Category!=PerformanceTest&Category!=E2E&Category!=HS-INT-087-CROSS-RUNTIME-PROOF'
+# HushVoting Server Twins execute in their supervised job below, with their
+# required client checkout, provenance, bounded execution and owned cleanup.
+test_filter='Category!=Performance&Category!=PerformanceTest&Category!=E2E&Category!=HS-INT-087-CROSS-RUNTIME-PROOF&Category!=HV-SERVER-TWIN'
 dotnet_test_args=("$@")
 
 test_projects=(

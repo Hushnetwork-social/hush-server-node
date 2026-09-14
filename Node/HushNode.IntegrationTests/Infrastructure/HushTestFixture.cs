@@ -126,6 +126,9 @@ internal sealed class HushTestFixture : IAsyncLifetime
             GRANT ALL ON SCHEMA public TO public;
             """;
         await resetCommand.ExecuteNonQueryAsync();
+        // Reset terminates pooled sessions too. Retire this fixture's pool so
+        // the next scenario cannot borrow a connection killed by the reset.
+        NpgsqlConnection.ClearPool(connection);
     }
 
     /// <summary>
