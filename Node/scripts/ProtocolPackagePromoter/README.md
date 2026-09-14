@@ -192,20 +192,21 @@ be used to open elections.
 
 After changing the promoter, run:
 
-```powershell
-dotnet test HushServerNode.Tests\HushServerNode.Tests.csproj --no-restore --filter "FullyQualifiedName~ProtocolPackagePromotionServiceTests" --verbosity minimal
+```bash
+dotnet test HushServerNode.Tests/HushServerNode.Tests.csproj --no-restore --filter "FullyQualifiedName~ProtocolPackagePromotionServiceTests" --verbosity minimal
 ```
 
 For a quick compile check:
 
-```powershell
-dotnet build Node\scripts\ProtocolPackagePromoter\ProtocolPackagePromoter.csproj --no-restore
+```bash
+dotnet build Node/scripts/ProtocolPackagePromoter/ProtocolPackagePromoter.csproj --no-restore
 ```
 
 ## Build-Time Resolver
 
-`HushServerNode.csproj` calls `Node/scripts/resolve-protocol-package-for-build.ps1` during build and
-publish unless `ResolveProtocolPackageOnBuild=false` is supplied.
+`HushServerNode.csproj` calls `Node/scripts/resolve-protocol-package-for-build.sh` during build and
+publish unless `ResolveProtocolPackageOnBuild=false` is supplied. The Linux resolver requires Bash,
+`curl`, `jq`, `realpath`, and `unzip`.
 
 Debug behavior:
 
@@ -244,8 +245,8 @@ the build resolver. Private authoring still happens in `hush-documents` and `hus
 
 Manual build examples:
 
-```powershell
-dotnet build Node\HushServerNode\HushServerNode.csproj --no-restore
-dotnet publish Node\HushServerNode\HushServerNode.csproj -c Release
-dotnet build Node\HushServerNode\HushServerNode.csproj /p:ResolveProtocolPackageOnBuild=false
+```bash
+dotnet build Node/HushServerNode/HushServerNode.csproj --no-restore
+dotnet publish Node/HushServerNode/HushServerNode.csproj -c Release
+dotnet build Node/HushServerNode/HushServerNode.csproj /p:ResolveProtocolPackageOnBuild=false
 ```

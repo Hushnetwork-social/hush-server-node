@@ -104,7 +104,7 @@ return 0";
                 return null;
             }
 
-            if (long.TryParse(value, out var blockIndexValue))
+            if (long.TryParse(value.ToString(), out var blockIndexValue))
             {
                 Interlocked.Increment(ref _cacheHits);
                 _logger.LogDebug(
@@ -158,7 +158,7 @@ return 0";
             await foreach (var key in server.KeysAsync(database: _database.Database, pattern: pattern))
             {
                 var value = await _database.StringGetAsync(key);
-                if (value.HasValue && long.TryParse(value, out var blockIndexValue))
+                if (value.HasValue && long.TryParse(value.ToString(), out var blockIndexValue))
                 {
                     // Extract feedId from key: {prefix}user:{userId}:read:{feedId}
                     var keyString = key.ToString();
@@ -288,7 +288,7 @@ return 0";
             var result = new Dictionary<FeedId, BlockIndex>();
             foreach (var entry in entries)
             {
-                if (long.TryParse(entry.Value, out var blockIndexValue))
+                if (long.TryParse(entry.Value.ToString(), out var blockIndexValue))
                 {
                     var feedId = FeedIdHandler.CreateFromString(entry.Name!);
                     result[feedId] = new BlockIndex(blockIndexValue);

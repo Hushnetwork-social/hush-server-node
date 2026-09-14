@@ -16,6 +16,41 @@ public sealed class FullIdentityValidatorTests
         new FullIdentityCanonicalSerializer(),
         new FullIdentitySignatureVerifier());
 
+    // FEAT-011 Phase 2 Tasks 2.5/2.6; Phase 3 Tasks 3.1/3.2.
+    [Theory]
+    [InlineData("payload", FullIdentityValidationCodes.MalformedJson)]
+    [InlineData("user-signature", FullIdentityValidationCodes.MalformedJson)]
+    [InlineData("alias", FullIdentityValidationCodes.AliasOutOfBounds)]
+    [InlineData("signing-address", FullIdentityValidationCodes.InvalidSigningAddress)]
+    [InlineData("encryption-address", FullIdentityValidationCodes.InvalidEncryptionAddress)]
+    [InlineData("signature", FullIdentityValidationCodes.UnsupportedSignatureEncoding)]
+    [InlineData("signatory", FullIdentityValidationCodes.InvalidTransactionId)]
+    public void NullRequiredIdentityContent_ReturnsItsExistingTypedCode(string field, string expectedCode)
+    {
+        var valid = FullIdentityTestData.BuildSigned();
+        var input = field switch
+        {
+            "payload" => valid with { Payload = null! },
+            "user-signature" => valid with { UserSignature = null! },
+            "alias" => valid with { Payload = valid.Payload with { IdentityAlias = null! } },
+            "signing-address" => valid with { Payload = valid.Payload with { PublicSigningAddress = null! } },
+            "encryption-address" => valid with { Payload = valid.Payload with { PublicEncryptAddress = null! } },
+            "signature" => valid with { UserSignature = valid.UserSignature with { Signature = null! } },
+            "signatory" => valid with { UserSignature = valid.UserSignature with { Signatory = null! } },
+            _ => throw new InvalidOperationException("Unknown test case")
+        };
+        if (field is "alias" or "signing-address" or "encryption-address")
+            input = input with { PayloadSize = new FullIdentityCanonicalSerializer().PayloadJsonUtf8Length(
+                input.Payload.IdentityAlias, input.Payload.PublicSigningAddress, input.Payload.PublicEncryptAddress, input.Payload.IsPublic) };
+
+        var result = _sut.Validate(input);
+
+        result.IsValid.Should().BeFalse();
+        result.ValidationCode.Should().Be(expectedCode);
+        result.ValidatedContent.Should().BeNull();
+        result.IsEditable.Should().Be(field == "alias");
+    }
+
     [Fact]
     public void CanonicalUnsignedJson_MatchesFeat001VectorByteExact()
     {

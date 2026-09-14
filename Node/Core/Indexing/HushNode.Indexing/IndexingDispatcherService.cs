@@ -31,17 +31,19 @@ public class IndexingDispatcherService :
     {
         Console.WriteLine($"[E2E] IndexingDispatcherService: Processing block {message.Block.BlockIndex.Value} with {message.Block.Transactions.Count()} transaction(s)");
 
-        var blockTimeUtc = message.Block.CreationTimeStamp.Value;
+        var blockContext = new BlockIndexContext(
+            message.Block.BlockIndex.Value,
+            message.Block.CreationTimeStamp.Value);
 
         // Process transactions in block order to avoid write races
         // on shared domain aggregates (e.g., multiple group/inner-circle
         // membership mutations in the same block).
         foreach (var transaction in message.Block.Transactions)
         {
-            // FEAT-015 D6: block-context strategies receive the authoritative consensus time.
+            // FEAT-015 D6: block-context strategies receive authoritative block index + consensus time.
             var blockContextStrategyTasks = this._blockContextStrategies
                 .Where(strategy => strategy.CanHandle(transaction))
-                .Select(strategy => strategy.HandleAsync(transaction, blockTimeUtc));
+                .Select(strategy => strategy.HandleAsync(transaction, blockContext));
 
             await Task.WhenAll(blockContextStrategyTasks);
 

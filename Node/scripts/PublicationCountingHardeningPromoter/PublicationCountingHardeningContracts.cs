@@ -365,6 +365,7 @@ public static class PublicationCountingHardeningContracts
         var refs = RequireObject(source, "verifierRefs");
         RequireNonEmpty(refs, "sourceRef", errors);
         RequireNonEmpty(refs, "projectPath", errors);
+        // The accepted v0.2.0 source release is immutable evidence produced on .NET 9.
         RequireValue(refs, "runtime", ".NET 9", errors);
         RequireValue(refs, "profileId", "public_anonymous_v1", errors);
         RequireSha256(refs, "binaryRelease", errors);

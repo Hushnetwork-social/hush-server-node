@@ -42,8 +42,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-048 Identity Lookups Cache", "  As a client displaying messages\r\n  I want user identities cached\r\n  So that loo" +
-                    "king up sender display names doesn\'t query the database", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-048 Identity Lookups Cache", "  As a client displaying messages\n  I want user identities cached\n  So that looki" +
+                    "ng up sender display names doesn\'t query the database", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

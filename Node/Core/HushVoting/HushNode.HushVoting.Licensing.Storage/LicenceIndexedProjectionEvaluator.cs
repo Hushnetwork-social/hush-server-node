@@ -50,6 +50,7 @@ internal static class LicenceIndexedProjectionEvaluator
             assignment.ExpiresAtUtc,
             assignment.AssignedCatalogueVersion,
             assignment.AssignedCatalogueDigestSha256,
-            subjectRow.EntitlementRevision);
+            subjectRow.EntitlementRevision,
+            assignment.OriginatingTransactionId);
     }
 }

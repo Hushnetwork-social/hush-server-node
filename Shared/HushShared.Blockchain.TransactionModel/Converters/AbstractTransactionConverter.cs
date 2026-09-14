@@ -10,7 +10,15 @@ public class AbstractTransactionConverter : JsonConverter<AbstractTransaction>
         using var jsonDocument = JsonDocument.ParseValue(ref reader);
 
         var payloadKindElement = jsonDocument.RootElement;
-        var payloadKind = payloadKindElement.GetProperty("PayloadKind").GetString();
+        // Missing/wrong-type discriminators are malformed input, not lookup/setup errors.
+        // Keep them within the RPC's existing typed JsonException rejection boundary.
+        if (payloadKindElement.ValueKind != JsonValueKind.Object ||
+            !payloadKindElement.TryGetProperty("PayloadKind", out var kindElement) ||
+            kindElement.ValueKind != JsonValueKind.String)
+        {
+            throw new JsonException("Transaction payload kind must be a string.");
+        }
+        var payloadKind = kindElement.GetString();
 
         payloadKindElement.TryGetProperty("ValidatorSignature", out var validatedSignature);
 
@@ -29,7 +37,9 @@ public class AbstractTransactionConverter : JsonConverter<AbstractTransaction>
             }
         }
 
-        throw new InvalidOperationException();
+        // FEAT-011 Task 3.1: unsupported wire kinds are parse failures. The
+        // RPC maps JsonException to its existing typed rejection response.
+        throw new JsonException("Unsupported transaction payload kind.");
     }
 
     public override void Write(Utf8JsonWriter writer, AbstractTransaction value, JsonSerializerOptions options)

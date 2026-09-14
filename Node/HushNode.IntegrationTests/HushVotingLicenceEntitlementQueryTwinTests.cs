@@ -92,7 +92,6 @@ public sealed class HushVotingLicenceEntitlementQueryTwinTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "FEAT-017")]
-    [Trait("AcceptanceId", "AT-LIC-004")] // FEAT-017 TwinTest pair (EPIC-002): options page reflects the exact server catalogue in server order
     public async Task Active_veritas_returns_safe_view_with_higher_option_and_enterprise()
     {
         var (address, trusted) = await InsertIndexedSubjectAsync();
@@ -157,7 +156,6 @@ public sealed class HushVotingLicenceEntitlementQueryTwinTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "FEAT-016")]
-    [Trait("AcceptanceId", "AT-LIC-011")] // FEAT-016 TwinTest pair (EPIC-002): Lock/identity replacement cannot leak entitlement
     public async Task Another_actor_never_observes_the_first_actors_entitlement()
     {
         // Actor A is an indexed identity holding an active Direct Free assignment.

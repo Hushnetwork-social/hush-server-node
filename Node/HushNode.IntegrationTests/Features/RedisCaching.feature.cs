@@ -42,9 +42,9 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-060 Redis-First Caching (Read Positions Hash + Feed lastBlockIndex)", "  As a sync endpoint\r\n  I want read positions stored in Redis Hash and feed lastB" +
-                    "lockIndex cached\r\n  So that idle sync cycles avoid per-key round trips and extra" +
-                    " PostgreSQL queries", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-060 Redis-First Caching (Read Positions Hash + Feed lastBlockIndex)", "  As a sync endpoint\n  I want read positions stored in Redis Hash and feed lastBl" +
+                    "ockIndex cached\n  So that idle sync cycles avoid per-key round trips and extra P" +
+                    "ostgreSQL queries", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

@@ -46,8 +46,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Auto-Pagination Scroll-Based Prefetch", "    As a user of Hush Feeds\r\n    I want messages to prefetch as I scroll through " +
-                    "history\r\n    So that I have a seamless scrolling experience", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Auto-Pagination Scroll-Based Prefetch", "    As a user of Hush Feeds\n    I want messages to prefetch as I scroll through h" +
+                    "istory\n    So that I have a seamless scrolling experience", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

@@ -44,8 +44,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Attachment Storage Infrastructure", "  As a user\r\n  I want to send file attachments with messages\r\n  So that I can sha" +
-                    "re media and documents in chat feeds", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Attachment Storage Infrastructure", "  As a user\n  I want to send file attachments with messages\n  So that I can share" +
+                    " media and documents in chat feeds", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

@@ -42,8 +42,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-065 Identity Display Name Cache (E2 — global Redis Hash)", "  As a message resolver\r\n  I want batch HMGET display name lookups from a global " +
-                    "Redis Hash\r\n  So that N message senders don\'t require N PostgreSQL queries", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-065 Identity Display Name Cache (E2 — global Redis Hash)", "  As a message resolver\n  I want batch HMGET display name lookups from a global R" +
+                    "edis Hash\n  So that N message senders don\'t require N PostgreSQL queries", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

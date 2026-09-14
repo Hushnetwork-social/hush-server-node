@@ -30,7 +30,7 @@
       "immutable": true
     },
     "projectPath": "Tools/HushVotingVerifier/HushVotingVerifier.csproj",
-    "runtime": ".NET 9",
+    "runtime": ".NET 10",
     "profileId": "public_anonymous_v1",
     "binaryRelease": {
       "available": false,

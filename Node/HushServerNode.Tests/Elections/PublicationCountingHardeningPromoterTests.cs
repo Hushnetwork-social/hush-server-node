@@ -905,6 +905,7 @@ public sealed class PublicationCountingHardeningPromoterTests
                     ["repository"] = "https://github.com/Hushnetwork-social/hush-server-node",
                     ["sourceRef"] = VerifierSourceRef,
                     ["projectPath"] = "Tools/HushVotingVerifier/HushVotingVerifier.csproj",
+                    // Preserve the runtime recorded by the immutable v0.2.0 source release.
                     ["runtime"] = ".NET 9",
                     ["profileId"] = "public_anonymous_v1",
                     ["binaryRelease"] = VerifierBinaryHash,

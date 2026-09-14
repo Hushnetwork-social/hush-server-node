@@ -46,9 +46,9 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Direct Chat Walkthrough", "    As two users on HushNetwork\r\n    I want to create a direct chat, exchange mes" +
-                    "sages, reply to specific messages, and react\r\n    So that peer-to-peer communica" +
-                    "tion works end-to-end", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Direct Chat Walkthrough", "    As two users on HushNetwork\n    I want to create a direct chat, exchange mess" +
+                    "ages, reply to specific messages, and react\n    So that peer-to-peer communicati" +
+                    "on works end-to-end", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

@@ -42,8 +42,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-062 Feed Sorting by blockIndex", "  As a sync endpoint\r\n  I want GetFeedsForAddress to return feeds with correct bl" +
-                    "ockIndex values\r\n  So that clients can sort feeds by most recent activity", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-062 Feed Sorting by blockIndex", "  As a sync endpoint\n  I want GetFeedsForAddress to return feeds with correct blo" +
+                    "ckIndex values\n  So that clients can sort feeds by most recent activity", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

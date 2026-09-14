@@ -91,10 +91,14 @@ public class IdentityCacheService : IIdentityCacheService, IHandleAsync<Identity
             // Deserialize the cached profile
             var profile = DeserializeProfile(value!);
 
-            if (profile == null)
+            // FEAT-011: cache metadata cannot override exact lookup or break the RPC reply.
+            // Preserve historical values; reject only unusable fields or a different identity.
+            if (profile == null ||
+                !string.Equals(profile.PublicSigningAddress, publicSigningAddress, StringComparison.Ordinal) ||
+                profile.PublicEncryptAddress is null || profile.Alias is null)
             {
                 Interlocked.Increment(ref _cacheMisses);
-                _logger.LogDebug("Cache miss for identity {Address} (deserialization failed)", TruncateAddress(publicSigningAddress));
+                _logger.LogDebug("Cache miss for identity {Address} (cached profile is unusable)", TruncateAddress(publicSigningAddress));
                 return null;
             }
 

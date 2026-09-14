@@ -52,7 +52,7 @@ public class NotificationService : INotificationService
             {
                 try
                 {
-                    var feedEvent = JsonSerializer.Deserialize<FeedEvent>(message!, JsonOptions);
+                    var feedEvent = JsonSerializer.Deserialize<FeedEvent>(message.ToString(), JsonOptions);
                     if (feedEvent != null)
                     {
                         _logger.LogDebug("Deserialized event type {Type} for feed {FeedId}, writing to queue", feedEvent.Type, feedEvent.FeedId);

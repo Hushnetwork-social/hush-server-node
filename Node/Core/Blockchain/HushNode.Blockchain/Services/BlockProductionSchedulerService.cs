@@ -16,7 +16,8 @@ public class BlockProductionSchedulerService :
     IHandle<BlockchainInitializedEvent>,
     IHandleAsync<BlockCreatedEvent>,
     IHandleAsync<BlockIndexCompletedEvent>,
-    IHandle<TransactionReceivedEvent>
+    IHandle<TransactionReceivedEvent>,
+    IAsyncDisposable
 {
     private readonly IBlockAssemblerWorkflow _blockAssemblerWorkflow;
     private readonly IMemPoolService _memPool;
@@ -28,7 +29,11 @@ public class BlockProductionSchedulerService :
     private readonly IObservable<long> _blockGeneratorLoop;
     private readonly bool _isTestMode;
     private readonly Action? _onBlockFinalized;
+    private readonly object _lifecycleGate = new();
+    private readonly HashSet<Task> _activeBlockProductions = [];
 
+    private IDisposable? _blockGeneratorSubscription;
+    private bool _isDisposed;
     private bool _canSchedule = true;
     private int _consecutiveEmptyBlockCount = 0;
     private bool _isPausedForEmptyBlocks = false;
@@ -104,7 +109,49 @@ public class BlockProductionSchedulerService :
         this._logger.LogInformation("BlockchainInitializedEvent received. TestMode={TestMode}, OnBlockFinalized={HasCallback}",
             this._isTestMode, this._onBlockFinalized != null);
 
-        this._blockGeneratorLoop.Subscribe(async x =>
+        lock (this._lifecycleGate)
+        {
+            if (this._isDisposed)
+            {
+                return;
+            }
+
+            this._blockGeneratorSubscription ??= this._blockGeneratorLoop.Subscribe(
+                this.ScheduleBlockProduction,
+                exception => this._logger.LogError(exception, "Block production trigger stream failed."));
+        }
+    }
+
+    private void ScheduleBlockProduction(long trigger)
+    {
+        Task blockProduction;
+        lock (this._lifecycleGate)
+        {
+            if (this._isDisposed)
+            {
+                return;
+            }
+
+            blockProduction = this.RunBlockProductionAsync(trigger);
+            this._activeBlockProductions.Add(blockProduction);
+        }
+
+        _ = this.ObserveBlockProductionCompletionAsync(blockProduction);
+    }
+
+    private async Task ObserveBlockProductionCompletionAsync(Task blockProduction)
+    {
+        await blockProduction.ConfigureAwait(false);
+
+        lock (this._lifecycleGate)
+        {
+            this._activeBlockProductions.Remove(blockProduction);
+        }
+    }
+
+    private async Task RunBlockProductionAsync(long trigger)
+    {
+        try
         {
             // In test mode, bypass the empty block pause check entirely
             if (!this._isTestMode && this._isPausedForEmptyBlocks)
@@ -115,59 +162,83 @@ public class BlockProductionSchedulerService :
 
             if (!this._canSchedule)
             {
-                this._logger.LogInformation("BlockAssembler is buzy. Cannot schedule a new block...");
+                this._logger.LogInformation("BlockAssembler is busy. Cannot schedule block trigger {Trigger}.", trigger);
+                return;
+            }
+
+            this._canSchedule = false;
+            this._logger.LogInformation("Generating a block for trigger {Trigger}...", trigger);
+
+            if (!this._blockchainCache.BlockchainStateInDatabase)
+            {
+                var blockchainState = await this._blockchainStorageService.RetrieveCurrentBlockchainStateAsync();
+
+                this._blockchainCache
+                    .IsBlockchainStateInDatabase()
+                    .SetBlockIndex(blockchainState.BlockIndex)
+                    .SetPreviousBlockId(blockchainState.PreviousBlockId)
+                    .SetCurrentBlockId(blockchainState.CurrentBlockId)
+                    .SetNextBlockId(blockchainState.NextBlockId);
+            }
+
+            var pendingTransactions = this._memPool.GetPendingValidatedTransactionsAsync();
+            var transactionsList = pendingTransactions.ToList();
+            var userTransactionCount = transactionsList.Count;
+
+            if (userTransactionCount == 0)
+            {
+                this._consecutiveEmptyBlockCount++;
+                this._logger.LogInformation(
+                    "Empty block (no user transactions) - {CurrentCount}/{MaxCount} before pause",
+                    this._consecutiveEmptyBlockCount,
+                    this._blockchainSettings.MaxEmptyBlocksBeforePause);
+
+                // In test mode, skip the pause logic entirely
+                if (!this._isTestMode && this._consecutiveEmptyBlockCount >= this._blockchainSettings.MaxEmptyBlocksBeforePause)
+                {
+                    this._isPausedForEmptyBlocks = true;
+                    this._logger.LogWarning(
+                        "Block production paused after {Count} consecutive empty blocks. Waiting for transactions...",
+                        this._consecutiveEmptyBlockCount);
+                    this._canSchedule = true;
+                    return;
+                }
             }
             else
             {
-                this._canSchedule = false;
-                this._logger.LogInformation("Generating a block...");
-
-                if (!this._blockchainCache.BlockchainStateInDatabase)
-                {
-                    var blockchainState = await this._blockchainStorageService.RetrieveCurrentBlockchainStateAsync();
-
-                    this._blockchainCache
-                        .IsBlockchainStateInDatabase()
-                        .SetBlockIndex(blockchainState.BlockIndex)
-                        .SetPreviousBlockId(blockchainState.PreviousBlockId)
-                        .SetCurrentBlockId(blockchainState.CurrentBlockId)
-                        .SetNextBlockId(blockchainState.NextBlockId);
-                }
-
-                var pendingTransactions = this._memPool.GetPendingValidatedTransactionsAsync();
-                var transactionsList = pendingTransactions.ToList();
-                var userTransactionCount = transactionsList.Count;
-
-                if (userTransactionCount == 0)
-                {
-                    this._consecutiveEmptyBlockCount++;
-                    this._logger.LogInformation(
-                        "Empty block (no user transactions) - {CurrentCount}/{MaxCount} before pause",
-                        this._consecutiveEmptyBlockCount,
-                        this._blockchainSettings.MaxEmptyBlocksBeforePause);
-
-                    // In test mode, skip the pause logic entirely
-                    if (!this._isTestMode && this._consecutiveEmptyBlockCount >= this._blockchainSettings.MaxEmptyBlocksBeforePause)
-                    {
-                        this._isPausedForEmptyBlocks = true;
-                        this._logger.LogWarning(
-                            "Block production paused after {Count} consecutive empty blocks. Waiting for transactions...",
-                            this._consecutiveEmptyBlockCount);
-                        this._canSchedule = true;
-                        return;
-                    }
-                }
-                else
-                {
-                    this._consecutiveEmptyBlockCount = 0;
-                    this._logger.LogInformation(
-                        "Block with {Count} user transaction(s)",
-                        userTransactionCount);
-                }
-
-                await this._blockAssemblerWorkflow.AssembleBlockAsync(transactionsList);
+                this._consecutiveEmptyBlockCount = 0;
+                this._logger.LogInformation(
+                    "Block with {Count} user transaction(s)",
+                    userTransactionCount);
             }
-        });
+
+            await this._blockAssemblerWorkflow.AssembleBlockAsync(transactionsList);
+        }
+        catch (Exception exception)
+        {
+            this._canSchedule = true;
+            this._logger.LogError(exception, "Block production failed for trigger {Trigger}.", trigger);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Task[] activeBlockProductions;
+        lock (this._lifecycleGate)
+        {
+            if (this._isDisposed)
+            {
+                return;
+            }
+
+            this._isDisposed = true;
+            this._blockGeneratorSubscription?.Dispose();
+            this._blockGeneratorSubscription = null;
+            activeBlockProductions = this._activeBlockProductions.ToArray();
+        }
+
+        await Task.WhenAll(activeBlockProductions).ConfigureAwait(false);
+        this._eventAggregator.Unsubscribe(this);
     }
 
     public Task HandleAsync(BlockCreatedEvent message)

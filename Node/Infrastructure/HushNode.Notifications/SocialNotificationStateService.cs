@@ -268,7 +268,7 @@ public sealed class SocialNotificationStateService : ISocialNotificationStateSer
 
         try
         {
-            return JsonSerializer.Deserialize<List<SocialNotificationItem>>(value!, JsonOptions) ?? [];
+            return JsonSerializer.Deserialize<List<SocialNotificationItem>>(value.ToString(), JsonOptions) ?? [];
         }
         catch (JsonException ex)
         {
@@ -295,7 +295,7 @@ public sealed class SocialNotificationStateService : ISocialNotificationStateSer
 
         try
         {
-            return JsonSerializer.Deserialize<SocialNotificationPreferences>(value!, JsonOptions) ?? CreateDefaultPreferences();
+            return JsonSerializer.Deserialize<SocialNotificationPreferences>(value.ToString(), JsonOptions) ?? CreateDefaultPreferences();
         }
         catch (JsonException ex)
         {

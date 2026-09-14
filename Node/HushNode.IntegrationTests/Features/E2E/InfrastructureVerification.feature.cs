@@ -44,8 +44,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "E2E Infrastructure Verification", "    As a developer\r\n    I want to verify that the E2E test infrastructure works e" +
-                    "nd-to-end\r\n    So that I can build reliable E2E tests", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "E2E Infrastructure Verification", "    As a developer\n    I want to verify that the E2E test infrastructure works en" +
+                    "d-to-end\n    So that I can build reliable E2E tests", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

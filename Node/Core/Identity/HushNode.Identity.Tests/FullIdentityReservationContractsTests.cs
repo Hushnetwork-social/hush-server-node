@@ -41,7 +41,9 @@ public sealed class FullIdentityReservationContractsTests
     [Fact]
     public void ConflictingSameSigningPending_MapsToStableConflict()
     {
-        FullIdentityReservationResult.Conflict().Outcome.Should().Be(FullIdentitySubmitOutcome.Conflict);
+        var result = FullIdentityReservationResult.Conflict();
+        result.Outcome.Should().Be(FullIdentitySubmitOutcome.Conflict);
+        result.ValidationCode.Should().Be(FullIdentityValidationCodes.Conflict);
     }
 
     [Fact]

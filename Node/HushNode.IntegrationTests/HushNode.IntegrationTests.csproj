@@ -79,7 +79,10 @@
 
   <ItemGroup>
     <!-- Reference HushServerNode for internal class access via InternalsVisibleTo -->
+    <Compile Remove="HushVoting/NodeProcessHost/**/*.cs" />
+    <ProjectReference Include="HushVoting/NodeProcessHost/HushVoting.NodeProcessHost.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\HushServerNode\HushServerNode.csproj" />
+    <ProjectReference Include="../../Shared/Olimpo.KeyDerivation/Olimpo.KeyDerivation.csproj" />
     <ProjectReference Include="..\Core\HushVoting\HushNode.HushVoting.Licence.Transactions\HushNode.HushVoting.Licence.Transactions.csproj" />
     <ProjectReference Include="..\Core\HushVoting\HushNode.HushVoting.Licence.gRPC\HushNode.HushVoting.Licence.gRPC.csproj" />
     <ProjectReference Include="..\..\Shared\HushShared.Elections.PublicationProof\HushShared.Elections.PublicationProof.csproj" />

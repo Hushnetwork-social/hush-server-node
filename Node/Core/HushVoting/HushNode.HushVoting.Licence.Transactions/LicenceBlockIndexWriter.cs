@@ -98,7 +98,7 @@ public static class LicenceBlockIndexWriter
             var authoritative = HushVotingLicenceTransitionDecisionCore.Decide(
                 configuration.Catalogue,
                 transaction.Payload,
-                LicenceBlockIndexWriterDecisions.CurrentlyActiveState(configuration.Catalogue, previousActive));
+                LicenceBlockIndexWriterDecisions.CurrentlyActiveState(configuration.Catalogue, previousActive, blockCreationTimeUtc));
             if (!authoritative.IsValid || authoritative.OperativeFacts is null)
             {
                 // A stale/lower/same transition that is no longer valid at block time is never
@@ -111,13 +111,20 @@ public static class LicenceBlockIndexWriter
 
             var facts = authoritative.OperativeFacts;
             var assignmentId = Guid.CreateVersion7();
+            var previousExpired = previousActive?.ExpiresAtUtc is DateTime previousExpiry
+                && blockCreationTimeUtc >= previousExpiry;
+            var previousLifecycleReason = previousExpired
+                ? LicenceEntitlementDecisions.ReasonAnnualExpiry
+                : LicenceEntitlementDecisions.ReasonSupersededByAutomaticUpgrade;
             if (previousActive is not null)
             {
-                // Lifecycle flip first; the SupersededByAssignmentId pointer is attached in a second
-                // SaveChanges after the new active row exists (self-FK ordering, FEAT-013 pattern).
-                previousActive.LifecycleStatus = LicencePersistenceVocabulary.LifecycleSuperseded;
+                // Retire history only when the replacement transaction indexes. An expired
+                // annual term is not an in-term upgrade; only upgrades attach a supersession pointer.
+                previousActive.LifecycleStatus = previousExpired
+                    ? LicencePersistenceVocabulary.LifecycleExpired
+                    : LicencePersistenceVocabulary.LifecycleSuperseded;
                 previousActive.LifecycleChangedAtUtc = blockCreationTimeUtc;
-                previousActive.LifecycleReason = LicenceEntitlementDecisions.ReasonSupersededByAutomaticUpgrade;
+                previousActive.LifecycleReason = previousLifecycleReason;
             }
 
             var expiresAtUtc = facts.Term.IsPerpetual
@@ -168,12 +175,14 @@ public static class LicenceBlockIndexWriter
                 db.Set<LicenceTransitionEventEntity>().Add(ToEvent(
                     subjectRow.LicenceSubjectId,
                     existingMaxSequence + 1,
-                    LicencePersistenceVocabulary.EventTypeSuperseded,
+                    previousExpired
+                        ? LicencePersistenceVocabulary.EventTypeExpired
+                        : LicencePersistenceVocabulary.EventTypeSuperseded,
                     revision,
                     previousActive.LicenceAssignmentId,
                     previousActive.PlanId,
                     previousActive.AssignedCatalogueVersion,
-                    LicenceEntitlementDecisions.ReasonSupersededByAutomaticUpgrade,
+                    previousLifecycleReason,
                     blockCreationTimeUtc));
             }
 
@@ -193,12 +202,22 @@ public static class LicenceBlockIndexWriter
                 cacheOutbox,
                 subjectRow.LicenceSubjectId,
                 revision,
-                LicenceCacheOutboxChangeKinds.ActivatedHigherPlan,
+                previousExpired
+                    ? LicenceCacheOutboxChangeKinds.ExpiredToDefault
+                    : LicenceCacheOutboxChangeKinds.ActivatedHigherPlan,
                 blockCreationTimeUtc);
+
+            // A reservation is pending only until its own transaction indexes. Resolve it in
+            // this same commit; otherwise an indexed annual upgrade blocks post-expiry baseline.
+            var indexedReservation = await db.Set<LicencePendingReservationEntity>().SingleOrDefaultAsync(
+                r => r.LicenceSubjectId == subjectRow.LicenceSubjectId
+                    && r.OriginatingTransactionId == transaction.TransactionId.Value,
+                cancellationToken);
+            LicenceBlockIndexWriterDecisions.ResolveIndexedReservation(indexedReservation, blockCreationTimeUtc);
 
             await db.SaveChangesAsync(cancellationToken);
 
-            if (previousActive is not null)
+            if (previousActive is not null && !previousExpired)
             {
                 previousActive.SupersededByAssignmentId = assignmentId;
                 await db.SaveChangesAsync(cancellationToken);

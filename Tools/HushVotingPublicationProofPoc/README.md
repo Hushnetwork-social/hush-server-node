@@ -17,46 +17,46 @@ touches the production election close path.
 
 ## Commands
 
-```powershell
-dotnet run --project Tools\HushVotingPublicationProofPoc\HushVotingPublicationProofPoc.csproj -- --help
-dotnet run --project Tools\HushVotingPublicationProofPoc\HushVotingPublicationProofPoc.csproj -- run --output artifacts\sp07-poc
-dotnet run --project Tools\HushVotingPublicationProofPoc\HushVotingPublicationProofPoc.csproj -- verify --input artifacts\sp07-poc
+```bash
+dotnet run --project Tools/HushVotingPublicationProofPoc/HushVotingPublicationProofPoc.csproj -- --help
+dotnet run --project Tools/HushVotingPublicationProofPoc/HushVotingPublicationProofPoc.csproj -- run --output artifacts/sp07-poc
+dotnet run --project Tools/HushVotingPublicationProofPoc/HushVotingPublicationProofPoc.csproj -- verify --input artifacts/sp07-poc
 ```
 
 Custom benchmark vectors can be generated with explicit dimensions:
 
-```powershell
-dotnet build Tools\HushVotingPublicationProofPoc\HushVotingPublicationProofPoc.csproj -c Release --no-restore
-dotnet Tools\HushVotingPublicationProofPoc\bin\Release\net9.0\HushVotingPublicationProofPoc.dll generate `
-  --vector sp07-bg-hush-valid-n20-k4-v1 `
-  --ballots 20 `
-  --slots 4 `
-  --output artifacts\sp07-benchmark-custom `
+```bash
+dotnet build Tools/HushVotingPublicationProofPoc/HushVotingPublicationProofPoc.csproj -c Release --no-restore
+dotnet Tools/HushVotingPublicationProofPoc/bin/Release/net10.0/HushVotingPublicationProofPoc.dll generate \
+  --vector sp07-bg-hush-valid-n20-k4-v1 \
+  --ballots 20 \
+  --slots 4 \
+  --output artifacts/sp07-benchmark-custom \
   --force
 ```
 
 The `hotbench` command runs the matched C# language baseline used by `Tools/HushSp07RustWorker`.
 It benchmarks only the component aggregation shape, not the full SP-07 proof:
 
-```powershell
-dotnet Tools\HushVotingPublicationProofPoc\bin\Release\net9.0\HushVotingPublicationProofPoc.dll hotbench `
-  --ballots 1000 `
-  --slots 8 `
-  --rounds 2 `
-  --mode windowed `
-  --output artifacts\sp07-language-bench\csharp-n1000-k8.json
+```bash
+dotnet Tools/HushVotingPublicationProofPoc/bin/Release/net10.0/HushVotingPublicationProofPoc.dll hotbench \
+  --ballots 1000 \
+  --slots 8 \
+  --rounds 2 \
+  --mode windowed \
+  --output artifacts/sp07-language-bench/csharp-n1000-k8.json
 ```
 
 Use `--mode pippenger --window-bits 6` to test the C# BigInteger/Pippenger lane:
 
-```powershell
-dotnet Tools\HushVotingPublicationProofPoc\bin\Release\net9.0\HushVotingPublicationProofPoc.dll hotbench `
-  --ballots 1000 `
-  --slots 8 `
-  --rounds 2 `
-  --mode pippenger `
-  --window-bits 6 `
-  --output artifacts\sp07-language-bench\csharp-pippenger-n1000-k8.json
+```bash
+dotnet Tools/HushVotingPublicationProofPoc/bin/Release/net10.0/HushVotingPublicationProofPoc.dll hotbench \
+  --ballots 1000 \
+  --slots 8 \
+  --rounds 2 \
+  --mode pippenger \
+  --window-bits 6 \
+  --output artifacts/sp07-language-bench/csharp-pippenger-n1000-k8.json
 ```
 
 ## Current Scope

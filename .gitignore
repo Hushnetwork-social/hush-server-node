@@ -166,3 +166,7 @@ local-config/
 .qodo/
 .vscode
 .claude/settings.local.json
+
+# Local Python bytecode caches
+__pycache__/
+*.py[cod]

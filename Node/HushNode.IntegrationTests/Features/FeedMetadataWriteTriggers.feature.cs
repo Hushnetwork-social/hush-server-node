@@ -42,8 +42,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-065 Feed Metadata Write Triggers", "  As a cache system\r\n  I want transaction handlers to write full metadata to Redi" +
-                    "s\r\n  So that the 3-second sync hot path can serve from cache without PostgreSQL", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-065 Feed Metadata Write Triggers", "  As a cache system\n  I want transaction handlers to write full metadata to Redis" +
+                    "\n  So that the 3-second sync hot path can serve from cache without PostgreSQL", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

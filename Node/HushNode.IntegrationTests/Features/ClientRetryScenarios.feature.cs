@@ -44,9 +44,9 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Client Retry Scenarios", "  As a client application implementing message retry logic\r\n  I want the server t" +
-                    "o return correct TransactionStatus values\r\n  So that I can implement reliable me" +
-                    "ssage retry logic", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Client Retry Scenarios", "  As a client application implementing message retry logic\n  I want the server to" +
+                    " return correct TransactionStatus values\n  So that I can implement reliable mess" +
+                    "age retry logic", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

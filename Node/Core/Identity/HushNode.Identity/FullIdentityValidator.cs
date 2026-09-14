@@ -39,6 +39,12 @@ public sealed class FullIdentityValidator(
     public ContentValidationResult Validate(SignedTransaction<FullIdentityPayload> transaction)
     {
         var payload = transaction.Payload;
+        if (payload is null || transaction.UserSignature is null)
+        {
+            return ContentValidationResult.Invalid(
+                FullIdentityValidationCodes.MalformedJson,
+                "Identity payload or user signature is missing.");
+        }
 
         // Transaction metadata bounds.
         if (transaction.TransactionId == TransactionId.Empty ||

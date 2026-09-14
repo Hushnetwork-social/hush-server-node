@@ -113,10 +113,10 @@ public class IndexingDispatcherServiceBlockContextTests
         blockContextMock.Setup(x => x.CanHandle(It.IsAny<AbstractTransaction>())).Returns(true);
         DateTime? receivedTime = null;
         blockContextMock
-            .Setup(x => x.HandleAsync(It.IsAny<AbstractTransaction>(), It.IsAny<DateTime>()))
-            .Returns<AbstractTransaction, DateTime>((_, time) =>
+            .Setup(x => x.HandleAsync(It.IsAny<AbstractTransaction>(), It.IsAny<BlockIndexContext>()))
+            .Returns<AbstractTransaction, BlockIndexContext>((_, context) =>
             {
-                receivedTime = time;
+                receivedTime = context.BlockCreationTimeUtc;
                 return Task.CompletedTask;
             });
 
@@ -128,7 +128,7 @@ public class IndexingDispatcherServiceBlockContextTests
         await sut.HandleAsync(new BlockCreatedEvent(block));
 
         receivedTime.Should().Be(blockTime.Value);
-        blockContextMock.Verify(x => x.HandleAsync(tx, blockTime.Value), Times.Once);
+        blockContextMock.Verify(x => x.HandleAsync(tx, It.Is<BlockIndexContext>(c => c.BlockCreationTimeUtc == blockTime.Value)), Times.Once);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class IndexingDispatcherServiceBlockContextTests
         plainMock.Setup(x => x.CanHandle(It.IsAny<AbstractTransaction>())).Returns(true);
         plainMock.Setup(x => x.HandleAsync(It.IsAny<AbstractTransaction>())).Returns(Task.CompletedTask);
         blockContextMock.Setup(x => x.CanHandle(It.IsAny<AbstractTransaction>())).Returns(true);
-        blockContextMock.Setup(x => x.HandleAsync(It.IsAny<AbstractTransaction>(), It.IsAny<DateTime>())).Returns(Task.CompletedTask);
+        blockContextMock.Setup(x => x.HandleAsync(It.IsAny<AbstractTransaction>(), It.IsAny<BlockIndexContext>())).Returns(Task.CompletedTask);
 
         var sut = new IndexingDispatcherService(
             indexStrategies: new[] { plainMock.Object },
@@ -153,7 +153,7 @@ public class IndexingDispatcherServiceBlockContextTests
         await sut.HandleAsync(new BlockCreatedEvent(block));
 
         plainMock.Verify(x => x.HandleAsync(tx), Times.Once);
-        blockContextMock.Verify(x => x.HandleAsync(tx, It.IsAny<DateTime>()), Times.Once);
+        blockContextMock.Verify(x => x.HandleAsync(tx, It.IsAny<BlockIndexContext>()), Times.Once);
     }
 
     private static FinalizedBlock CreateBlockWithTime(Timestamp creationTime, params AbstractTransaction[] transactions)

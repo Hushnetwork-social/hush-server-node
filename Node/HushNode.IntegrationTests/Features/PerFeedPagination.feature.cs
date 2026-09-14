@@ -46,8 +46,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-059 Per-Feed Pagination API", "  As a client developer\r\n  I want to fetch messages for a specific feed with curs" +
-                    "or pagination\r\n  So that I can implement scroll-based prefetch", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-059 Per-Feed Pagination API", "  As a client developer\n  I want to fetch messages for a specific feed with curso" +
+                    "r pagination\n  So that I can implement scroll-based prefetch", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

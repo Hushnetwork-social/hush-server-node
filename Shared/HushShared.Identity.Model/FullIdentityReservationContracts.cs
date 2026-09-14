@@ -45,7 +45,7 @@ public sealed record FullIdentityReservationResult(
         new(FullIdentitySubmitOutcome.AlreadyExists, null);
 
     public static FullIdentityReservationResult Conflict() =>
-        new(FullIdentitySubmitOutcome.Conflict, null);
+        new(FullIdentitySubmitOutcome.Conflict, FullIdentityValidationCodes.Conflict);
 
     public static FullIdentityReservationResult Rejected(string validationCode) =>
         new(FullIdentitySubmitOutcome.RejectedTerminal, validationCode);

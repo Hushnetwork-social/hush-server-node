@@ -46,9 +46,9 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Reaction proof cross-runtime interop", "  As a FEAT-087 maintainer\r\n  I want a minimal cross-runtime proof example\r\n  So " +
-                    "that TypeScript-generated Groth16 proofs can be injected directly into the .NET " +
-                    "verifier path", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Reaction proof cross-runtime interop", "  As a FEAT-087 maintainer\n  I want a minimal cross-runtime proof example\n  So th" +
+                    "at TypeScript-generated Groth16 proofs can be injected directly into the .NET ve" +
+                    "rifier path", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

@@ -13,17 +13,28 @@ namespace HushNode.HushVoting.Licence.Transactions;
 
 public static class LicenceBlockIndexWriterDecisions
 {
+    /// <summary>Complete the matching reservation inside the successful index transaction.</summary>
+    public static void ResolveIndexedReservation(LicencePendingReservationEntity? reservation, DateTime blockCreationTimeUtc)
+    {
+        if (reservation?.LifecycleStatus != LicencePersistenceVocabulary.ReservationLifecyclePending) return;
+        reservation.LifecycleStatus = LicencePersistenceVocabulary.ReservationLifecycleResolved;
+        reservation.ResolvedAtUtc = blockCreationTimeUtc;
+    }
+
     /// <summary>
     /// Builds the current indexed state view used for deterministic block-time re-derivation. A
-    /// null/absent active row is verified no-active; an active row maps its plan/reference/interval.
+    /// null/absent or expired row is verified no-active; expiry uses the containing block's
+    /// consensus timestamp so replay cannot depend on the machine's current clock.
     /// </summary>
     public static HushVotingLicenceCurrentState CurrentlyActiveState(
         HushVotingLicenceCatalogue catalogue,
-        LicenceAssignmentEntity? currentlyActive)
+        LicenceAssignmentEntity? currentlyActive,
+        DateTime blockCreationTimeUtc)
     {
         ArgumentNullException.ThrowIfNull(catalogue);
 
-        if (currentlyActive is null)
+        if (currentlyActive is null
+            || (currentlyActive.ExpiresAtUtc is DateTime expiry && blockCreationTimeUtc >= expiry))
         {
             return new HushVotingLicenceCurrentState.NoActive();
         }

@@ -48,9 +48,9 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Document & Video Attachment Walkthrough", "    As two users on HushNetwork\r\n    I want to send and receive document and vide" +
-                    "o attachments in a direct chat\r\n    So that file sharing works end-to-end throug" +
-                    "h the blockchain", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Document & Video Attachment Walkthrough", "    As two users on HushNetwork\n    I want to send and receive document and video" +
+                    " attachments in a direct chat\n    So that file sharing works end-to-end through " +
+                    "the blockchain", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

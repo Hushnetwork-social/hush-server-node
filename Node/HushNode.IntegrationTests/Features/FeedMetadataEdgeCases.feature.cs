@@ -42,8 +42,8 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-065 Feed Metadata Edge Cases", "  As a cache system\r\n  I want to handle edge cases gracefully\r\n  So that the syst" +
-                    "em remains robust under non-ideal conditions", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-065 Feed Metadata Edge Cases", "  As a cache system\n  I want to handle edge cases gracefully\n  So that the system" +
+                    " remains robust under non-ideal conditions", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

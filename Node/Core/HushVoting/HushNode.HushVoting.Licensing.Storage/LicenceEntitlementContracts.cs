@@ -224,7 +224,8 @@ public sealed record EffectiveLicenceEntitlement(
     DateTime? ExpiresAtUtc,
     string AssignedCatalogueVersion,
     string AssignedCatalogueDigestSha256,
-    long EntitlementRevision);
+    long EntitlementRevision,
+    Guid? LicenceReference = null);
 
 /// <summary>Result of <c>GetOrProvision</c>. Business and authority outcomes are typed, never exceptions.</summary>
 public sealed record LicenceResolutionResult(

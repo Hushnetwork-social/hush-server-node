@@ -44,9 +44,9 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "FEAT-063 Cross-Device Read Sync E2E", "    As a user with multiple browser sessions\r\n    I want reading messages on one " +
-                    "session to update unread badges on another\r\n    So that my unread counts are con" +
-                    "sistent everywhere", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "FEAT-063 Cross-Device Read Sync E2E", "    As a user with multiple browser sessions\n    I want reading messages on one s" +
+                    "ession to update unread badges on another\n    So that my unread counts are consi" +
+                    "stent everywhere", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

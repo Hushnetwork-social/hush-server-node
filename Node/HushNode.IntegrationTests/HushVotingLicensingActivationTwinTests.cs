@@ -204,7 +204,6 @@ public sealed class HushVotingLicensingActivationTwinTests
 
     [Fact]
     [Trait("Category", "FEAT-017")]
-    [Trait("AcceptanceId", "AT-LIC-005")] // FEAT-017 TwinTest pair (EPIC-002): explicit informed activation supersedes Direct Free exactly once with one annual assignment
     public async Task Valid_activation_supersedes_direct_free_and_starts_one_annual_veritas()
     {
         var databaseName = await NewDatabaseAsync();
@@ -360,7 +359,6 @@ public sealed class HushVotingLicensingActivationTwinTests
 
     [Fact]
     [Trait("Category", "FEAT-016")]
-    [Trait("AcceptanceId", "AT-LIC-007")] // FEAT-016 TwinTest pair (EPIC-002): exact transaction retry/ambiguity is idempotent
     public async Task Identical_command_replay_returns_the_original_outcome_without_mutation()
     {
         var databaseName = await NewDatabaseAsync();
@@ -480,7 +478,6 @@ public sealed class HushVotingLicensingActivationTwinTests
 
     [Fact]
     [Trait("Category", "FEAT-017")]
-    [Trait("AcceptanceId", "AT-LIC-008")] // FEAT-017 TwinTest pair (EPIC-002): activation of the current plan returns unchanged durably with no mutation
     public async Task Same_plan_activation_returns_transition_unchanged_durably()
     {
         var databaseName = await NewDatabaseAsync();
@@ -610,7 +607,6 @@ public sealed class HushVotingLicensingActivationTwinTests
 
     [Fact]
     [Trait("Category", "FEAT-017")]
-    [Trait("AcceptanceId", "AT-LIC-009")] // FEAT-017 TwinTest pair (EPIC-002): stale current-plan/catalogue precondition conflicts safely and durably
     public async Task Stale_precondition_returns_precondition_conflict_durably()
     {
         var databaseName = await NewDatabaseAsync();

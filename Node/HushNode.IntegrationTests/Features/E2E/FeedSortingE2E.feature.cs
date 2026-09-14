@@ -44,9 +44,9 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "FEAT-062 Feed Sorting E2E (blockIndex-based)", "    As a user viewing my feed list in the browser\r\n    I want feeds sorted by mos" +
-                    "t recent activity (blockIndex)\r\n    So that my most active conversations appear " +
-                    "at the top", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "FEAT-062 Feed Sorting E2E (blockIndex-based)", "    As a user viewing my feed list in the browser\n    I want feeds sorted by most" +
+                    " recent activity (blockIndex)\n    So that my most active conversations appear at" +
+                    " the top", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         

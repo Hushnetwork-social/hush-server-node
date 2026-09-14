@@ -8,7 +8,7 @@ databases, or restricted owner/auditor evidence.
 
 ## Requirements
 
-- .NET 9 SDK
+- .NET 10 SDK
 - Verifier source repository: `https://github.com/Hushnetwork-social/hush-server-node`
 - Verifier source ref: `{{VERIFIER_SOURCE_REF}}`
 - Verifier project: `Tools/HushVotingVerifier/HushVotingVerifier.csproj`

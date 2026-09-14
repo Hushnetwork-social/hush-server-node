@@ -1,6 +1,11 @@
 # Use the .NET SDK image to build the application
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
+
+# Build-time protocol package resolution uses Bash and standard Linux utilities.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl jq unzip \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy all the necessary files and restore dependencies
 # Copying .sln and .csproj files first allows Docker to cache the restore step
@@ -31,7 +36,7 @@ RUN npm init -y
 RUN npm install --omit=dev snarkjs@0.7.5
 
 # Use the ASP.NET runtime image for the final, smaller container
-FROM mcr.microsoft.com/dotnet/aspnet:9.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=build /app/publish .
 COPY --from=sp07-worker-build /src/Tools/HushSp07RustWorker/target/release/hush-sp07-rust-worker /app/tools/hush-sp07/hush-sp07-rust-worker

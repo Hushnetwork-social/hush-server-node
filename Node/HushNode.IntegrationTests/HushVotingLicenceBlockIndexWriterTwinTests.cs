@@ -194,6 +194,108 @@ public sealed class HushVotingLicenceBlockIndexWriterTwinTests : IAsyncLifetime
         subjectRow.EntitlementRevision.Should().Be(1);
     }
 
+    // EPIC-002 AT-LIC-010 -> FEAT-015 AC-015-011/013/014/016/017, Phase 6 Tasks 6.3/6.4.
+    // Backend Twin evidence only: the browser expiry wake-up is a separate E2E requirement.
+    [Theory]
+    [InlineData(-1, false)]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    public async Task Annual_expiry_allows_only_an_indexed_replacement_baseline(long expiryOffsetSeconds, bool allowed)
+    {
+        var subject = await InsertSubjectAsync();
+        var policy = new LicenceCacheOutboxPolicy(true, null);
+        (await IndexAsync(subject, BaselineTx, BaselinePayload(), 42, BlockTime, policy)).Indexed.Should().BeTrue();
+        var annualTx = Guid.NewGuid();
+        var annualTime = BlockTime.AddDays(30);
+        (await IndexAsync(subject, annualTx, UpgradePayload(), 55, annualTime, policy)).Indexed.Should().BeTrue();
+        var evaluationTime = annualTime.AddYears(1).AddSeconds(expiryOffsetSeconds);
+        var reader = new LicenceIndexedProjectionReader(() => _fixture.CreateContext(_databaseName));
+
+        var before = await reader.ResolveEffectiveAsync(subject, evaluationTime, CancellationToken.None);
+        before.Outcome.Should().Be(allowed ? IndexedEntitlementReadOutcome.NoActive : IndexedEntitlementReadOutcome.Active);
+        await using (var unchanged = _fixture.CreateContext(_databaseName))
+        {
+            (await unchanged.Set<LicenceAssignmentEntity>().CountAsync()).Should().Be(2);
+            (await unchanged.Set<LicenceTransitionEventEntity>().CountAsync()).Should().Be(3);
+            (await unchanged.Set<LicenceCacheOutboxEntity>().CountAsync()).Should().Be(2);
+            (await unchanged.Set<LicenceSubjectEntity>().SingleAsync()).EntitlementRevision.Should().Be(2);
+        }
+
+        var replacementTx = Guid.NewGuid();
+        var result = await IndexAsync(subject, replacementTx, BaselinePayload(), 70, evaluationTime, policy);
+        result.Indexed.Should().Be(allowed);
+        if (!allowed)
+            result.StableErrorCode.Should().Be(HushNode.HushVoting.Licence.Transactions.HushVotingLicenceValidationCodes.BaselineRequiresNoActiveEntitlement);
+        else
+            (await IndexAsync(subject, replacementTx, BaselinePayload(), 70, evaluationTime, policy)).Indexed.Should().BeTrue();
+
+        await using var context = _fixture.CreateContext(_databaseName);
+        var assignments = await context.Set<LicenceAssignmentEntity>().ToListAsync();
+        assignments.Should().HaveCount(allowed ? 3 : 2);
+        var active = assignments.Single(a => a.LifecycleStatus == LicencePersistenceVocabulary.LifecycleActive);
+        active.PlanId.Should().Be(allowed ? "hushvoting.direct.free" : "hushvoting.veritas.2000");
+        (await context.Set<LicenceSubjectEntity>().SingleAsync()).EntitlementRevision.Should().Be(allowed ? 3 : 2);
+        (await context.Set<LicenceTransitionEventEntity>().CountAsync()).Should().Be(allowed ? 5 : 3);
+        (await context.Set<LicenceCacheOutboxEntity>().CountAsync()).Should().Be(allowed ? 3 : 2);
+        if (allowed)
+        {
+            active.OriginatingTransactionId.Should().Be(replacementTx);
+            active.OriginatingBlockIndex.Should().Be(70);
+            active.EffectiveFromUtc.Should().Be(evaluationTime);
+            active.ExpiresAtUtc.Should().BeNull();
+            var expired = assignments.Single(a => a.OriginatingTransactionId == annualTx);
+            expired.LifecycleStatus.Should().Be(LicencePersistenceVocabulary.LifecycleExpired);
+            expired.LifecycleReason.Should().Be(LicenceEntitlementDecisions.ReasonAnnualExpiry);
+            expired.SupersededByAssignmentId.Should().BeNull();
+            var expiryEvent = await context.Set<LicenceTransitionEventEntity>()
+                .SingleAsync(e => e.EventType == LicencePersistenceVocabulary.EventTypeExpired);
+            expiryEvent.AssignmentId.Should().Be(expired.LicenceAssignmentId);
+            expiryEvent.SubjectRevision.Should().Be(3);
+            expiryEvent.OccurredAtUtc.Should().Be(evaluationTime);
+            (await context.Set<LicenceCacheOutboxEntity>().SingleAsync(o => o.CommittedRevision == 3))
+                .ChangeKind.Should().Be(LicenceCacheOutboxChangeKinds.ExpiredToDefault);
+        }
+    }
+
+    [Fact]
+    public async Task Indexed_annual_reservation_does_not_block_the_next_baseline()
+    {
+        var subject = await InsertSubjectAsync();
+        Guid subjectId;
+        await using (var context = _fixture.CreateContext(_databaseName))
+            subjectId = (await context.Set<LicenceSubjectEntity>().SingleAsync()).LicenceSubjectId;
+        var store = new HushVotingLicenceReservationStore(() => _fixture.CreateContext(_databaseName));
+        var annualTx = Guid.NewGuid();
+        var replacementTx = Guid.NewGuid();
+        var annualTime = BlockTime.AddDays(30);
+        var transitions = new[]
+        {
+            (Id: BaselineTx, Payload: BaselinePayload(), Rank: 0, Time: BlockTime),
+            (Id: annualTx, Payload: UpgradePayload(), Rank: 2, Time: annualTime),
+            (Id: replacementTx, Payload: BaselinePayload(), Rank: 0, Time: annualTime.AddYears(1)),
+        };
+        foreach (var transition in transitions)
+        {
+            var claim = new HushVotingLicenceReservationClaim(subjectId, transition.Id,
+                new string('a', 64), transition.Payload.TransitionIntent, transition.Payload.RequestedPlanId,
+                Catalogue.Version.Value, transition.Payload.ExpectedCurrentLicenceTransactionId,
+                transition.Payload.ExpectedCurrentPlanId, transition.Rank);
+            var admission = await store.ReserveAsync(claim, CancellationToken.None);
+            admission.Outcome.Should().Be(HushVotingLicenceSubmitOutcome.Accepted);
+            (await IndexAsync(subject, transition.Id, transition.Payload, 70, transition.Time)).Indexed.Should().BeTrue();
+            await using var context = _fixture.CreateContext(_databaseName);
+            var reservation = await context.Set<LicencePendingReservationEntity>()
+                .SingleAsync(r => r.OriginatingTransactionId == transition.Id);
+            reservation.LifecycleStatus.Should().Be(LicencePersistenceVocabulary.ReservationLifecycleResolved);
+            reservation.ResolvedAtUtc.Should().Be(transition.Time);
+            (await context.Set<LicencePendingReservationEntity>()
+                .CountAsync(r => r.LifecycleStatus == LicencePersistenceVocabulary.ReservationLifecyclePending)).Should().Be(0);
+        }
+        await using var retained = _fixture.CreateContext(_databaseName);
+        (await retained.Set<LicencePendingReservationEntity>().CountAsync()).Should().Be(3);
+        (await retained.Set<LicenceAssignmentEntity>().CountAsync()).Should().Be(3);
+    }
+
     [Fact]
     public async Task Atomic_index_write_enqueues_cache_outbox_row_when_policy_enabled()
     {

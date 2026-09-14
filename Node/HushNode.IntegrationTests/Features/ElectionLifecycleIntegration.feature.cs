@@ -46,9 +46,9 @@ namespace HushNode.IntegrationTests.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-094 election lifecycle integration", "  As a FEAT-094 maintainer\r\n  I want the election lifecycle flow wired through th" +
-                    "e real node host\r\n  So that the minimum owner workflow can be validated without " +
-                    "broad browser execution", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "FEAT-094 election lifecycle integration", "  As a FEAT-094 maintainer\n  I want the election lifecycle flow wired through the" +
+                    " real node host\n  So that the minimum owner workflow can be validated without br" +
+                    "oad browser execution", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         
