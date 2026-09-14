@@ -22,7 +22,7 @@ COPY . .
 WORKDIR "/src"
 RUN dotnet restore "Node/HushServerNode.sln"
 
-RUN dotnet publish "Node/HushServerNode/HushServerNode.csproj" -c Release -o /app/publish
+RUN dotnet publish "Node/HushServerNode/HushServerNode.csproj" -c Release -o /src/publish
 
 FROM rust:1-bookworm AS sp07-worker-build
 WORKDIR /src
@@ -38,7 +38,7 @@ RUN npm install --omit=dev snarkjs@0.7.5
 # Use the ASP.NET runtime image for the final, smaller container
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
-COPY --from=build /app/publish .
+COPY --from=build /src/publish .
 COPY --from=sp07-worker-build /src/Tools/HushSp07RustWorker/target/release/hush-sp07-rust-worker /app/tools/hush-sp07/hush-sp07-rust-worker
 COPY --from=zk-runtime /usr/local/ /usr/local/
 COPY --from=zk-runtime /opt/hush-snarkjs /opt/hush-snarkjs
