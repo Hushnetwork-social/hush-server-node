@@ -101,6 +101,45 @@ public class IndexingDispatcherServiceTests
 
 public class IndexingDispatcherServiceBlockContextTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CanonicalFrame_PreservesOrderAndRestoresCaller_WithoutCheckpointOnFault(bool failSecond)
+    {
+        var events = new Mock<IEventAggregator>();
+        var strategy = new Mock<IIndexStrategy>();
+        strategy.Setup(x => x.CanHandle(It.IsAny<AbstractTransaction>())).Returns(true);
+        var first = CreateTransaction();
+        var second = CreateTransaction();
+        var block = CreateBlock(first, second);
+        var observed = new List<BlockTransactionExecution>();
+        var outer = new BlockTransactionExecution(Guid.NewGuid(), new(1, DateTime.UtcNow, Guid.NewGuid(), 7));
+        using var outerScope = BlockTransactionExecutionScope.Enter(outer);
+        strategy.Setup(x => x.HandleAsync(It.IsAny<AbstractTransaction>()))
+            .Returns<AbstractTransaction>(async tx =>
+            {
+                await Task.Yield();
+                var frame = BlockTransactionExecutionScope.Current!;
+                frame.TransactionId.Should().Be(tx.TransactionId.Value);
+                observed.Add(frame);
+                if (failSecond && tx.TransactionId == second.TransactionId)
+                    throw new InvalidOperationException("controlled indexing fault");
+            });
+        var checkpoints = 0;
+        var dispatcher = new IndexingDispatcherService([strategy.Object], events.Object, () => checkpoints++);
+        var run = () => dispatcher.HandleAsync(new BlockCreatedEvent(block));
+        if (failSecond) await run.Should().ThrowAsync<InvalidOperationException>();
+        else await run();
+
+        observed.Select(x => x.TransactionId).Should().Equal(first.TransactionId.Value, second.TransactionId.Value);
+        observed.Select(x => x.Block.TransactionPosition).Should().Equal(0, 1);
+        observed.Should().OnlyContain(x => x.Block.BlockId == block.BlockId.Value &&
+            x.Block.BlockIndex == block.BlockIndex.Value && x.Block.BlockCreationTimeUtc == block.CreationTimeStamp.Value);
+        BlockTransactionExecutionScope.Current.Should().Be(outer);
+        checkpoints.Should().Be(failSecond ? 0 : 1);
+        events.Verify(x => x.PublishAsync(It.IsAny<BlockIndexCompletedEvent>()), failSecond ? Times.Never() : Times.Once());
+    }
+
     [Fact]
     public async Task BlockContextStrategies_ReceiveTheContainingBlockConsensusTime()
     {

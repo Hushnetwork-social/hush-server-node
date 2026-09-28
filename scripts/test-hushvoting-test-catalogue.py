@@ -21,7 +21,7 @@ class SelectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "requires --server-twins"):
             MODULE.validate_group(result, "HV-ENTITLEMENT-STORAGE-TWIN", False)
         with self.assertRaisesRegex(ValueError, "reserved"):
-            MODULE.validate_group(result, "HV-ENTITLEMENT-ENFORCEMENT-TWIN", True)
+            MODULE.validate_group(result, "HV-ENTITLEMENT-ROLLOUT-TWIN", True)
         with self.assertRaisesRegex(ValueError, "inventory mismatch"):
             self.changed(lambda data: data["featureOwnedGroups"][0].update(scenarioIds=[]))
 

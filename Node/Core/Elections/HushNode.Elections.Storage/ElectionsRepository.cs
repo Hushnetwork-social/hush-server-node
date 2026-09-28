@@ -6,6 +6,18 @@ namespace HushNode.Elections.Storage;
 
 public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElectionsRepository
 {
+    public Task<string?> GetElectionOwnerAsync(ElectionId electionId) => Context.Elections.AsNoTracking()
+        .Where(e => e.ElectionId == electionId).Select(e => (string?)e.OwnerPublicAddress).SingleOrDefaultAsync();
+
+    public Task<HushNode.HushVoting.Licensing.Storage.IndexedEntitlementReadResult> LockOwnerEntitlementAsync(string owner, DateTime executionUtc) =>
+        HushNode.HushVoting.Licensing.Storage.LicenceEnlistedProjectionReader.LockAndReadAsync(Context, owner, executionUtc);
+
+    public Task<ElectionRosterLinkBoundary?> GetFirstRosterLinkAsync(ElectionId electionId) =>
+        Context.ElectionRosterLinkBoundaries.AsNoTracking().SingleOrDefaultAsync(e => e.ElectionId == electionId);
+
+    public Task<ElectionEvidenceWriteOutcome> AddFirstRosterLinkAsync(ElectionRosterLinkBoundary boundary) =>
+        ElectionEntitlementStorage.AddFirstLinkAsync(Context, boundary);
+
     private static readonly ElectionAdminOnlyProtectedTallyCustodyLifecycleState[] CustodyReconciliationStates =
     [
         ElectionAdminOnlyProtectedTallyCustodyLifecycleState.ProviderUnavailable,
@@ -913,11 +925,15 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task DeleteRosterEntriesAsync(ElectionId electionId)
     {
+        if (Context.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("Roster replacement requires the caller's write transaction.");
         var existing = await Context.ElectionRosterEntries
             .Where(x => x.ElectionId == electionId)
             .ToListAsync();
 
         Context.ElectionRosterEntries.RemoveRange(existing);
+        // Flush key reuse inside the caller's still-uncommitted transaction.
+        await Context.SaveChangesAsync();
     }
 
     public async Task<IReadOnlyList<ElectionEligibilityActivationEventRecord>> GetEligibilityActivationEventsAsync(ElectionId electionId) =>

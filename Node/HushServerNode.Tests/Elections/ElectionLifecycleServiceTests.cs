@@ -8,6 +8,8 @@ using HushNode.Credentials;
 using HushNode.Elections;
 using HushNode.Elections.Storage;
 using HushNode.Identity.Storage;
+using HushNode.HushVoting.Licensing.Storage;
+using HushShared.HushVoting.Licensing.Model;
 using HushNode.Reactions.Crypto;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Elections.Model;
@@ -65,6 +67,8 @@ public class ElectionLifecycleServiceTests
         var electionId = ElectionId.NewElectionId;
         var transactionId = Guid.NewGuid();
         var blockId = Guid.NewGuid();
+
+        store.ExecutionContext = new(transactionId, blockId, 17, 0, DateTime.UtcNow);
 
         var result = await service.CreateDraftAsync(new CreateElectionDraftRequest(
             OwnerPublicAddress: "owner-address",
@@ -266,6 +270,8 @@ public class ElectionLifecycleServiceTests
         var transactionId = Guid.NewGuid();
         var blockId = Guid.NewGuid();
 
+        store.ExecutionContext = new(transactionId, blockId, 19, 0, DateTime.UtcNow);
+
         var updateResult = await service.UpdateDraftAsync(new UpdateElectionDraftRequest(
             ElectionId: createResult.Election!.ElectionId,
             ActorPublicAddress: "owner-address",
@@ -292,15 +298,13 @@ public class ElectionLifecycleServiceTests
     public async Task UpdateDraftAsync_WithProfileChange_MarksProtocolPackageBindingIncompatible()
     {
         var store = new ElectionStore();
-        SeedApprovedProtocolPackage(store, "dkg-prod-2of2");
+        SeedApprovedProtocolPackage(store, "admin-prod-1of1");
         var service = CreateService(store);
         var createResult = await service.CreateDraftAsync(new CreateElectionDraftRequest(
             OwnerPublicAddress: "owner-address",
             ActorPublicAddress: "owner-address",
             SnapshotReason: "initial governed draft",
-            Draft: CreateTrusteeDraftSpecification(
-                requiredApprovalCount: 2,
-                selectedProfileId: "dkg-prod-2of2")));
+            Draft: CreateAdminDraftSpecification()));
 
         var updateResult = await service.UpdateDraftAsync(new UpdateElectionDraftRequest(
             ElectionId: createResult.Election!.ElectionId,
@@ -333,12 +337,15 @@ public class ElectionLifecycleServiceTests
         var latestCatalog = SeedApprovedProtocolPackage(store, "admin-prod-1of1", packageVersion: "v1.1.0", isLatest: true, hashSeed: 'f');
         var transactionId = Guid.NewGuid();
 
+        var blockId = Guid.NewGuid();
+        store.ExecutionContext = new(transactionId, blockId, 31, 0, DateTime.UtcNow);
+
         var result = await service.RefreshProtocolPackageBindingAsync(new RefreshElectionProtocolPackageBindingRequest(
             createResult.Election!.ElectionId,
             "owner-address",
             SourceTransactionId: transactionId,
             SourceBlockHeight: 31,
-            SourceBlockId: Guid.NewGuid()));
+            SourceBlockId: blockId));
 
         result.IsSuccess.Should().BeTrue();
         result.ProtocolPackageBinding.Should().NotBeNull();
@@ -1860,6 +1867,8 @@ public class ElectionLifecycleServiceTests
 
         store.Elections[election.ElectionId] = election;
         store.TrusteeInvitations[invitation.Id] = invitation;
+
+        store.ExecutionContext = new(transactionId, blockId, 27, 0, DateTime.UtcNow);
 
         var result = await service.RevokeTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest(
             ElectionId: election.ElectionId,
@@ -6481,7 +6490,9 @@ public class ElectionLifecycleServiceTests
             publicationProofSessionRunner: publicationProofSessionRunner,
             sp08ReleaseEvidenceProvider: sp08ReleaseEvidenceProvider,
             adminOnlyProtectedTallyCustodyLifecycleAuthority: adminOnlyProtectedTallyCustodyLifecycleAuthority,
-            deploymentProofBindingService: deploymentProofBindingService);
+            deploymentProofBindingService: deploymentProofBindingService,
+            licenceCatalogueArchive: new LicenceCatalogueArchive([LicenceServiceConfiguration.CreateDefault()]),
+            electionExecutionContextSource: new UnitExecutionContext(store));
     }
 
     private sealed record OpenReadyHighAssuranceSetup(
@@ -8484,8 +8495,18 @@ public class ElectionLifecycleServiceTests
         ElectionCommitmentRegistrationRecord? CommitmentRegistration,
         ElectionPreparedBallotCommitmentRecord? PreparedBallotCommitment);
 
+    // Legacy lifecycle-unit cases supply trusted external facts through the same ports as
+    // production. They exercise the real entitlement policy; PostgreSQL/dispatch authority,
+    // unavailable states and cap/profile rejection are proven by FEAT-018's owned Twins.
+    private sealed class UnitExecutionContext(ElectionStore store) : IElectionExecutionContextSource
+    {
+        public ElectionExecutionContext? Current => store.ExecutionContext;
+    }
+
     private sealed class ElectionStore
     {
+        public ElectionExecutionContext ExecutionContext { get; set; } = new(Guid.NewGuid(), Guid.NewGuid(), 17, 0, DateTime.UtcNow);
+        public List<ElectionRosterLinkBoundary> FirstRosterLinks { get; } = [];
         public Dictionary<ElectionId, ElectionRecord> Elections { get; } = [];
         public Dictionary<(ElectionId ElectionId, string ActorPublicAddress), ElectionEnvelopeAccessRecord> ElectionEnvelopeAccessRecords { get; } = [];
         public List<ElectionResultArtifactRecord> ResultArtifacts { get; } = [];
@@ -8567,6 +8588,8 @@ public class ElectionLifecycleServiceTests
 
         public void ReplaceDataFrom(ElectionStore source)
         {
+            ExecutionContext = source.ExecutionContext;
+            ReplaceList(FirstRosterLinks, source.FirstRosterLinks);
             ReplaceDictionary(Elections, source.Elections);
             ReplaceDictionary(ElectionEnvelopeAccessRecords, source.ElectionEnvelopeAccessRecords);
             ReplaceList(ResultArtifacts, source.ResultArtifacts);
@@ -8985,6 +9008,33 @@ public class ElectionLifecycleServiceTests
 
     private sealed class FakeElectionsRepository(ElectionStore store) : IElectionsRepository
     {
+        public Task<string?> GetElectionOwnerAsync(ElectionId electionId) => Task.FromResult(
+            store.Elections.TryGetValue(electionId, out var election) ? election.OwnerPublicAddress : null);
+
+        public Task<IndexedEntitlementReadResult> LockOwnerEntitlementAsync(string owner, DateTime executionUtc)
+        {
+            if (string.IsNullOrEmpty(owner)) return Task.FromResult(IndexedEntitlementReadResult.NoActive());
+            var release = LicenceServiceConfiguration.CreateDefault();
+            var plan = release.Catalogue.FindPlan(HushVotingLicencePlanId.Veritas10000)!;
+            return Task.FromResult(IndexedEntitlementReadResult.Active(new(Guid.NewGuid(), Guid.NewGuid(), plan.Id.Value,
+                "veritas", plan.UpgradeRank, plan.EligibleVoterCap, plan.UnlimitedElections, "annual", plan.Term.Years,
+                plan.GovernanceOptions.Select(o => o.Id.Value).ToArray(), "confirmed_upgrade",
+                executionUtc.AddMonths(-1), executionUtc.AddMonths(11), release.CatalogueVersion,
+                release.ReleaseDigestSha256, 1, Guid.NewGuid())));
+        }
+
+        public Task<ElectionRosterLinkBoundary?> GetFirstRosterLinkAsync(ElectionId electionId) =>
+            Task.FromResult(store.FirstRosterLinks.SingleOrDefault(e => e.ElectionId == electionId));
+
+        public Task<ElectionEvidenceWriteOutcome> AddFirstRosterLinkAsync(ElectionRosterLinkBoundary boundary)
+        {
+            var existing = store.FirstRosterLinks.SingleOrDefault(e => e.ElectionId == boundary.ElectionId);
+            if (existing is not null) return Task.FromResult(existing == boundary
+                ? ElectionEvidenceWriteOutcome.IdenticalReplay : ElectionEvidenceWriteOutcome.Conflict);
+            store.FirstRosterLinks.Add(boundary);
+            return Task.FromResult(ElectionEvidenceWriteOutcome.Added);
+        }
+
         public Task<ElectionRecord?> GetElectionAsync(ElectionId electionId) =>
             Task.FromResult(store.Elections.GetValueOrDefault(electionId));
 

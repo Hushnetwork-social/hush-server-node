@@ -13,3 +13,12 @@ public interface IElectionExecutionContextSource
 {
     ElectionExecutionContext? Current { get; }
 }
+
+/// <summary>Adapts the canonical dispatcher frame for both direct and encrypted election paths.</summary>
+public sealed class ElectionExecutionContextSource : IElectionExecutionContextSource
+{
+    public ElectionExecutionContext? Current => HushNode.Indexing.Interfaces.BlockTransactionExecutionScope.Current is { } frame
+        ? new(frame.TransactionId, frame.Block.BlockId, frame.Block.BlockIndex,
+            frame.Block.TransactionPosition, frame.Block.BlockCreationTimeUtc)
+        : null;
+}

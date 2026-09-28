@@ -5,6 +5,15 @@ namespace HushNode.Elections.Storage;
 
 public interface IElectionsRepository : IRepository
 {
+    Task<string?> GetElectionOwnerAsync(ElectionId electionId) =>
+        throw new NotSupportedException("Election owner authority is not implemented.");
+    Task<HushNode.HushVoting.Licensing.Storage.IndexedEntitlementReadResult> LockOwnerEntitlementAsync(string owner, DateTime executionUtc) =>
+        throw new NotSupportedException("Transactional licence authority is not implemented.");
+    Task<ElectionRosterLinkBoundary?> GetFirstRosterLinkAsync(ElectionId electionId) =>
+        throw new NotSupportedException("First-link evidence is not implemented.");
+    Task<ElectionEvidenceWriteOutcome> AddFirstRosterLinkAsync(ElectionRosterLinkBoundary boundary) =>
+        throw new NotSupportedException("First-link evidence is not implemented.");
+
     Task<ElectionRecord?> GetElectionAsync(ElectionId electionId);
 
     Task<ElectionRecord?> GetElectionForUpdateAsync(ElectionId electionId);

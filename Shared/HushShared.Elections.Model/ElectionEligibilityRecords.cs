@@ -1,5 +1,7 @@
 namespace HushShared.Elections.Model;
 
+public enum ElectionRosterImportMode { Add = 0, Replace = 1 }
+
 public record ElectionRosterImportItem(
     string OrganizationVoterId,
     ElectionRosterContactType ContactType,

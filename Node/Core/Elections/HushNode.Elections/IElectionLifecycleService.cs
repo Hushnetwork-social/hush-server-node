@@ -120,7 +120,8 @@ public record ImportElectionRosterRequest(
     IReadOnlyList<ElectionRosterImportItem> RosterEntries,
     Guid? SourceTransactionId = null,
     long? SourceBlockHeight = null,
-    Guid? SourceBlockId = null);
+    Guid? SourceBlockId = null,
+    ElectionRosterImportMode Mode = ElectionRosterImportMode.Add);
 
 public record ClaimElectionRosterEntryRequest(
     ElectionId ElectionId,

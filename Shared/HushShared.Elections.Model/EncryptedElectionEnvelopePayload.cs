@@ -35,7 +35,8 @@ public record RefreshProtocolPackageBindingActionPayload(
 
 public record ImportElectionRosterActionPayload(
     string ActorPublicAddress,
-    IReadOnlyList<ElectionRosterImportItem> RosterEntries);
+    IReadOnlyList<ElectionRosterImportItem> RosterEntries,
+    ElectionRosterImportMode Mode = ElectionRosterImportMode.Add);
 
 public record ClaimElectionRosterEntryActionPayload(
     string ActorPublicAddress,

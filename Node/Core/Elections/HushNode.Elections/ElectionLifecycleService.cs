@@ -15,6 +15,8 @@ using HushShared.Identity.Model;
 using Microsoft.Extensions.Logging;
 using Olimpo;
 using Olimpo.EntityFramework.Persistency;
+using HushNode.HushVoting.Licensing.Storage;
+using Microsoft.EntityFrameworkCore;
 
 namespace HushNode.Elections;
 
@@ -45,6 +47,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly IBabyJubJub _curve;
     private readonly ProtocolPackageBindingService _protocolPackageBindingService = new();
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
+    private readonly ElectionEntitlementAuthorizer _entitlementAuthorizer;
+    private readonly IElectionExecutionContextSource _executionContext;
 
     public ElectionLifecycleService(
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
@@ -81,7 +85,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IElectionSp08ReleaseEvidenceProvider? sp08ReleaseEvidenceProvider = null,
         IAdminOnlyProtectedTallyCustodyLifecycleAuthority? adminOnlyProtectedTallyCustodyLifecycleAuthority = null,
         IElectionDeploymentProofBindingService? deploymentProofBindingService = null,
-        IProtocolPackageCatalogSyncService? protocolPackageCatalogSyncService = null)
+        IProtocolPackageCatalogSyncService? protocolPackageCatalogSyncService = null,
+        LicenceCatalogueArchive? licenceCatalogueArchive = null,
+        IElectionExecutionContextSource? electionExecutionContextSource = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
@@ -107,9 +113,30 @@ public class ElectionLifecycleService : IElectionLifecycleService
         _protocolPackageCatalogSyncService =
             protocolPackageCatalogSyncService ?? NoopProtocolPackageCatalogSyncService.Instance;
         _curve = curve ?? new BabyJubJubCurve();
+        _executionContext = electionExecutionContextSource ?? new ElectionExecutionContextSource();
+        _entitlementAuthorizer = new ElectionEntitlementAuthorizer(licenceCatalogueArchive, _executionContext);
     }
 
-    public async Task<ElectionCommandResult> CreateDraftAsync(CreateElectionDraftRequest request)
+    private static async Task<ElectionCommandResult> ExecuteEntitlementWriteAsync(Func<Task<ElectionCommandResult>> operation)
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try { return await operation(); }
+            catch (Exception ex) when (LicenceDatabaseFailures.IsSerializationConflict(ex))
+            {
+                if (attempt == 2) return ElectionEntitlementResults.Reject(ElectionEntitlementReason.AuthorityUnavailable);
+                await Task.Delay(10 * (1 << attempt));
+            }
+            catch (System.Data.Common.DbException) { return ElectionEntitlementResults.Reject(ElectionEntitlementReason.AuthorityUnavailable); }
+            catch (DbUpdateException) { return ElectionEntitlementResults.Reject(ElectionEntitlementReason.AuthorityUnavailable); }
+        }
+        return ElectionEntitlementResults.Reject(ElectionEntitlementReason.AuthorityUnavailable);
+    }
+
+    public Task<ElectionCommandResult> CreateDraftAsync(CreateElectionDraftRequest request) =>
+        ExecuteEntitlementWriteAsync(() => CreateDraftAsyncCore(request));
+
+    private async Task<ElectionCommandResult> CreateDraftAsyncCore(CreateElectionDraftRequest request)
     {
         if (!string.Equals(request.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
         {
@@ -134,6 +161,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var entitlement = await _entitlementAuthorizer.LockOwnerAsync(repository, request.OwnerPublicAddress, request.SourceTransactionId);
+        var entitlementReason = _entitlementAuthorizer.Check(entitlement, request.Draft.SelectedProfileId, request.Draft.BindingStatus, request.Draft.GovernanceMode, 0, out _);
+        if (entitlementReason != ElectionEntitlementReason.None) return ElectionEntitlementResults.Reject(entitlementReason);
+
         var selectedProfileResult = await ValidateSelectedProfileAsync(repository, request.Draft);
         if (selectedProfileResult.ErrorResult is not null)
         {
@@ -218,7 +249,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             protocolPackageBinding: protocolPackageBinding);
     }
 
-    public async Task<ElectionCommandResult> UpdateDraftAsync(UpdateElectionDraftRequest request)
+    public Task<ElectionCommandResult> UpdateDraftAsync(UpdateElectionDraftRequest request) =>
+        ExecuteEntitlementWriteAsync(() => UpdateDraftAsyncCore(request));
+
+    private async Task<ElectionCommandResult> UpdateDraftAsyncCore(UpdateElectionDraftRequest request)
     {
         var validationErrors = ElectionDraftValidator.ValidateDraftRequest(
             request.ActorPublicAddress,
@@ -234,6 +268,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var entitlement = await _entitlementAuthorizer.LockElectionOwnerAsync(repository, request.ElectionId, request.SourceTransactionId);
         var existing = await repository.GetElectionForUpdateAsync(request.ElectionId);
 
         if (existing is null)
@@ -263,6 +298,23 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ElectionCommandErrorCode.Forbidden,
                 "Only the owner can edit a draft election.");
         }
+
+        var currentRoster = await repository.GetRosterEntriesAsync(request.ElectionId);
+        var entitlementReason = _entitlementAuthorizer.Check(entitlement, request.Draft.SelectedProfileId, request.Draft.BindingStatus, request.Draft.GovernanceMode, currentRoster.Count, out _);
+        if (entitlementReason != ElectionEntitlementReason.None) return ElectionEntitlementResults.Reject(entitlementReason);
+
+        var changesGovernance = existing.SelectedProfileId != request.Draft.SelectedProfileId
+            || existing.GovernanceMode != request.Draft.GovernanceMode
+            || existing.BindingStatus != request.Draft.BindingStatus
+            || existing.RequiredApprovalCount != request.Draft.RequiredApprovalCount
+            || existing.ControlDomainProfileId != request.Draft.ControlDomainProfileId
+            || existing.ControlDomainProfileVersion != request.Draft.ControlDomainProfileVersion
+            || existing.ThresholdProfileId != (request.Draft.ThresholdProfileId ?? request.Draft.SelectedProfileId);
+        if (changesGovernance && ((await repository.GetTrusteeInvitationsAsync(request.ElectionId)).Count > 0
+            || (await repository.GetCeremonyVersionsAsync(request.ElectionId)).Count > 0))
+            return ElectionCommandResult.Failure(ElectionCommandErrorCode.Conflict,
+                "The first ceremony artifact locks this election's governance choice.",
+                [HushShared.HushVoting.Licensing.Model.HushVotingGovernanceLockEvaluator.GovernanceLockedByArtifact]);
 
         var selectedProfileResult = await ValidateSelectedProfileAsync(repository, request.Draft);
         if (selectedProfileResult.ErrorResult is not null)
@@ -351,12 +403,16 @@ public class ElectionLifecycleService : IElectionLifecycleService
             protocolPackageBinding: protocolPackageBinding);
     }
 
-    public async Task<ElectionCommandResult> RefreshProtocolPackageBindingAsync(RefreshElectionProtocolPackageBindingRequest request)
+    public Task<ElectionCommandResult> RefreshProtocolPackageBindingAsync(RefreshElectionProtocolPackageBindingRequest request) =>
+        ExecuteEntitlementWriteAsync(() => RefreshProtocolPackageBindingAsyncCore(request));
+
+    private async Task<ElectionCommandResult> RefreshProtocolPackageBindingAsyncCore(RefreshElectionProtocolPackageBindingRequest request)
     {
         await SyncProtocolPackageCatalogForElectionAsync(request.ElectionId);
 
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var entitlement = await _entitlementAuthorizer.LockElectionOwnerAsync(repository, request.ElectionId, request.SourceTransactionId);
         var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
 
         if (election is null)
@@ -372,6 +428,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
         {
             return governedDraftLock;
         }
+
+        var roster = await repository.GetRosterEntriesAsync(request.ElectionId);
+        var entitlementReason = _entitlementAuthorizer.Check(entitlement, election.SelectedProfileId, election.BindingStatus, election.GovernanceMode, roster.Count, out _);
+        if (entitlementReason != ElectionEntitlementReason.None) return ElectionEntitlementResults.Reject(entitlementReason);
 
         var refreshOutcome = await _protocolPackageBindingService.RefreshDraftBindingAsync(
             repository,
@@ -394,10 +454,14 @@ public class ElectionLifecycleService : IElectionLifecycleService
             protocolPackageBinding: refreshOutcome.Binding);
     }
 
-    public async Task<ElectionCommandResult> ImportRosterAsync(ImportElectionRosterRequest request)
+    public Task<ElectionCommandResult> ImportRosterAsync(ImportElectionRosterRequest request) =>
+        ExecuteEntitlementWriteAsync(() => ImportRosterAsyncCore(request));
+
+    private async Task<ElectionCommandResult> ImportRosterAsyncCore(ImportElectionRosterRequest request)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var entitlement = await _entitlementAuthorizer.LockElectionOwnerAsync(repository, request.ElectionId, request.SourceTransactionId);
         var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
 
         if (election is null)
@@ -428,16 +492,26 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return governedDraftLock;
         }
 
+        if (!Enum.IsDefined(request.Mode))
+            return ElectionCommandResult.Failure(ElectionCommandErrorCode.ValidationFailed, "Unknown roster import mode.");
+        var authorityReason = _entitlementAuthorizer.Check(entitlement, election.SelectedProfileId,
+            election.BindingStatus, election.GovernanceMode, 0, out _);
+        if (authorityReason != ElectionEntitlementReason.None) return ElectionEntitlementResults.Reject(authorityReason);
+
         ElectionRosterEntryRecord[] rosterEntries;
         try
         {
             var existingRosterEntries = await repository.GetRosterEntriesAsync(request.ElectionId);
-            var importedAt = DateTime.UtcNow;
+            var replacing = request.Mode == ElectionRosterImportMode.Replace;
+            if (replacing && (existingRosterEntries.Any(e => e.IsLinked || e.LinkedAt.HasValue)
+                || (await repository.GetFirstRosterLinkAsync(election.ElectionId)) is not null))
+                return ElectionEntitlementResults.Reject(ElectionEntitlementReason.RosterReplacementAfterLink);
+            var importedAt = _executionContext.Current!.BlockTimeUtc;
             var latestImportEvidence = await repository.GetLatestRosterImportEvidenceAsync(request.ElectionId);
             var importAnalysis = ElectionEligibilityContracts.AnalyzeRosterImportEntries(
                 request.ElectionId,
                 request.RosterEntries,
-                existingRosterEntries,
+                replacing ? Array.Empty<ElectionRosterEntryRecord>() : existingRosterEntries,
                 rosterImportVersion: (latestImportEvidence?.RosterImportVersion ?? 0) + 1,
                 request.ActorPublicAddress,
                 importedAt);
@@ -453,6 +527,16 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     "Election roster import validation failed.",
                     importAnalysis.ValidationErrors,
                     importAnalysis.Evidence);
+            }
+
+            var resultingCount = checked((replacing ? 0 : existingRosterEntries.Count) + importAnalysis.AcceptedRosterEntries.Count);
+            var capReason = _entitlementAuthorizer.Check(entitlement, election.SelectedProfileId,
+                election.BindingStatus, election.GovernanceMode, resultingCount, out _);
+            if (capReason != ElectionEntitlementReason.None) return ElectionEntitlementResults.Reject(capReason);
+
+            if (replacing)
+            {
+                await repository.DeleteRosterEntriesAsync(election.ElectionId);
             }
 
             rosterEntries = importAnalysis.AcceptedRosterEntries
@@ -496,7 +580,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             rosterImportEvidence: await repository.GetLatestRosterImportEvidenceAsync(request.ElectionId));
     }
 
-    public async Task<ElectionCommandResult> ClaimRosterEntryAsync(ClaimElectionRosterEntryRequest request)
+    public Task<ElectionCommandResult> ClaimRosterEntryAsync(ClaimElectionRosterEntryRequest request) =>
+        ExecuteEntitlementWriteAsync(() => ClaimRosterEntryAsyncCore(request));
+
+    private async Task<ElectionCommandResult> ClaimRosterEntryAsyncCore(ClaimElectionRosterEntryRequest request)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
@@ -559,7 +646,16 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionRosterEntryRecord updatedEntry;
         try
         {
-            var linkedAt = DateTime.UtcNow;
+            var execution = _executionContext.Current;
+            if (execution is null || !execution.IsValid || (request.SourceTransactionId.HasValue && execution.TransactionId != request.SourceTransactionId))
+                return ElectionEntitlementResults.Reject(ElectionEntitlementReason.AuthorityUnavailable);
+            var linkedAt = execution.BlockTimeUtc;
+            if (await repository.GetFirstRosterLinkAsync(election.ElectionId) is null)
+            {
+                var boundary = new ElectionRosterLinkBoundary(election.ElectionId, execution.TransactionId, linkedAt);
+                if (await repository.AddFirstRosterLinkAsync(boundary) != ElectionEvidenceWriteOutcome.Added)
+                    return ElectionEntitlementResults.Reject(ElectionEntitlementReason.AuthorityUnavailable);
+            }
             updatedEntry = rosterEntry.LinkToActor(
                 request.ActorPublicAddress,
                 linkedAt,
@@ -579,7 +675,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ElectionCommandErrorCode.ValidationFailed,
                 ex.Message);
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException ex) when (!LicenceDatabaseFailures.IsSerializationConflict(ex))
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.Conflict,

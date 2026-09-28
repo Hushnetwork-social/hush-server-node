@@ -148,7 +148,8 @@ public static class ElectionsHostBuild
                 adminOnlyProtectedTallyCustodyLifecycleAuthority:
                     sp.GetRequiredService<IAdminOnlyProtectedTallyCustodyLifecycleAuthority>(),
                 deploymentProofBindingService: sp.GetRequiredService<IElectionDeploymentProofBindingService>(),
-                protocolPackageCatalogSyncService: sp.GetRequiredService<IProtocolPackageCatalogSyncService>()));
+                protocolPackageCatalogSyncService: sp.GetRequiredService<IProtocolPackageCatalogSyncService>(),
+                licenceCatalogueArchive: sp.GetRequiredService<HushNode.HushVoting.Licensing.Storage.LicenceCatalogueArchive>()));
         services.AddHostedService<TallyExecutorBackgroundService>();
     }
 

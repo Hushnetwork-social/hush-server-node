@@ -238,7 +238,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             RosterEntries: importAction.RosterEntries,
             SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
-            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value,
+            Mode: importAction.Mode));
     }
 
     private async Task<ElectionCommandResult> HandleClaimRosterEntryAsync(
