@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FluentAssertions;
 using HushShared.HushVoting.Licensing.Model;
 using Xunit;
@@ -6,15 +7,16 @@ namespace HushServerNode.Tests.HushVotingLicence;
 
 /// <summary>
 /// Architecture duplication guard (FEAT-012 Phase 7): the HushVoting client must not contain a
-/// duplicated editable catalogue (stable-plan constant sets, safe-copy catalogue, or bundled release
-/// manifest). The server release manifest is the single source of plan truth.
+/// duplicated editable catalogue (policy terms, plan metadata tables, or bundled release manifest).
+/// Stable wire vocabulary and compatibility comparisons are required by FEAT-016 AC-016-018.
+/// The server release manifest remains the single source of plan truth.
 /// </summary>
 public sealed class HushVotingLicenceClientDuplicationTests
 {
     private static string ResolveRepoRoot()
     {
-        // Tests run from Node/HushServerNode.Tests/bin/Debug -> workspace root is four levels up.
-        var candidate = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", ".."));
+        // Find the nearest paired checkout, including isolated Git worktrees.
+        var candidate = AppContext.BaseDirectory;
         while (!Directory.Exists(Path.Combine(candidate, "hush-voting-web-client")))
         {
             var parent = Path.GetDirectoryName(candidate);
@@ -30,7 +32,7 @@ public sealed class HushVotingLicenceClientDuplicationTests
     }
 
     [Fact]
-    public void ClientRepository_DoesNotBundleAnEditableCatalogueTruth()
+    public async Task ClientRepository_DoesNotBundleAnEditableCatalogueTruth()
     {
         var root = ResolveRepoRoot();
         if (string.IsNullOrEmpty(root) || !Directory.Exists(Path.Combine(root, "hush-voting-web-client")))
@@ -40,40 +42,26 @@ public sealed class HushVotingLicenceClientDuplicationTests
             return;
         }
 
-        var clientSourceFiles = Directory.EnumerateFiles(
-                Path.Combine(root, "hush-voting-web-client", "src"),
-                "*.ts",
-                SearchOption.AllDirectories)
-            .Concat(Directory.EnumerateFiles(
-                Path.Combine(root, "hush-voting-web-client", "src"),
-                "*.tsx",
-                SearchOption.AllDirectories))
-            .Where(p => !p.Contains("node_modules", StringComparison.Ordinal))
-            .Where(p => !p.Contains(".test.", StringComparison.Ordinal) && !p.Contains(".spec.", StringComparison.Ordinal))
-            .ToArray();
-
-        clientSourceFiles.Should().NotBeEmpty("expected client source to exist for the duplication scan");
-
-        var forbiddenTokens = new[]
+        var start = new ProcessStartInfo("node")
         {
-            "hushvoting.direct.free",
-            "hushvoting.veritas.500",
-            "hushvoting.veritas.2000",
-            "hushvoting.veritas.10000",
-            "hushvoting.enterprise",
-            "hushvoting-licence-catalogue/v1.0.0",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
         };
-
-        foreach (var file in clientSourceFiles)
+        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Fixtures", "licensing", "client-catalogue-guard.cjs"));
+        start.ArgumentList.Add(Path.Combine(root, "hush-voting-web-client"));
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(30_000))
         {
-            var text = File.ReadAllText(file);
-            foreach (var token in forbiddenTokens)
-            {
-                text.Should().NotContain(
-                    token,
-                    $"client must not duplicate catalogue truth '{token}' (found in {file}); server catalogue is the single source");
-            }
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+            throw new Xunit.Sdk.XunitException("Client catalogue architecture guard timed out.");
         }
+        process.ExitCode.Should().Be(0,
+            "FEAT-012 AC-012-024 forbids client policy authority while FEAT-016 AC-016-018 requires compatibility vocabulary. {0} {1}",
+            await output, await error);
     }
 
     [Fact]
