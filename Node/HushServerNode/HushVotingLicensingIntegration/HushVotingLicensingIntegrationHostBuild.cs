@@ -43,12 +43,9 @@ public static class HushVotingLicensingIntegrationHostBuild
 
         services.AddSingleton(sp => BuildLicenceTelemetry(sp));
         services.AddSingleton(sp => BuildLicenceServiceConfiguration(sp));
-        services.AddTransient<LicenceEntitlementService>(sp => new LicenceEntitlementService(
-            () => CreateFreshDbContext(sp),
-            sp.GetRequiredService<LicenceServiceConfiguration>(),
-            TimeProvider.System,
-            sp.GetService<LicenceTelemetry>(),
-            sp.GetService<LicenceCacheOutboxPolicy>()));
+        services.AddSingleton(sp => new LicenceCatalogueArchive([sp.GetRequiredService<LicenceServiceConfiguration>()]));
+        // Rights originate only in committed signed licence transactions. The legacy
+        // FEAT-013 direct-write service remains outside the runtime composition.
         services.AddSingleton<ILicenceIndexedProjectionReader>(sp =>
             new LicenceIndexedProjectionReader(() => CreateFreshDbContext(sp)));
         services.AddSingleton<HushVotingLicenceRolloutReadinessBootstrapper>();
@@ -70,7 +67,8 @@ public static class HushVotingLicensingIntegrationHostBuild
         services.AddSingleton<HushNode.HushVoting.Licence.gRPC.ILicenceEntitlementQueryApplicationService>(sp =>
             new HushNode.HushVoting.Licence.gRPC.LicenceEntitlementQueryApplicationService(
                 sp.GetRequiredService<ILicenceIndexedProjectionReader>(),
-                sp.GetRequiredService<LicenceServiceConfiguration>()));
+                sp.GetRequiredService<LicenceServiceConfiguration>(),
+                archive: sp.GetRequiredService<LicenceCatalogueArchive>()));
         HushNode.HushVoting.Licence.gRPC.HushVotingLicencegRPCHostBuild
             .RegisterHushVotingLicenceQueryServices(services);
     }
@@ -104,9 +102,8 @@ public static class HushVotingLicensingIntegrationHostBuild
         services.AddSingleton<HushNode.Indexing.Interfaces.IBlockContextIndexStrategy>(sp =>
             new HushNode.HushVoting.Licence.Transactions.LicenceBlockContextIndexStrategy(
                 sp.GetRequiredService<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceTransactionValidator>(),
-                sp.GetRequiredService<HushNode.HushVoting.Licence.Transactions.IHushVotingLicenceValidationContextSource>(),
                 () => CreateFreshDbContext(sp),
-                sp.GetRequiredService<LicenceServiceConfiguration>(),
+                sp.GetRequiredService<LicenceCatalogueArchive>(),
                 sp.GetService<LicenceCacheOutboxPolicy>()));
         services.AddTransient<HushShared.Blockchain.TransactionModel.ITransactionContentHandler>(
             sp => new HushNode.HushVoting.Licence.Transactions.HushVotingLicenceContentHandler(

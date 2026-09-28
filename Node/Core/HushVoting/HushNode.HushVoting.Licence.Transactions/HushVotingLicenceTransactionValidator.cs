@@ -72,7 +72,7 @@ public sealed class HushVotingLicenceTransactionValidator(
     public bool CanValidate(Guid transactionKind) =>
         HushVotingLicenceAssignmentPayloadHandler.IsLicencePayloadKind(transactionKind);
 
-    public async Task<ContentValidationResult> ValidateAsync(
+    public async Task<ContentValidationResult> AuthenticateAsync(
         SignedTransaction<HushVotingLicenceAssignmentPayload> transaction,
         CancellationToken cancellationToken)
     {
@@ -135,6 +135,17 @@ public sealed class HushVotingLicenceTransactionValidator(
                 "The signatory does not own an exact indexed HushNetwork identity.");
         }
 
+        return ContentValidationResult.Valid(identity);
+    }
+
+    public async Task<ContentValidationResult> ValidateAsync(
+        SignedTransaction<HushVotingLicenceAssignmentPayload> transaction,
+        CancellationToken cancellationToken)
+    {
+        var authentication = await AuthenticateAsync(transaction, cancellationToken);
+        if (!authentication.IsValid) return authentication;
+        var identity = (HushVotingLicenceSignatoryContext)authentication.ValidatedContent!;
+
         // Catalogue staleness: observed immutable release must equal the current catalogue.
         var catalogue = await _contextSource.GetCurrentCatalogueAsync(cancellationToken);
         if (!string.Equals(
@@ -166,6 +177,11 @@ public sealed class HushVotingLicenceTransactionValidator(
 public interface IHushVotingLicenceTransactionValidator
 {
     bool CanValidate(Guid transactionKind);
+
+    /// <summary>Authenticates closed shape, canonical bytes and indexed identity without consulting today's licence.</summary>
+    Task<ContentValidationResult> AuthenticateAsync(
+        SignedTransaction<HushVotingLicenceAssignmentPayload> transaction,
+        CancellationToken cancellationToken);
 
     Task<ContentValidationResult> ValidateAsync(
         SignedTransaction<HushVotingLicenceAssignmentPayload> transaction,

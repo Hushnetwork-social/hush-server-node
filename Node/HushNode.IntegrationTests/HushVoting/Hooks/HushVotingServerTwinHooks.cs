@@ -24,6 +24,8 @@ internal sealed class HushVotingServerTwinHooks(HushVotingScenario scenario, Sce
             catch { await starting.DisposeAsync(); throw; }
             _run = starting;
         }
+        if (context.ScenarioInfo.Tags.Concat(feature.FeatureInfo.Tags).Contains("HV-ENTITLEMENT-REPLAY-TWIN"))
+            scenario.HistoricalBlockClock = new HushVotingBlockClock();
         await scenario.StartAsync(_run, includeBrowser: false,
             useNodeProcess: context.ScenarioInfo.Tags.Concat(feature.FeatureInfo.Tags)
                 .Any(tag => tag is "HV-NODE-RESTART-TWIN" or "HV-NODE-RESET-TWIN" or "HV-ORIGINAL-IDENTITY-TWIN"));

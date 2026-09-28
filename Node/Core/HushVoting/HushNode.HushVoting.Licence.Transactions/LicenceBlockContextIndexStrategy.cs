@@ -12,21 +12,20 @@ using HushNode.HushVoting.Licensing.Storage;
 using HushNode.Indexing.Interfaces;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
+using HushShared.Identity.Model;
 using Microsoft.EntityFrameworkCore;
 
 namespace HushNode.HushVoting.Licence.Transactions;
 
 public sealed class LicenceBlockContextIndexStrategy(
     IHushVotingLicenceTransactionValidator validator,
-    IHushVotingLicenceValidationContextSource contextSource,
     Func<DbContext> contextFactory,
-    LicenceServiceConfiguration configuration,
+    LicenceCatalogueArchive archive,
     LicenceCacheOutboxPolicy? cacheOutbox = null) : IBlockContextIndexStrategy
 {
     private readonly IHushVotingLicenceTransactionValidator _validator = validator;
-    private readonly IHushVotingLicenceValidationContextSource _contextSource = contextSource;
     private readonly Func<DbContext> _contextFactory = contextFactory;
-    private readonly LicenceServiceConfiguration _configuration = configuration;
+    private readonly LicenceCatalogueArchive _archive = archive;
     private readonly LicenceCacheOutboxPolicy? _cacheOutbox = cacheOutbox;
 
     public bool CanHandle(AbstractTransaction transaction) =>
@@ -39,10 +38,9 @@ public sealed class LicenceBlockContextIndexStrategy(
             throw new InvalidOperationException("Licence index strategy received an invalid transaction shape.");
         }
 
-        // The composite validator authenticates (signature -> identity -> catalogue -> state ->
-        // transition) BEFORE indexing. Its ValidatedContent carries the server-owned facts; the
-        // writer re-derives the authoritative decision at block time under the subject lock.
-        var validation = await _validator.ValidateAsync(
+        // Replay verifies the signed bytes and identity, then resolves the exact approved
+        // release observed by this transaction. Today's clock/state/release is irrelevant.
+        var validation = await _validator.AuthenticateAsync(
             new SignedTransaction<HushVotingLicenceAssignmentPayload>(
                 licenceTransaction,
                 licenceTransaction.UserSignature),
@@ -56,11 +54,17 @@ public sealed class LicenceBlockContextIndexStrategy(
                 $"Licence block index rejected an invalid transaction: {validation.ValidationCode}");
         }
 
-        var signatory = HushVotingLicenceCanonicalAddress.Normalize(licenceTransaction.UserSignature.Signatory)
-            ?? throw new InvalidOperationException("Licence signatory is not canonical.");
+        var configuration = _archive.Find(licenceTransaction.Payload.ObservedCatalogueVersion)
+            ?? throw new InvalidOperationException("Licence block index requires its retained approved catalogue.");
 
-        var identity = await _contextSource.ResolveIdentityAsync(signatory, CancellationToken.None)
-            ?? throw new InvalidOperationException("Licence signatory identity is not indexed.");
+        var identity = validation.ValidatedContent as HushVotingLicenceSignatoryContext
+            ?? throw new InvalidOperationException("Licence signatory identity was not authenticated.");
+
+        if (identity.IdentityCreationBlockIndex > blockContext.BlockIndex
+            || blockContext.BlockCreationTimeUtc.Kind != DateTimeKind.Utc)
+        {
+            throw new InvalidOperationException("Licence block index has incompatible historical context.");
+        }
 
         if (!AuthenticatedIdentitySubject.TryCreate(
                 LicencePersistenceVocabulary.SubjectTypeIdentity,
@@ -76,7 +80,7 @@ public sealed class LicenceBlockContextIndexStrategy(
 
         var indexResult = await LicenceBlockIndexWriter.IndexAsync(
             _contextFactory,
-            _configuration,
+            configuration,
             subject,
             licenceTransaction,
             blockContext.BlockIndex,

@@ -34,6 +34,7 @@ public static class LicenceBlockIndexWriterDecisions
         ArgumentNullException.ThrowIfNull(catalogue);
 
         if (currentlyActive is null
+            || currentlyActive.EffectiveFromUtc > blockCreationTimeUtc
             || (currentlyActive.ExpiresAtUtc is DateTime expiry && blockCreationTimeUtc >= expiry))
         {
             return new HushVotingLicenceCurrentState.NoActive();
@@ -47,6 +48,7 @@ public static class LicenceBlockIndexWriterDecisions
             currentlyActive.OriginatingTransactionId,
             currentlyActive.AssignedCatalogueVersion,
             currentlyActive.EffectiveFromUtc,
-            currentlyActive.ExpiresAtUtc);
+            currentlyActive.ExpiresAtUtc,
+            currentlyActive.UpgradeRank);
     }
 }

@@ -15,11 +15,13 @@ namespace HushNode.HushVoting.Licence.gRPC;
 public sealed class LicenceEntitlementQueryApplicationService(
     ILicenceIndexedProjectionReader indexedProjectionReader,
     LicenceServiceConfiguration configuration,
-    Func<DateTime>? utcNow = null) : ILicenceEntitlementQueryApplicationService
+    Func<DateTime>? utcNow = null,
+    LicenceCatalogueArchive? archive = null) : ILicenceEntitlementQueryApplicationService
 {
     private readonly ILicenceIndexedProjectionReader _indexedProjectionReader = indexedProjectionReader;
     private readonly LicenceServiceConfiguration _configuration = configuration;
     private readonly Func<DateTime> _utcNow = utcNow ?? (() => DateTime.UtcNow);
+    private readonly LicenceCatalogueArchive _archive = archive ?? new LicenceCatalogueArchive([configuration]);
 
     public async Task<LicenceEntitlementQueryApplicationResult> GetMyEntitlementAsync(
         string canonicalActorAddress,
@@ -45,6 +47,8 @@ public sealed class LicenceEntitlementQueryApplicationService(
             _utcNow(),
             cancellationToken);
 
+        if (!read.IsSuccess) return Unavailable("licence_index_unavailable");
+
         return read.Outcome switch
         {
             IndexedEntitlementReadOutcome.Active when read.Entitlement is not null =>
@@ -57,25 +61,39 @@ public sealed class LicenceEntitlementQueryApplicationService(
     private LicenceEntitlementQueryApplicationResult ProjectActive(
         EffectiveLicenceEntitlement entitlement)
     {
-        var state = new HushVotingLicenceCurrentState.Active(
-            HushVotingLicencePlanId.FromExternal(entitlement.PlanId),
-            entitlement.LicenceReference,
-            entitlement.AssignedCatalogueVersion,
-            entitlement.EffectiveFromUtc,
-            entitlement.ExpiresAtUtc);
-
-        var view = HushVotingLicenceEntitlementApplicationProjector.Project(_configuration.Catalogue, state);
-        if (view.State == HushVotingLicenceEntitlementQueryState.Active && view.Active is not null)
+        var assignedRelease = _archive.Find(entitlement.AssignedCatalogueVersion, entitlement.AssignedCatalogueDigestSha256);
+        var planId = HushVotingLicencePlanId.TryGetKnown(entitlement.PlanId);
+        var label = planId is null ? null : assignedRelease?.Catalogue.FindPlan(planId);
+        if (label is null || entitlement.LicenceReference is null || entitlement.LicenceReference == Guid.Empty
+            || entitlement.UpgradeRank < 0 || entitlement.EligibleVoterCap is < 0
+            || entitlement.PlanFamily != HushVotingLicenceEnumNames.FamilyToWire(label.Family).ToLowerInvariant()
+            || entitlement.AllowedGovernanceOptionIds.Count == 0
+            || entitlement.AllowedGovernanceOptionIds.Any(id => HushVotingGovernanceOptionId.TryGetKnown(id) is null)
+            || (entitlement.TermKind == "perpetual" ? entitlement.TermYears != 0 || entitlement.ExpiresAtUtc is not null
+                : entitlement.TermKind != "annual" || entitlement.TermYears <= 0 || entitlement.ExpiresAtUtc <= entitlement.EffectiveFromUtc || entitlement.ExpiresAtUtc is null))
         {
-            return new LicenceEntitlementQueryApplicationResult(
-                HushVotingLicenceEntitlementQueryState.Active,
-                view.Active,
-                null,
-                null);
+            return Unavailable("licence_index_inconsistent");
         }
 
-        // Indexed row exists but the catalogue cannot interpret it: never fabricate Direct Free.
-        return Unavailable("licence_index_inconsistent");
+        // The retained release supplies safe display copy; persisted terms remain authoritative.
+        // Only new upgrade options come from the current release, ranked against the assigned rank.
+        var higher = _configuration.Catalogue.Plans
+            .Where(p => p.Family == HushVotingLicenceFamily.Veritas && p.Id != planId
+                && p.UpgradeRank > entitlement.UpgradeRank
+                && p.Availability == HushVotingLicenceAvailability.AutomaticUpgrade && !p.Retirement.IsRetired)
+            .OrderBy(p => p.UpgradeRank)
+            .Select(p => new HushVotingLicenceOptionTemplate(p.Id.Value, p.DisplayName, p.SafeDescription,
+                p.EligibleVoterCap, p.UnlimitedElections, p.Term.IsPerpetual ? "perpetual" : "annual", p.Term.Years))
+            .ToArray();
+        var enterprise = _configuration.Catalogue.FindPlan(HushVotingLicencePlanId.Enterprise);
+        return new LicenceEntitlementQueryApplicationResult(HushVotingLicenceEntitlementQueryState.Active,
+            new HushVotingLicenceActiveView(entitlement.LicenceReference.Value.ToString(), entitlement.PlanId,
+                entitlement.PlanFamily, label.DisplayName, label.SafeDescription, entitlement.EligibleVoterCap,
+                entitlement.UnlimitedElectionPolicy, entitlement.TermKind, entitlement.TermYears,
+                entitlement.AllowedGovernanceOptionIds.ToArray(), entitlement.EffectiveFromUtc, entitlement.ExpiresAtUtc,
+                entitlement.AssignedCatalogueVersion, higher, enterprise is null ? null :
+                    new HushVotingLicenceEnterpriseInfo(enterprise.Id.Value, enterprise.DisplayName, enterprise.SafeDescription)),
+            null, null);
     }
 
     private LicenceEntitlementQueryApplicationResult ProjectNoActive()

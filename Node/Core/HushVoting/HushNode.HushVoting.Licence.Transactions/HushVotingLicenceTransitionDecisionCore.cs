@@ -18,13 +18,17 @@ public abstract record HushVotingLicenceCurrentState
     /// <summary>No indexed assignment is currently effective (verified absence).</summary>
     public sealed record NoActive() : HushVotingLicenceCurrentState;
 
+    /// <summary>The index cannot establish authority; this is never verified absence.</summary>
+    public sealed record Unavailable() : HushVotingLicenceCurrentState;
+
     /// <summary>An indexed assignment is effective now.</summary>
     public sealed record Active(
         HushVotingLicencePlanId CurrentPlanId,
         Guid? CurrentLicenceTransactionId,
         string CurrentCatalogueVersion,
         DateTime EffectiveFromUtc,
-        DateTime? ExpiresAtUtc) : HushVotingLicenceCurrentState;
+        DateTime? ExpiresAtUtc,
+        int? AssignedUpgradeRank = null) : HushVotingLicenceCurrentState;
 }
 
 /// <summary>Server-derived operative facts the index writer persists (never client-authored).</summary>
@@ -76,6 +80,13 @@ public static class HushVotingLicenceTransitionDecisionCore
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(payload);
         ArgumentNullException.ThrowIfNull(currentState);
+
+        if (currentState is not (HushVotingLicenceCurrentState.NoActive or HushVotingLicenceCurrentState.Active))
+        {
+            return HushVotingLicenceTransitionDecision.Reject(
+                HushVotingLicenceValidationCodes.IndexAuthorityUnavailable,
+                "The licence chain index cannot establish authority.");
+        }
 
         var intent = payload.TransitionIntent;
         var target = HushVotingLicencePlanId.TryGetKnown(payload.RequestedPlanId);
@@ -184,7 +195,8 @@ public static class HushVotingLicenceTransitionDecisionCore
         }
 
         var currentPlan = catalogue.FindPlan(active.CurrentPlanId);
-        if (currentPlan is null)
+        if (!active.CurrentPlanId.IsKnown || (active.AssignedUpgradeRank is null && currentPlan is null)
+            || active.AssignedUpgradeRank is < 0)
         {
             return HushVotingLicenceTransitionDecision.Reject(
                 HushVotingLicenceValidationCodes.PreconditionStale,
@@ -199,7 +211,7 @@ public static class HushVotingLicenceTransitionDecisionCore
                 "Selecting the current plan is not an actionable transition.");
         }
 
-        if (plan.UpgradeRank <= currentPlan.UpgradeRank)
+        if (plan.UpgradeRank <= (active.AssignedUpgradeRank ?? currentPlan!.UpgradeRank))
         {
             return HushVotingLicenceTransitionDecision.Reject(
                 HushVotingLicenceValidationCodes.TransitionNotHigher,
