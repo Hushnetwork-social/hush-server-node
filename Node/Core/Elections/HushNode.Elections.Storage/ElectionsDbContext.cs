@@ -9,6 +9,9 @@ public class ElectionsDbContext(
 {
     private readonly ElectionsDbContextConfigurator _electionsDbContextConfigurator = electionsDbContextConfigurator;
 
+    public DbSet<ElectionEntitlementCapture> ElectionEntitlementCaptures { get; set; }
+    public DbSet<ElectionRosterLinkBoundary> ElectionRosterLinkBoundaries { get; set; }
+
     public DbSet<ElectionRecord> Elections { get; set; }
     public DbSet<ElectionDraftSnapshotRecord> ElectionDraftSnapshots { get; set; }
     public DbSet<ElectionEnvelopeAccessRecord> ElectionEnvelopeAccessRecords { get; set; }

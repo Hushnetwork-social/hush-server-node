@@ -3603,5 +3603,32 @@
         ]
       }
     }
+  ],
+  "featureOwnedGroups": [
+    {
+      "group": "HV-ENTITLEMENT-STORAGE-TWIN",
+      "feature": "FEAT-018",
+      "phase": "P018-2-01",
+      "tasks": [
+        "T018-2-01",
+        "T018-2-03"
+      ],
+      "layer": "backend-twin",
+      "destination": "ServerTwins/entitlement-storage.feature",
+      "scenarioIds": [
+        "HV-TWIN-ENT-STORAGE-001",
+        "HV-TWIN-ENT-STORAGE-002",
+        "HV-TWIN-ENT-STORAGE-003",
+        "HV-TWIN-ENT-STORAGE-004",
+        "HV-TWIN-ENT-STORAGE-005",
+        "HV-TWIN-ENT-STORAGE-006"
+      ],
+      "status": "implemented-not-yet-executed"
+    }
+  ],
+  "reservedFeatureGroups": [
+    "HV-ENTITLEMENT-ENFORCEMENT-TWIN",
+    "HV-ENTITLEMENT-REPLAY-TWIN",
+    "HV-ENTITLEMENT-ROLLOUT-TWIN"
   ]
 }

@@ -541,6 +541,7 @@ public record ElectionCommandResult
     public bool IsSuccess { get; init; }
     public bool ShouldCommitSideEffects { get; init; }
     public ElectionCommandErrorCode ErrorCode { get; init; }
+    public ElectionEntitlementReason EntitlementReason { get; init; }
     public string? ErrorMessage { get; init; }
     public IReadOnlyList<string> ValidationErrors { get; init; } = Array.Empty<string>();
     public ElectionRecord? Election { get; init; }

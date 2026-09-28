@@ -68,6 +68,7 @@ internal static partial class ElectionGrpcMappings
             Success = result.IsSuccess,
             ErrorCode = (ElectionCommandErrorCodeProto)(int)result.ErrorCode,
             ErrorMessage = result.ErrorMessage ?? string.Empty,
+            EntitlementReason = ElectionEntitlementReasonNames.ToWire(result.EntitlementReason),
         };
 
         response.ValidationErrors.AddRange(result.ValidationErrors);

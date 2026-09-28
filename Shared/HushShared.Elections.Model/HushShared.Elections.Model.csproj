@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="../HushShared.HushVoting.Licensing.Model/HushShared.HushVoting.Licensing.Model.csproj" />
     <ProjectReference Include="..\HushShared.Blockchain.Model\HushShared.Blockchain.Model.csproj" />
     <ProjectReference Include="..\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
   </ItemGroup>
