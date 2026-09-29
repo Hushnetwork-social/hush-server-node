@@ -134,6 +134,7 @@ internal sealed class EntitlementStorageTwinSteps(HushVotingScenario scenario)
     [When("a schema downgrade is attempted after a capture commits")]
     public async Task Downgrade()
     {
+        await PrepareHistoricalStorageSchema();
         await WriteCapture(true);
         using var scope = scenario.Node.Services.CreateScope();
         var hostDb = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
@@ -155,6 +156,7 @@ internal sealed class EntitlementStorageTwinSteps(HushVotingScenario scenario)
     [When("the populated prior schema is upgraded through the entitlement migration")]
     public async Task UpgradePopulatedSchema()
     {
+        await PrepareHistoricalStorageSchema();
         using var scope = scenario.Node.Services.CreateScope();
         var hostDb = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
         var applied = (await hostDb.Database.GetAppliedMigrationsAsync()).ToArray();
@@ -182,6 +184,7 @@ internal sealed class EntitlementStorageTwinSteps(HushVotingScenario scenario)
     [When("a negative Open outcome is committed and its schema downgrade is attempted")]
     public async Task RejectOpenAndDowngrade()
     {
+        await PrepareHistoricalStorageSchema();
         var rejection = new ElectionOpenRejection(Guid.NewGuid(), _election.ElectionId, Guid.NewGuid(),
             12, 2, At, null, 4, ElectionEntitlementReason.LimitExceeded);
         rejection.HasSupportedSemantics().Should().BeTrue();
@@ -206,6 +209,29 @@ internal sealed class EntitlementStorageTwinSteps(HushVotingScenario scenario)
             await delete.Should().ThrowAsync<PostgresException>().Where(e => e.SqlState == "23514");
             (await db.ElectionOpenRejections.AsNoTracking().SingleAsync()).Should().Be(original);
         });
+    }
+
+    private async Task PrepareHistoricalStorageSchema()
+    {
+        // These three cases qualify the historical capture/rejection migrations, not
+        // the later checkpoint migration. The scenario owns this PostgreSQL instance.
+        // Represent the prior schema explicitly so the new checkpoint guard cannot
+        // mask a broken older guard. Current-schema rollback refusal is exercised by
+        // HV-ENTITLEMENT-ROLLOUT-TWIN, with its real checkpoints left intact.
+        using var scope = scenario.Node.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        (await db.Set<ElectionIndexCheckpoint>().CountAsync()).Should().BeGreaterThan(0);
+        await using (var transaction = await db.Database.BeginTransactionAsync())
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Elections\".\"ElectionIndexCheckpoint\" DISABLE TRIGGER \"ImmutableIndexCheckpoint\"");
+            await db.Set<ElectionIndexCheckpoint>().ExecuteDeleteAsync();
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Elections\".\"ElectionIndexCheckpoint\" ENABLE TRIGGER \"ImmutableIndexCheckpoint\"");
+            await transaction.CommitAsync();
+        }
+        var historical = (await db.Database.GetAppliedMigrationsAsync())
+            .Single(id => id.EndsWith("Feat018RejectedOpenOutcome", StringComparison.Ordinal));
+        await db.GetService<IMigrator>().MigrateAsync(historical);
+        (await db.Database.GetAppliedMigrationsAsync()).Last().Should().Be(historical);
     }
 
 }
