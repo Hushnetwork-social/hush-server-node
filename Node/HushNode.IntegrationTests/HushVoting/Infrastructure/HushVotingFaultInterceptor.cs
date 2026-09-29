@@ -24,6 +24,7 @@ internal sealed class HushVotingFaultInterceptor : Interceptor
     public int DroppedSubmissionResponses { get; private set; }
     public bool TransportUnavailable { get; set; }
     public bool HoldMempoolDrain { get; set; }
+    public IReadOnlyList<Guid>? NextBlockTransactionOrder { get; set; }
     public int RejectIdentityQueryNumber { get; set; }
     public int StallIdentityQueryNumber { get; set; }
     public TimeSpan IdentityResponseDelay { get; set; }

@@ -10,7 +10,7 @@ namespace HushVoting.IntegrationTests.Infrastructure;
 /// <summary>Browser-independent fixture actor; assignments always use public signed admission and block indexing.</summary>
 internal static class HushVotingServerLicence
 {
-    public static async Task<Guid> SubmitAsync(HushVotingScenario scenario, DerivedKeys keys, HushVotingLicenceAssignmentPayload payload)
+    public static async Task<Guid> SubmitAsync(HushVotingScenario scenario, DerivedKeys keys, HushVotingLicenceAssignmentPayload payload, bool produceBlock = true)
     {
         var id = Guid.NewGuid();
         var unsigned = new UnsignedTransaction<HushVotingLicenceAssignmentPayload>(new TransactionId(id),
@@ -29,7 +29,7 @@ internal static class HushVotingServerLicence
             if (!reply.Successfull) throw new InvalidOperationException("Fixture licence rejected: " + reply.ValidationCode);
             await received.WaitAsync();
         }
-        await scenario.Blocks.ProduceBlockAsync();
+        if (produceBlock) await scenario.Blocks.ProduceBlockAsync();
         return id;
     }
 }

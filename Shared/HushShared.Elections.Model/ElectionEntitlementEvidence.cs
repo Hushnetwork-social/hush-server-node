@@ -55,9 +55,7 @@ public sealed record ElectionEntitlementCapture(
             !Text(AssignedCatalogueVersion) || !Text(SelectedProfileId) || !Text(SelectedGovernanceOptionId) ||
             AssignedCatalogueDigestSha256 is null || AssignedCatalogueDigestSha256.Length != 64 ||
             !AssignedCatalogueDigestSha256.All(Uri.IsHexDigit) ||
-            EffectiveFromUtc.Kind != DateTimeKind.Utc || OpenBlockTimeUtc.Kind != DateTimeKind.Utc ||
-            OpenBlockTimeUtc < EffectiveFromUtc ||
-            (ExpiresAtUtc.HasValue && (ExpiresAtUtc.Value.Kind != DateTimeKind.Utc || OpenBlockTimeUtc >= ExpiresAtUtc.Value)) ||
+            !HushVotingLicenceOpenInstantPolicy.IsEffectiveAt(EffectiveFromUtc, ExpiresAtUtc, OpenBlockTimeUtc) ||
             TermKind is not ("perpetual" or "annual") || TermYears < 0 ||
             (TermKind == "annual" && (TermYears == 0 || !ExpiresAtUtc.HasValue)) ||
             (TermKind == "perpetual" && (TermYears != 0 || ExpiresAtUtc.HasValue)) ||
@@ -82,6 +80,22 @@ public sealed record ElectionRosterLinkBoundary(
     ElectionId ElectionId,
     Guid SourceTransactionId,
     DateTime LinkedAtUtc);
+
+/// <summary>Immutable negative Open outcome. Prevents replay from borrowing later rights or
+/// prerequisites. Stores only closed result categories and canonical provenance, no payload,
+/// actor address, roster, ballot or raw error text.</summary>
+public sealed record ElectionOpenRejection(
+    Guid TransactionId, ElectionId ElectionId, Guid BlockId, long BlockHeight,
+    int TransactionPosition, DateTime BlockTimeUtc, Guid? GovernedProposalId,
+    int ErrorCategory, ElectionEntitlementReason Reason, int SchemaVersion = 1)
+{
+    public bool HasSupportedSemantics() => SchemaVersion == 1 && TransactionId != Guid.Empty &&
+        ElectionId != ElectionId.Empty && BlockId != Guid.Empty && BlockHeight >= 0 &&
+        TransactionPosition >= 0 && BlockTimeUtc.Kind == DateTimeKind.Utc && GovernedProposalId != Guid.Empty &&
+        ErrorCategory is >= 1 and <= 7 && (Reason == ElectionEntitlementReason.None ||
+            (ErrorCategory == 4 && Reason is ElectionEntitlementReason.NotActive
+                or ElectionEntitlementReason.LimitExceeded or ElectionEntitlementReason.ProfileNotAllowed));
+}
 
 /// <summary>Closed safe reasons, separate from the FEAT-015 licence-transaction registry.</summary>
 public enum ElectionEntitlementReason

@@ -27,6 +27,13 @@ public static class ElectionEntitlementStorageConfiguration
         link.Property(x => x.ElectionId).HasConversion(x => x.ToString(), x => ElectionIdHandler.CreateFromString(x)).HasColumnType("varchar(40)");
         link.HasOne<ElectionRecord>().WithOne().HasForeignKey<ElectionRosterLinkBoundary>(x => x.ElectionId).OnDelete(DeleteBehavior.Restrict);
         foreach (var p in link.Metadata.GetProperties()) p.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+
+        var rejection = builder.Entity<ElectionOpenRejection>();
+        rejection.ToTable("ElectionOpenRejection", "Elections");
+        rejection.HasKey(x => x.TransactionId);
+        rejection.Property(x => x.ElectionId).HasConversion(x => x.ToString(), x => ElectionIdHandler.CreateFromString(x)).HasColumnType("varchar(40)");
+        rejection.HasOne<ElectionRecord>().WithMany().HasForeignKey(x => x.ElectionId).OnDelete(DeleteBehavior.Restrict);
+        foreach (var p in rejection.Metadata.GetProperties()) p.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
     }
 }
 

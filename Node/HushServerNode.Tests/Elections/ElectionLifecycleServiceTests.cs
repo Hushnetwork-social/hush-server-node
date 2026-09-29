@@ -3068,6 +3068,7 @@ public class ElectionLifecycleServiceTests
         custodyAuthority.CreatedEnvelopeCount.Should().Be(1);
 
         custodyAuthority.FailOpen = false;
+        store.ExecutionContext = store.ExecutionContext! with { TransactionId = Guid.NewGuid() };
         var retriedOpen = await service.OpenElectionAsync(new OpenElectionRequest(
             ElectionId: election.ElectionId,
             ActorPublicAddress: "owner-address",
@@ -3224,6 +3225,80 @@ public class ElectionLifecycleServiceTests
         result.ErrorMessage.Should().Contain("governed open proposal");
     }
 
+    // FEAT-018 AC-005/006 -> P018-3-03 -> T018-3-03. These tests exercise the real lifecycle
+    // against transactional repository ports; PostgreSQL/dispatcher obligations remain separate.
+    [Theory]
+    [InlineData(-1, true)]
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    public async Task OpenElection_UsesActualConsensusInstant_AndCapturesAllOperativeTerms(int secondsFromExpiry, bool allowed)
+    {
+        var store = new ElectionStore();
+        var expiry = new DateTime(2027, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var release = LicenceServiceConfiguration.CreateDefault();
+        var plan = release.Catalogue.FindPlan(HushVotingLicencePlanId.Veritas2000)!;
+        var terms = new EffectiveLicenceEntitlement(Guid.NewGuid(), Guid.NewGuid(), plan.Id.Value,
+            "veritas", plan.UpgradeRank, plan.EligibleVoterCap, plan.UnlimitedElections, "annual", plan.Term.Years,
+            plan.GovernanceOptions.Select(o => o.Id.Value).ToArray(), "confirmed_upgrade", expiry.AddYears(-1), expiry,
+            release.CatalogueVersion, release.ReleaseDigestSha256, 7, Guid.NewGuid());
+        store.OwnerAuthority = IndexedEntitlementReadResult.Active(terms);
+        var execution = new ElectionExecutionContext(Guid.NewGuid(), Guid.NewGuid(), 123, 4, expiry.AddSeconds(secondsFromExpiry));
+        store.ExecutionContext = execution;
+        var election = CreateAdminElection(acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
+        store.Elections[election.ElectionId] = election;
+        store.WarningAcknowledgements.Add(ElectionModelFactory.CreateWarningAcknowledgement(election.ElectionId,
+            ElectionWarningCode.LowAnonymitySet, election.CurrentDraftRevision, "owner-address"));
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(store, CreateRosterEntry(election, "capture-voter"));
+        var service = CreateService(store);
+        var request = new OpenElectionRequest(election.ElectionId, "owner-address",
+            RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet], SourceTransactionId: execution.TransactionId,
+            SourceBlockHeight: 999, SourceBlockId: Guid.NewGuid()); // Untrusted hints must not replace canonical facts.
+        var result = await service.OpenElectionAsync(request);
+        result.IsSuccess.Should().Be(allowed, result.ErrorMessage);
+        if (!allowed)
+        {
+            result.EntitlementReason.Should().Be(ElectionEntitlementReason.NotActive);
+            store.EntitlementCaptures.Should().BeEmpty();
+            store.BoundaryArtifacts.Should().BeEmpty();
+            store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Draft);
+            store.RosterEntries.Should().OnlyContain(r => !r.WasPresentAtOpen);
+            var rejection = store.OpenRejections.Should().ContainSingle().Subject;
+            // A later upgrade must not change an already-indexed negative outcome.
+            store.OwnerAuthority = IndexedEntitlementReadResult.Active(terms with { ExpiresAtUtc = expiry.AddYears(1) });
+            var replay = await service.OpenElectionAsync(request);
+            replay.EntitlementReason.Should().Be(ElectionEntitlementReason.NotActive);
+            store.EntitlementCaptures.Should().BeEmpty();
+            store.OpenRejections.Should().ContainSingle().Which.Should().Be(rejection);
+            store.ExecutionContext = execution with { BlockId = Guid.NewGuid() };
+            var inconsistentReplay = () => service.OpenElectionAsync(request);
+            await inconsistentReplay.Should().ThrowAsync<ElectionIndexAuthorityException>();
+            return;
+        }
+        var capture = store.EntitlementCaptures.Should().ContainSingle().Subject;
+        capture.HasSupportedSemantics().Should().BeTrue();
+        capture.LicenceSubjectId.Should().Be(terms.LicenceSubjectId);
+        capture.OriginatingLicenceTransactionId.Should().Be(terms.LicenceReference!.Value);
+        capture.PlanId.Should().Be(terms.PlanId);
+        capture.EligibleVoterCap.Should().Be(2000);
+        capture.EntitlementRevision.Should().Be(7);
+        capture.AssignedCatalogueDigestSha256.Should().Be(terms.AssignedCatalogueDigestSha256);
+        capture.OpenBlockTimeUtc.Should().Be(execution.BlockTimeUtc);
+        capture.OpenBlockId.Should().Be(execution.BlockId);
+        capture.OpenBlockHeight.Should().Be(123);
+        capture.OpenTransactionPosition.Should().Be(4);
+        capture.FrozenRosterBasisId.Should().Be(result.EligibilitySnapshot!.Id);
+        capture.FrozenEligibleVoterCount.Should().Be(1);
+        result.Election!.OpenedAt.Should().Be(execution.BlockTimeUtc);
+        result.BoundaryArtifact!.SourceBlockId.Should().Be(execution.BlockId);
+        result.BoundaryArtifact.SourceBlockHeight.Should().Be(123);
+        // Exact duplicate re-index does not consult today's rights or mutate immutable evidence.
+        store.OwnerAuthority = IndexedEntitlementReadResult.NoActive();
+        (await service.OpenElectionAsync(request)).IsSuccess.Should().BeTrue();
+        store.EntitlementCaptures.Should().ContainSingle().Which.Should().Be(capture);
+        store.BoundaryArtifacts.Should().ContainSingle();
+    }
+
     [Fact]
     public async Task OpenElectionAsync_WithValidAdminOnlyDraft_PersistsOpenBoundary()
     {
@@ -3244,6 +3319,8 @@ public class ElectionLifecycleServiceTests
         SeedLatestProtocolPackageBinding(store, election);
         AddRosterEntries(store, rosterEntry);
         var expectedBallotDefinitionHash = ElectionBallotDefinitionCanonicalizer.ComputeHash(election);
+
+        store.ExecutionContext = new(sourceTransactionId, Guid.NewGuid(), 41, 0, DateTime.UtcNow);
 
         var result = await service.OpenElectionAsync(new OpenElectionRequest(
             ElectionId: election.ElectionId,
@@ -3652,25 +3729,31 @@ public class ElectionLifecycleServiceTests
         store.BoundaryArtifacts.Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task ApproveGovernedProposalAsync_AtThreshold_AutoExecutesProposal()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task ApproveGovernedProposalAsync_AtThreshold_AutoExecutesProposal(bool expired, bool storageFault)
     {
         var store = new ElectionStore();
         var service = CreateService(store);
         var approvalTransactionId = Guid.NewGuid();
-        var profile = RegisterCeremonyProfile(store, "dkg-prod-1of2-open", trusteeCount: 2, requiredApprovalCount: 1);
+        var profile = RegisterCeremonyProfile(store, "dkg-prod-3of5", trusteeCount: 5, requiredApprovalCount: 3);
         var election = CreateTrusteeElection(
-            requiredApprovalCount: 1,
+            requiredApprovalCount: 3,
             selectedProfileId: profile.ProfileId,
             selectedProfileDevOnly: false);
         var acceptedTrusteeA = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
         var acceptedTrusteeB = CreateAcceptedTrusteeInvitation(election, "trustee-b", "Bob");
+        var remainingTrustees = new[] { "trustee-c", "trustee-d", "trustee-e" }
+            .Select(address => CreateAcceptedTrusteeInvitation(election, address, address)).ToArray();
+        var allTrustees = new[] { acceptedTrusteeA, acceptedTrusteeB }.Concat(remainingTrustees).ToArray();
         RegisterCeremonyVersion(
             store,
             election,
             profile,
-            [acceptedTrusteeA, acceptedTrusteeB],
-            completedTrustees: ["trustee-a", "trustee-b"],
+            allTrustees,
+            completedTrustees: allTrustees.Select(t => t.TrusteeUserAddress).ToArray(),
             ready: true);
         var proposal = ElectionModelFactory.CreateGovernedProposal(
             election,
@@ -3684,14 +3767,43 @@ public class ElectionLifecycleServiceTests
         SeedLatestProtocolPackageBinding(store, election);
         AddRosterEntries(store, CreateRosterEntry(election, "4001"));
 
-        var result = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+        foreach (var trustee in remainingTrustees) store.TrusteeInvitations[trustee.Id] = trustee;
+        foreach (var trustee in new[] { acceptedTrusteeB, remainingTrustees[0] })
+            store.GovernedProposalApprovals.Add(ElectionModelFactory.CreateGovernedProposalApproval(
+                proposal, trustee.TrusteeUserAddress, trustee.TrusteeDisplayName, "Earlier approval"));
+        store.ExecutionContext = new(approvalTransactionId, Guid.NewGuid(), 47, 0, DateTime.UtcNow);
+
+        if (expired) store.OwnerAuthority = IndexedEntitlementReadResult.NoActive();
+        if (storageFault) store.ThrowBeforeOperationName = nameof(IElectionsRepository.AddEntitlementCaptureAsync);
+        var request = new ApproveElectionGovernedProposalRequest(
             election.ElectionId,
             proposal.Id,
             "trustee-a",
             "Ready.",
             SourceTransactionId: approvalTransactionId,
             SourceBlockHeight: 47,
-            SourceBlockId: Guid.NewGuid()));
+            SourceBlockId: Guid.NewGuid());
+        if (storageFault)
+        {
+            Func<Task> execute = () => service.ApproveGovernedProposalAsync(request);
+            await execute.Should().ThrowAsync<InvalidOperationException>().WithMessage("Forced test failure before AddEntitlementCaptureAsync.");
+            store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Draft);
+            store.EntitlementCaptures.Should().BeEmpty();
+            store.BoundaryArtifacts.Should().BeEmpty();
+            store.GovernedProposalApprovals.Should().HaveCount(2, "the triggering approval must roll back with Open");
+            store.GovernedProposals[proposal.Id].ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.WaitingForApprovals);
+            return;
+        }
+        var result = await service.ApproveGovernedProposalAsync(request);
+        if (expired)
+        {
+            result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Draft);
+            result.GovernedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionFailed);
+            store.EntitlementCaptures.Should().BeEmpty();
+            store.BoundaryArtifacts.Should().BeEmpty();
+            store.GovernedProposalApprovals.Should().HaveCount(3, "valid earlier approvals do not reserve licence rights");
+            return;
+        }
 
         result.IsSuccess.Should().BeTrue();
         result.Election.Should().NotBeNull();
@@ -3706,11 +3818,11 @@ public class ElectionLifecycleServiceTests
         result.BoundaryArtifact.Should().NotBeNull();
         result.BoundaryArtifact!.CeremonySnapshot.Should().NotBeNull();
         result.BoundaryArtifact.CeremonySnapshot!.ProfileId.Should().Be(profile.ProfileId);
-        result.BoundaryArtifact.CeremonySnapshot.ActiveTrustees.Should().HaveCount(2);
+        result.BoundaryArtifact.CeremonySnapshot.ActiveTrustees.Should().HaveCount(5);
         result.EligibilitySnapshot.Should().NotBeNull();
         result.BoundaryArtifact.SourceTransactionId.Should().Be(approvalTransactionId);
         result.BoundaryArtifact.SourceBlockHeight.Should().Be(47);
-        store.GovernedProposalApprovals.Should().ContainSingle();
+        store.GovernedProposalApprovals.Should().HaveCount(3);
         store.BoundaryArtifacts.Should().ContainSingle();
         store.EligibilitySnapshots.Should().ContainSingle();
         store.Elections[election.ElectionId].OpenArtifactId.Should().Be(result.BoundaryArtifact!.Id);
@@ -8505,8 +8617,11 @@ public class ElectionLifecycleServiceTests
 
     private sealed class ElectionStore
     {
-        public ElectionExecutionContext ExecutionContext { get; set; } = new(Guid.NewGuid(), Guid.NewGuid(), 17, 0, DateTime.UtcNow);
+        public ElectionExecutionContext? ExecutionContext { get; set; } = new(Guid.NewGuid(), Guid.NewGuid(), 17, 0, DateTime.UtcNow);
         public List<ElectionRosterLinkBoundary> FirstRosterLinks { get; } = [];
+        public List<ElectionEntitlementCapture> EntitlementCaptures { get; } = [];
+        public IndexedEntitlementReadResult? OwnerAuthority { get; set; }
+        public List<ElectionOpenRejection> OpenRejections { get; } = [];
         public Dictionary<ElectionId, ElectionRecord> Elections { get; } = [];
         public Dictionary<(ElectionId ElectionId, string ActorPublicAddress), ElectionEnvelopeAccessRecord> ElectionEnvelopeAccessRecords { get; } = [];
         public List<ElectionResultArtifactRecord> ResultArtifacts { get; } = [];
@@ -8589,7 +8704,10 @@ public class ElectionLifecycleServiceTests
         public void ReplaceDataFrom(ElectionStore source)
         {
             ExecutionContext = source.ExecutionContext;
+            OwnerAuthority = source.OwnerAuthority;
             ReplaceList(FirstRosterLinks, source.FirstRosterLinks);
+            ReplaceList(EntitlementCaptures, source.EntitlementCaptures);
+            ReplaceList(OpenRejections, source.OpenRejections);
             ReplaceDictionary(Elections, source.Elections);
             ReplaceDictionary(ElectionEnvelopeAccessRecords, source.ElectionEnvelopeAccessRecords);
             ReplaceList(ResultArtifacts, source.ResultArtifacts);
@@ -9008,11 +9126,33 @@ public class ElectionLifecycleServiceTests
 
     private sealed class FakeElectionsRepository(ElectionStore store) : IElectionsRepository
     {
+        private ElectionStore? _beforeOpen;
+        public Task BeginOpenAttemptAsync() { _beforeOpen = store.CreateTransactionalCopy(); return Task.CompletedTask; }
+        public Task RollbackOpenAttemptAsync() { store.ReplaceDataFrom(_beforeOpen!); return Task.CompletedTask; }
+        public Task ReleaseOpenAttemptAsync() { _beforeOpen = null; return Task.CompletedTask; }
+        public Task<ElectionOpenRejection?> GetOpenRejectionAsync(Guid transactionId) =>
+            Task.FromResult(store.OpenRejections.SingleOrDefault(r => r.TransactionId == transactionId));
+        public Task AddOpenRejectionAsync(ElectionOpenRejection rejection) { store.OpenRejections.Add(rejection); return Task.CompletedTask; }
+
+        public Task<ElectionEntitlementCapture?> GetEntitlementCaptureAsync(ElectionId electionId) =>
+            Task.FromResult(store.EntitlementCaptures.SingleOrDefault(c => c.ElectionId == electionId));
+
+        public Task<ElectionEvidenceWriteOutcome> AddEntitlementCaptureAsync(ElectionEntitlementCapture capture)
+        {
+            store.ThrowIfConfigured(nameof(AddEntitlementCaptureAsync));
+            if (!capture.HasSupportedSemantics()) return Task.FromResult(ElectionEvidenceWriteOutcome.Unsupported);
+            var existing = store.EntitlementCaptures.SingleOrDefault(c => c.ElectionId == capture.ElectionId);
+            if (existing is not null) return Task.FromResult(existing == capture ? ElectionEvidenceWriteOutcome.IdenticalReplay : ElectionEvidenceWriteOutcome.Conflict);
+            store.EntitlementCaptures.Add(capture);
+            return Task.FromResult(ElectionEvidenceWriteOutcome.Added);
+        }
+
         public Task<string?> GetElectionOwnerAsync(ElectionId electionId) => Task.FromResult(
             store.Elections.TryGetValue(electionId, out var election) ? election.OwnerPublicAddress : null);
 
         public Task<IndexedEntitlementReadResult> LockOwnerEntitlementAsync(string owner, DateTime executionUtc)
         {
+            if (store.OwnerAuthority is not null) return Task.FromResult(store.OwnerAuthority);
             if (string.IsNullOrEmpty(owner)) return Task.FromResult(IndexedEntitlementReadResult.NoActive());
             var release = LicenceServiceConfiguration.CreateDefault();
             var plan = release.Catalogue.FindPlan(HushVotingLicencePlanId.Veritas10000)!;

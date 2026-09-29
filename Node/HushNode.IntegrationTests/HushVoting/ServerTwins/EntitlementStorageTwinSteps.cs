@@ -138,8 +138,8 @@ internal sealed class EntitlementStorageTwinSteps(HushVotingScenario scenario)
         using var scope = scenario.Node.Services.CreateScope();
         var hostDb = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
         var applied = (await hostDb.Database.GetAppliedMigrationsAsync()).ToArray();
-        applied.Last().Should().EndWith("Feat018ElectionEntitlementEvidence");
-        Func<Task> downgrade = () => hostDb.GetService<IMigrator>().MigrateAsync(applied[^2]);
+        applied.Last().Should().EndWith("Feat018RejectedOpenOutcome");
+        Func<Task> downgrade = () => hostDb.GetService<IMigrator>().MigrateAsync(applied[Array.FindIndex(applied, id => id.EndsWith("Feat018ElectionEntitlementEvidence", StringComparison.Ordinal)) - 1]);
         await downgrade.Should().ThrowAsync<PostgresException>().Where(e => e.SqlState == "23514");
     }
 
@@ -148,7 +148,7 @@ internal sealed class EntitlementStorageTwinSteps(HushVotingScenario scenario)
     {
         using var scope = scenario.Node.Services.CreateScope();
         var hostDb = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
-        (await hostDb.Database.GetAppliedMigrationsAsync()).Last().Should().EndWith("Feat018ElectionEntitlementEvidence");
+        (await hostDb.Database.GetAppliedMigrationsAsync()).Last().Should().EndWith("Feat018RejectedOpenOutcome");
         await WithContext(async db => (await db.ElectionEntitlementCaptures.SingleAsync()).Should().Be(_capture));
     }
 
@@ -158,9 +158,9 @@ internal sealed class EntitlementStorageTwinSteps(HushVotingScenario scenario)
         using var scope = scenario.Node.Services.CreateScope();
         var hostDb = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
         var applied = (await hostDb.Database.GetAppliedMigrationsAsync()).ToArray();
-        applied.Last().Should().EndWith("Feat018ElectionEntitlementEvidence");
+        applied.Last().Should().EndWith("Feat018RejectedOpenOutcome");
         // No new evidence exists yet: compatible rollback is safe, including the existing Draft.
-        await hostDb.GetService<IMigrator>().MigrateAsync(applied[^2]);
+        await hostDb.GetService<IMigrator>().MigrateAsync(applied[Array.FindIndex(applied, id => id.EndsWith("Feat018ElectionEntitlementEvidence", StringComparison.Ordinal)) - 1]);
         (await hostDb.Database.GetAppliedMigrationsAsync()).Should().NotContain(applied[^1]);
         (await hostDb.Set<ElectionRecord>().AsNoTracking().SingleAsync()).Title.Should().Be(_election.Title);
         await hostDb.GetService<IMigrator>().MigrateAsync(applied[^1]);
@@ -179,4 +179,33 @@ internal sealed class EntitlementStorageTwinSteps(HushVotingScenario scenario)
             (await db.ElectionRosterLinkBoundaries.CountAsync()).Should().Be(0);
         });
     }
+    [When("a negative Open outcome is committed and its schema downgrade is attempted")]
+    public async Task RejectOpenAndDowngrade()
+    {
+        var rejection = new ElectionOpenRejection(Guid.NewGuid(), _election.ElectionId, Guid.NewGuid(),
+            12, 2, At, null, 4, ElectionEntitlementReason.LimitExceeded);
+        rejection.HasSupportedSemantics().Should().BeTrue();
+        await WithContext(async db => { db.ElectionOpenRejections.Add(rejection); await db.SaveChangesAsync(); });
+        using var scope = scenario.Node.Services.CreateScope();
+        var hostDb = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var applied = (await hostDb.Database.GetAppliedMigrationsAsync()).ToArray();
+        Func<Task> downgrade = () => hostDb.GetService<IMigrator>().MigrateAsync(applied[^2]);
+        await downgrade.Should().ThrowAsync<PostgresException>().Where(e => e.SqlState == "23514");
+    }
+
+    [Then("negative Open evidence survives restart of the context and cannot be erased or changed")]
+    public async Task RejectionImmutable()
+    {
+        await WithContext(async db => {
+            var original = await db.ElectionOpenRejections.AsNoTracking().SingleAsync();
+            original.Reason.Should().Be(ElectionEntitlementReason.LimitExceeded);
+            original.HasSupportedSemantics().Should().BeTrue();
+            Func<Task> change = () => db.Database.ExecuteSqlRawAsync("UPDATE \"Elections\".\"ElectionOpenRejection\" SET \"Reason\" = 0");
+            await change.Should().ThrowAsync<PostgresException>().Where(e => e.SqlState == "23514");
+            Func<Task> delete = () => db.Database.ExecuteSqlRawAsync("DELETE FROM \"Elections\".\"ElectionOpenRejection\"");
+            await delete.Should().ThrowAsync<PostgresException>().Where(e => e.SqlState == "23514");
+            (await db.ElectionOpenRejections.AsNoTracking().SingleAsync()).Should().Be(original);
+        });
+    }
+
 }

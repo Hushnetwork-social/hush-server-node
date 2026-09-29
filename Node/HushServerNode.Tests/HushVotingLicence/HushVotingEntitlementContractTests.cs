@@ -67,6 +67,30 @@ public sealed class HushVotingEntitlementContractTests
         good.HasSupportedSemantics().Should().BeTrue();
     }
 
+    [Fact]
+    public void RejectedOpenRetainsOnlySupportedBusinessOutcomesAndCanonicalProvenance()
+    {
+        var good = new ElectionOpenRejection(Guid.NewGuid(), ElectionId.NewElectionId,
+            Guid.NewGuid(), 10, 2, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            null, (int)ElectionCommandErrorCode.ValidationFailed, ElectionEntitlementReason.NotActive);
+        good.HasSupportedSemantics().Should().BeTrue();
+        (good with { Reason = ElectionEntitlementReason.None, ErrorCategory = (int)ElectionCommandErrorCode.Forbidden })
+            .HasSupportedSemantics().Should().BeTrue();
+        var invalid = new[] {
+            good with { TransactionId = Guid.Empty }, good with { ElectionId = ElectionId.Empty },
+            good with { BlockId = Guid.Empty }, good with { GovernedProposalId = Guid.Empty },
+            good with { BlockHeight = -1 }, good with { TransactionPosition = -1 },
+            good with { BlockTimeUtc = DateTime.SpecifyKind(good.BlockTimeUtc, DateTimeKind.Unspecified) },
+            good with { SchemaVersion = 2 }, good with { ErrorCategory = 0 }, good with { ErrorCategory = 8 },
+            good with { Reason = (ElectionEntitlementReason)99 },
+            good with { Reason = ElectionEntitlementReason.AuthorityUnavailable },
+            good with { Reason = ElectionEntitlementReason.CaptureUnavailable },
+            good with { Reason = ElectionEntitlementReason.SemanticsUnsupported },
+            good with { ErrorCategory = (int)ElectionCommandErrorCode.Conflict }
+        };
+        foreach (var outcome in invalid) outcome.HasSupportedSemantics().Should().BeFalse();
+    }
+
     internal static ElectionEntitlementCapture ValidCapture() => new(
         ElectionId.NewElectionId, Guid.NewGuid(), Guid.NewGuid(), "hushvoting.veritas.500", "veritas", 1,
         500, true, "annual", 1, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc),

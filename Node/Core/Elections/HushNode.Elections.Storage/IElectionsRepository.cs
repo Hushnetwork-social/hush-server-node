@@ -5,6 +5,16 @@ namespace HushNode.Elections.Storage;
 
 public interface IElectionsRepository : IRepository
 {
+    Task<ElectionOpenRejection?> GetOpenRejectionAsync(Guid transactionId) => throw new NotSupportedException("Open outcome history is unavailable.");
+    Task AddOpenRejectionAsync(ElectionOpenRejection rejection) => throw new NotSupportedException("Open outcome history is unavailable.");
+    Task BeginOpenAttemptAsync() => throw new NotSupportedException("Atomic Open scope is unavailable.");
+    Task RollbackOpenAttemptAsync() => throw new NotSupportedException("Atomic Open scope is unavailable.");
+    Task ReleaseOpenAttemptAsync() => throw new NotSupportedException("Atomic Open scope is unavailable.");
+    Task<ElectionEntitlementCapture?> GetEntitlementCaptureAsync(ElectionId electionId) =>
+        throw new NotSupportedException("Election entitlement capture is not implemented.");
+    Task<ElectionEvidenceWriteOutcome> AddEntitlementCaptureAsync(ElectionEntitlementCapture capture) =>
+        throw new NotSupportedException("Election entitlement capture is not implemented.");
+
     Task<string?> GetElectionOwnerAsync(ElectionId electionId) =>
         throw new NotSupportedException("Election owner authority is not implemented.");
     Task<HushNode.HushVoting.Licensing.Storage.IndexedEntitlementReadResult> LockOwnerEntitlementAsync(string owner, DateTime executionUtc) =>

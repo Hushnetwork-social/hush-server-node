@@ -11,6 +11,7 @@ public class ElectionsDbContext(
 
     public DbSet<ElectionEntitlementCapture> ElectionEntitlementCaptures { get; set; }
     public DbSet<ElectionRosterLinkBoundary> ElectionRosterLinkBoundaries { get; set; }
+    public DbSet<ElectionOpenRejection> ElectionOpenRejections { get; set; }
 
     public DbSet<ElectionRecord> Elections { get; set; }
     public DbSet<ElectionDraftSnapshotRecord> ElectionDraftSnapshots { get; set; }

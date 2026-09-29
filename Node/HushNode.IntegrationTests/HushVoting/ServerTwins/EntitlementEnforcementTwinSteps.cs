@@ -15,7 +15,7 @@ namespace HushVoting.IntegrationTests.ServerTwins;
 
 [Binding]
 [Scope(Tag = "HV-ENTITLEMENT-ENFORCEMENT-TWIN")]
-internal sealed class EntitlementEnforcementTwinSteps(HushVotingScenario scenario)
+internal sealed partial class EntitlementEnforcementTwinSteps(HushVotingScenario scenario)
 {
     private DerivedKeys _owner = null!;
     private ElectionId _id;
@@ -27,10 +27,10 @@ internal sealed class EntitlementEnforcementTwinSteps(HushVotingScenario scenari
 
     // A trusted service-boundary fixture, not a forged client-supplied timestamp. Signed
     // dispatcher coverage is separately owned by the Open/replay scenarios.
-    private static async Task<ElectionCommandResult> Execute(Func<Guid, Task<ElectionCommandResult>> action)
+    private async Task<ElectionCommandResult> Execute(Func<Guid, Task<ElectionCommandResult>> action)
     {
         var tx = Guid.NewGuid();
-        using var frame = BlockTransactionExecutionScope.Enter(new(tx, new(100, DateTime.UtcNow, Guid.NewGuid(), 0)));
+        using var frame = BlockTransactionExecutionScope.Enter(new(tx, new(100, scenario.HistoricalBlockClock?.GetUtcNow().UtcDateTime ?? DateTime.UtcNow, Guid.NewGuid(), 0)));
         return await action(tx);
     }
 

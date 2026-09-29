@@ -3621,7 +3621,8 @@
         "HV-TWIN-ENT-STORAGE-003",
         "HV-TWIN-ENT-STORAGE-004",
         "HV-TWIN-ENT-STORAGE-005",
-        "HV-TWIN-ENT-STORAGE-006"
+        "HV-TWIN-ENT-STORAGE-006",
+        "HV-TWIN-ENT-STORAGE-007"
       ],
       "status": "verified-phase-2"
     },
@@ -3647,7 +3648,8 @@
       "feature": "FEAT-018",
       "phase": "P018-3-02",
       "tasks": [
-        "T018-3-02"
+        "T018-3-02",
+        "T018-3-03"
       ],
       "layer": "backend-twin",
       "destination": "ServerTwins/entitlement-enforcement.feature",
@@ -3661,9 +3663,19 @@
         "HV-TWIN-ENT-ENFORCEMENT-007",
         "HV-TWIN-ENT-ENFORCEMENT-008",
         "HV-TWIN-ENT-ENFORCEMENT-009",
-        "HV-TWIN-ENT-ENFORCEMENT-010"
+        "HV-TWIN-ENT-ENFORCEMENT-010",
+        "HV-TWIN-ENT-ENFORCEMENT-011",
+        "HV-TWIN-ENT-ENFORCEMENT-012",
+        "HV-TWIN-ENT-ENFORCEMENT-013",
+        "HV-TWIN-ENT-ENFORCEMENT-014",
+        "HV-TWIN-ENT-ENFORCEMENT-015",
+        "HV-TWIN-ENT-ENFORCEMENT-016",
+        "HV-TWIN-ENT-ENFORCEMENT-017",
+        "HV-TWIN-ENT-ENFORCEMENT-018",
+        "HV-TWIN-ENT-ENFORCEMENT-019",
+        "HV-TWIN-ENT-ENFORCEMENT-020"
       ],
-      "status": "implemented-not-yet-executed"
+      "status": "draft-and-open-20-verified-captured-completion-pending"
     }
   ],
   "reservedFeatureGroups": [

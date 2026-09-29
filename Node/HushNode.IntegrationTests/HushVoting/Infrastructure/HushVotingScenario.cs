@@ -178,6 +178,19 @@ internal sealed class HushVotingScenario : IAsyncDisposable
         await NodeProcess.RestartAsync();
     }
 
+    public async Task MoveOwnedStorageToNodeProcessAsync()
+    {
+        if (_run is null || Node is null || NodeProcess is not null || Page is not null)
+            throw new InvalidOperationException("Node-process handover requires the owned backend-only scenario.");
+        await HushVotingArtifactClient.RegisterAsync($"localhost:{Node.GrpcPort}");
+        _channel?.Dispose();
+        _channel = null;
+        await Node.DisposeAsync();
+        Node = null!;
+        NodeProcess = new HushVotingNodeProcess(_run.Postgres, _run.Redis, _run.ProtocolCatalog);
+        await NodeProcess.StartAsync(); // resetDatabase:false; the same owned PostgreSQL history survives.
+    }
+
     public async Task UseRestartableBrowserAsync()
     {
         _persistentBrowserType = Context.Browser!.BrowserType;

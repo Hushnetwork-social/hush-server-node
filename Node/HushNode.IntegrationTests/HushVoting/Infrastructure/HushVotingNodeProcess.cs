@@ -88,6 +88,14 @@ internal sealed class HushVotingNodeProcess(string postgres, string redis, strin
 
     private Task SendAsync(object command) => _process!.StandardInput.WriteLineAsync(JsonSerializer.Serialize(command));
 
+    public async Task<(string Digest, bool Supported, string State, int Frozen, int Boundaries)> CaptureAsync(string electionId)
+    {
+        await SendAsync(new { kind = "capture", electionId });
+        var value = await ReceiveAsync("capture", TimeSpan.FromSeconds(10));
+        return (value.GetProperty("digest").GetString()!, value.GetProperty("supported").GetBoolean(),
+            value.GetProperty("state").GetString()!, value.GetProperty("frozen").GetInt32(), value.GetProperty("boundaries").GetInt32());
+    }
+
     private async Task<JsonElement> ReceiveAsync(string kind, TimeSpan timeout)
     {
         var line = await _process!.StandardOutput.ReadLineAsync().WaitAsync(timeout);

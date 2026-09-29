@@ -39,3 +39,9 @@ Feature: Immutable election entitlement storage
     Given an owned PostgreSQL election with supported capture contract facts
     When the populated prior schema is upgraded through the entitlement migration
     Then the existing Draft is unchanged and no historical entitlement is invented
+
+  @HV-TWIN-ENT-STORAGE-007 @AC-018-006 @AC-018-010 @AC-018-011
+  Scenario: Negative Open outcomes are immutable and cannot disappear during downgrade
+    Given an owned PostgreSQL election with supported capture contract facts
+    When a negative Open outcome is committed and its schema downgrade is attempted
+    Then negative Open evidence survives restart of the context and cannot be erased or changed

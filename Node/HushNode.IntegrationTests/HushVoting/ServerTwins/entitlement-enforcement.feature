@@ -64,3 +64,63 @@ Feature: Election entitlement lifecycle enforcement
     Given an owned Draft with the indexed hushvoting.veritas.2000 licence
     When the owner selects trustee governance and issues its first invitation
     Then switching to another licensed trustee profile is rejected without deleting evidence
+
+  @HV-TWIN-ENT-ENFORCEMENT-011 @AC-018-005 @AC-018-006
+  Scenario: Signed Open just before the annual expiry uses canonical execution time
+    Given an encrypted Open-ready election with an annual owner licence
+    When its signed Open executes -1 seconds from licence expiry
+    Then its persisted Open outcome matches the upper-exclusive expiry boundary
+
+  @HV-TWIN-ENT-ENFORCEMENT-012 @AC-018-005 @AC-018-006
+  Scenario: Signed Open exactly at the annual expiry uses canonical execution time
+    Given an encrypted Open-ready election with an annual owner licence
+    When its signed Open executes 0 seconds from licence expiry
+    Then its persisted Open outcome matches the upper-exclusive expiry boundary
+
+  @HV-TWIN-ENT-ENFORCEMENT-013 @AC-018-005 @AC-018-006
+  Scenario: Signed Open after the annual expiry uses canonical execution time
+    Given an encrypted Open-ready election with an annual owner licence
+    When its signed Open executes 1 seconds from licence expiry
+    Then its persisted Open outcome matches the upper-exclusive expiry boundary
+
+  @HV-TWIN-ENT-ENFORCEMENT-014 @AC-018-005 @AC-018-006
+  Scenario: Only an upgrade before Open in the same block affects its capture
+    Given an encrypted Open-ready election with an annual owner licence
+    When a cap-raising licence executes before Open in the same block
+    Then only the earlier licence can authorize that Open
+
+  @HV-TWIN-ENT-ENFORCEMENT-015 @AC-018-005 @AC-018-006
+  Scenario: Only an upgrade after Open in the same block affects its capture
+    Given an encrypted Open-ready election with an annual owner licence
+    When a cap-raising licence executes after Open in the same block
+    Then only the earlier licence can authorize that Open
+
+  @HV-TWIN-ENT-ENFORCEMENT-016 @AC-018-006 @AC-018-009
+  Scenario: PostgreSQL capture failure rolls back actual Open and suppresses completion
+    Given an encrypted Open-ready election with an annual owner licence
+    When PostgreSQL refuses its Open capture and that committed block is retried
+    Then the fault leaves no partial Open and retry persists one consistent capture
+
+  @HV-TWIN-ENT-ENFORCEMENT-017 @AC-018-006
+  Scenario: Committed Open authorization survives an actual node-process crash
+    Given an encrypted Open-ready election with an annual owner licence
+    When the recorded Open survives an owned node-process crash and restart
+    Then the new node process reads the identical durable Open capture and frozen roster
+
+  @HV-TWIN-ENT-ENFORCEMENT-018 @AC-018-005 @AC-018-006
+  Scenario: Governed Open executes -1 seconds from owner licence expiry
+    Given an encrypted governed Open with two earlier trustee approvals
+    When the final signed trustee approval executes -1 seconds from owner expiry
+    Then governed Open uses execution-time owner rights and preserves its proposal reference
+
+  @HV-TWIN-ENT-ENFORCEMENT-019 @AC-018-005 @AC-018-006
+  Scenario: Governed Open executes 0 seconds from owner licence expiry
+    Given an encrypted governed Open with two earlier trustee approvals
+    When the final signed trustee approval executes 0 seconds from owner expiry
+    Then governed Open uses execution-time owner rights and preserves its proposal reference
+
+  @HV-TWIN-ENT-ENFORCEMENT-020 @AC-018-005 @AC-018-006
+  Scenario: Governed Open executes 1 seconds from owner licence expiry
+    Given an encrypted governed Open with two earlier trustee approvals
+    When the final signed trustee approval executes 1 seconds from owner expiry
+    Then governed Open uses execution-time owner rights and preserves its proposal reference
