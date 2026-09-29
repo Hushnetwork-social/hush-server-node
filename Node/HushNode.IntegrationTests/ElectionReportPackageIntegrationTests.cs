@@ -1700,6 +1700,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             diagnosticCapture,
             configurationOverrides,
             configureTestServices);
+        await ElectionOwnerLicenceSetup.RegisterAsync(_node, _blockControl, _grpcFactory, TestIdentities.Alice);
         return _grpcFactory.CreateClient<HushElections.HushElectionsClient>();
     }
 

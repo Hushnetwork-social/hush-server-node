@@ -69,7 +69,7 @@ public sealed class ElectionLifecycleIntegrationSteps
     }
 
     [Given(@"FEAT-094 election integration services are available")]
-    public void GivenFeatElectionIntegrationServicesAreAvailable()
+    public async Task GivenFeatElectionIntegrationServicesAreAvailable()
     {
         _client = GetGrpcFactory().CreateClient<HushElections.HushElectionsClient>();
         _owner = TestIdentities.Alice;
@@ -86,6 +86,8 @@ public sealed class ElectionLifecycleIntegrationSteps
         _trusteeInvitationIds.Clear();
         _registeredIdentityAddresses.Clear();
         _acceptedBallotCastTransactions.Clear();
+        await ElectionOwnerLicenceSetup.RegisterAsync(GetNode(), GetBlockControl(), GetGrpcFactory(), _owner);
+        _registeredIdentityAddresses.Add(_owner.PublicSigningAddress);
     }
 
     [When(@"the owner creates an admin-only election draft through blockchain submission")]
