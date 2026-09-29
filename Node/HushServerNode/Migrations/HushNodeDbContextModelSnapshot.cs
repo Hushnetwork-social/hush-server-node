@@ -2767,6 +2767,117 @@ namespace HushServerNode.Migrations
                     b.ToTable("ElectionEligibilitySnapshotRecord", "Elections");
                 });
 
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionEntitlementCapture", b =>
+                {
+                    b.Property<string>("ElectionId")
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("AllowedGovernanceOptionIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AssignedCatalogueDigestSha256")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("AssignedCatalogueVersion")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("EffectiveFromUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("EligibleVoterCap")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("EntitlementRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FrozenEligibleVoterCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("FrozenRosterBasisId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("GovernedProposalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("LicenceSubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("OpenBlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("OpenBlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("OpenBlockTimeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OpenTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OpenTransactionPosition")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OriginatingLicenceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PlanFamily")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("PlanId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SelectedGovernanceOptionId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("SelectedProfileId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("TermKind")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("TermYears")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("UnlimitedElectionPolicy")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("UpgradeRank")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ElectionId");
+
+                    b.HasIndex("OpenTransactionId")
+                        .IsUnique();
+
+                    b.ToTable("ElectionEntitlementCapture", "Elections");
+                });
+
             modelBuilder.Entity("HushShared.Elections.Model.ElectionEnvelopeAccessRecord", b =>
                 {
                     b.Property<string>("ElectionId")
@@ -3350,6 +3461,78 @@ namespace HushServerNode.Migrations
                     b.HasIndex("ElectionId", "ExecutionStatus");
 
                     b.ToTable("ElectionGovernedProposalRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionIndexCheckpoint", b =>
+                {
+                    b.Property<long>("BlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("BlockHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("BlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("HistoryDigestSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("BlockHeight");
+
+                    b.HasIndex("BlockId")
+                        .IsUnique();
+
+                    b.ToTable("ElectionIndexCheckpoint", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionOpenRejection", b =>
+                {
+                    b.Property<Guid>("TransactionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("BlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("BlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("BlockTimeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<int>("ErrorCategory")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("GovernedProposalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Reason")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TransactionPosition")
+                        .HasColumnType("integer");
+
+                    b.HasKey("TransactionId");
+
+                    b.HasIndex("ElectionId");
+
+                    b.ToTable("ElectionOpenRejection", "Elections");
                 });
 
             modelBuilder.Entity("HushShared.Elections.Model.ElectionParticipationRecord", b =>
@@ -4571,6 +4754,22 @@ namespace HushServerNode.Migrations
                         .IsUnique();
 
                     b.ToTable("ElectionRosterImportEvidenceRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionRosterLinkBoundary", b =>
+                {
+                    b.Property<string>("ElectionId")
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime>("LinkedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SourceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ElectionId");
+
+                    b.ToTable("ElectionRosterLinkBoundary", "Elections");
                 });
 
             modelBuilder.Entity("HushShared.Elections.Model.ElectionSpoiledPreparedBallotRecord", b =>
@@ -5950,6 +6149,33 @@ namespace HushServerNode.Migrations
                     b.Navigation("Assignment");
 
                     b.Navigation("LicenceSubject");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionEntitlementCapture", b =>
+                {
+                    b.HasOne("HushShared.Elections.Model.ElectionRecord", null)
+                        .WithOne()
+                        .HasForeignKey("HushShared.Elections.Model.ElectionEntitlementCapture", "ElectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionOpenRejection", b =>
+                {
+                    b.HasOne("HushShared.Elections.Model.ElectionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ElectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionRosterLinkBoundary", b =>
+                {
+                    b.HasOne("HushShared.Elections.Model.ElectionRecord", null)
+                        .WithOne()
+                        .HasForeignKey("HushShared.Elections.Model.ElectionRosterLinkBoundary", "ElectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("HushShared.Feeds.Model.FeedParticipant", b =>

@@ -120,7 +120,8 @@ public record ImportElectionRosterRequest(
     IReadOnlyList<ElectionRosterImportItem> RosterEntries,
     Guid? SourceTransactionId = null,
     long? SourceBlockHeight = null,
-    Guid? SourceBlockId = null);
+    Guid? SourceBlockId = null,
+    ElectionRosterImportMode Mode = ElectionRosterImportMode.Add);
 
 public record ClaimElectionRosterEntryRequest(
     ElectionId ElectionId,
@@ -541,6 +542,7 @@ public record ElectionCommandResult
     public bool IsSuccess { get; init; }
     public bool ShouldCommitSideEffects { get; init; }
     public ElectionCommandErrorCode ErrorCode { get; init; }
+    public ElectionEntitlementReason EntitlementReason { get; init; }
     public string? ErrorMessage { get; init; }
     public IReadOnlyList<string> ValidationErrors { get; init; } = Array.Empty<string>();
     public ElectionRecord? Election { get; init; }
@@ -659,6 +661,7 @@ public record ElectionCommandResult
 
 public record ElectionCommitmentRegistrationResult
 {
+    public ElectionEntitlementReason EntitlementReason { get; init; }
     public bool IsSuccess { get; init; }
     public ElectionCommitmentRegistrationFailureReason FailureReason { get; init; }
     public string? ErrorMessage { get; init; }
@@ -692,6 +695,7 @@ public record ElectionCommitmentRegistrationResult
 
 public record ElectionCastAcceptanceResult
 {
+    public ElectionEntitlementReason EntitlementReason { get; init; }
     public bool IsSuccess { get; init; }
     public ElectionCastAcceptanceFailureReason FailureReason { get; init; }
     public string? ErrorMessage { get; init; }
@@ -731,6 +735,7 @@ public record ElectionCastAcceptanceResult
 
 public record ElectionPreparedBallotCommitmentResult
 {
+    public ElectionEntitlementReason EntitlementReason { get; init; }
     public bool IsSuccess { get; init; }
     public ElectionPreparedBallotCommitmentFailureReason FailureReason { get; init; }
     public string? ErrorMessage { get; init; }
@@ -761,6 +766,7 @@ public record ElectionPreparedBallotCommitmentResult
 
 public record ElectionSpoilPreparedBallotResult
 {
+    public ElectionEntitlementReason EntitlementReason { get; init; }
     public bool IsSuccess { get; init; }
     public ElectionSpoilPreparedBallotFailureReason FailureReason { get; init; }
     public string? ErrorMessage { get; init; }

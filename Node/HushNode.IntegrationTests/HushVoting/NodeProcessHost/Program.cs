@@ -14,6 +14,9 @@ using Microsoft.Extensions.Options;
 using HushNode.Caching;
 using HushNode.Notifications.Models;
 using StackExchange.Redis;
+using HushNode.Elections.Storage;
+using HushShared.Elections.Model;
+using System.Security.Cryptography;
 
 using var output = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
 Console.SetOut(TextWriter.Null);
@@ -48,6 +51,19 @@ try
         stage = command.RootElement.GetProperty("kind").GetString()!;
         switch (stage)
         {
+            case "capture":
+                using (var scope = node.Services.CreateScope())
+                {
+                    var id = ElectionIdHandler.CreateFromString(command.RootElement.GetProperty("electionId").GetString()!);
+                    var db = scope.ServiceProvider.GetRequiredService<ElectionsDbContext>();
+                    var capture = await db.ElectionEntitlementCaptures.AsNoTracking().SingleAsync(c => c.ElectionId == id, deadline.Token);
+                    var state = await db.Elections.Where(e => e.ElectionId == id).Select(e => e.LifecycleState).SingleAsync(deadline.Token);
+                    var frozen = await db.ElectionRosterEntries.CountAsync(r => r.ElectionId == id && r.WasPresentAtOpen, deadline.Token);
+                    var boundaries = await db.ElectionBoundaryArtifacts.CountAsync(b => b.ElectionId == id, deadline.Token);
+                    var digest = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(capture)));
+                    await ReplyAsync(new { kind = "capture", digest, supported = capture.HasSupportedSemantics(), state = state.ToString(), frozen, boundaries });
+                }
+                break;
             case "block":
                 await blocks.ProduceBlockAsync().WaitAsync(deadline.Token);
                 await ReplyAsync(new { kind = "block" });

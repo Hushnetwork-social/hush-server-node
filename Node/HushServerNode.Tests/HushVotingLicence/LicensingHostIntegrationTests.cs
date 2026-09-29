@@ -123,6 +123,30 @@ public sealed class HushVotingLicensingHostIntegrationTests
         configuration.Catalogue.FindPlan(HushVotingLicencePlanId.DirectFree).Should().NotBeNull();
     }
 
+    [Fact]
+    public void Host_archive_retains_the_only_approved_release_and_rejects_unknown_history()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(new HushVotingLicenceSnapshot(HushVotingLicenceCatalogueV1.CreateCatalogue()));
+        services.AddSingleton<IOptions<HushVotingLicenceOptions>>(
+            new OptionsWrapper<HushVotingLicenceOptions>(new HushVotingLicenceOptions()));
+        using var catalogueProvider = services.BuildServiceProvider();
+        var release = HushVotingLicensingIntegrationHostBuild.BuildLicenceServiceConfiguration(
+            catalogueProvider, LocateLicenceCatalogueContentRoot());
+        HushVotingLicensingIntegrationHostBuild.AddHushVotingLicensingIntegrationServices(services);
+        services.AddSingleton(release);
+        using var provider = services.BuildServiceProvider();
+        var archive = provider.GetRequiredService<LicenceCatalogueArchive>();
+
+        archive.Find(release.CatalogueVersion, release.ReleaseDigestSha256).Should().BeSameAs(release);
+        archive.Find(release.CatalogueVersion, new string('0', 64)).Should().BeNull();
+        archive.Find("hushvoting-licence-catalogue/v2.0.0").Should().BeNull();
+        // A new version cannot silently become current without explicit model and
+        // retained-release composition work in its own approved release change.
+        HushVotingLicenceCatalogueVersion.TryGetKnown("hushvoting-licence-catalogue/v2.0.0")
+            .Should().BeNull();
+    }
+
     // ------------------------------------------------------------------ trusted subject boundary
 
     [Fact]
@@ -160,9 +184,14 @@ public sealed class HushVotingLicensingHostIntegrationTests
 
         services.Should().ContainSingle(d => d.ServiceType == typeof(LicenceServiceConfiguration));
         services.Should().ContainSingle(d => d.ServiceType == typeof(LicenceTelemetry));
-        services.Should().ContainSingle(d => d.ServiceType == typeof(LicenceEntitlementService));
+        // FEAT-018 T018-3-01 / G01: only indexed signed transactions originate rights.
+        services.Should().NotContain(d => d.ServiceType == typeof(LicenceEntitlementService));
         services.Should().ContainSingle(d => d.ServiceType == typeof(HushVotingLicenceRolloutReadinessBootstrapper));
-        services.Where(d => d.ServiceType == typeof(Olimpo.IBootstrapper)).Should().ContainSingle();
+        services.Where(d => d.ServiceType == typeof(Olimpo.IBootstrapper)).Should().HaveCount(2);
+        services.Should().ContainSingle(d => d.ServiceType == typeof(Olimpo.IBootstrapper)
+            && d.ImplementationType == typeof(ElectionEntitlementRolloutBootstrapper));
+        services.Should().ContainSingle(d => d.ServiceType == typeof(HushNode.Indexing.Interfaces.IBlockIndexCompletionRecorder));
+        services.Should().ContainSingle(d => d.ServiceType == typeof(ElectionEntitlementRolloutReadiness));
         services.Should().NotContain(d => d.ServiceType == typeof(LicensingDbContextConfigurator));
     }
 

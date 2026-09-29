@@ -594,6 +594,7 @@ public sealed class ElectionAnomalyIntegrationTests : IAsyncLifetime
         await DisposeNodeAsync();
         await _fixture!.ResetAllAsync();
         (_node, _blockControl, _grpcFactory) = await _fixture.StartNodeAsync();
+        await ElectionOwnerLicenceSetup.RegisterAsync(_node, _blockControl, _grpcFactory, TestIdentities.Alice);
     }
 
     private async Task DisposeNodeAsync()

@@ -100,22 +100,25 @@ public sealed class HostLicenceValidationContextSource : IHushVotingLicenceValid
                 out _)
             || subject is null)
         {
-            return new HushVotingLicenceCurrentState.NoActive();
+            return new HushVotingLicenceCurrentState.Unavailable();
         }
 
         var reader = _services.GetRequiredService<ILicenceIndexedProjectionReader>();
         var result = await reader.ResolveEffectiveAsync(subject, DateTime.UtcNow, cancellationToken);
 
-        if (result.Outcome == IndexedEntitlementReadOutcome.Active && result.Entitlement is not null)
+        if (result.IsSuccess && result.Outcome == IndexedEntitlementReadOutcome.Active && result.Entitlement is not null)
         {
             return new HushVotingLicenceCurrentState.Active(
                 HushVotingLicencePlanId.FromExternal(result.Entitlement.PlanId),
                 result.Entitlement.LicenceReference,
                 result.Entitlement.AssignedCatalogueVersion,
                 result.Entitlement.EffectiveFromUtc,
-                result.Entitlement.ExpiresAtUtc);
+                result.Entitlement.ExpiresAtUtc,
+                result.Entitlement.UpgradeRank);
         }
 
-        return new HushVotingLicenceCurrentState.NoActive();
+        return result.IsSuccess && result.Outcome == IndexedEntitlementReadOutcome.NoActive
+            ? new HushVotingLicenceCurrentState.NoActive()
+            : new HushVotingLicenceCurrentState.Unavailable();
     }
 }

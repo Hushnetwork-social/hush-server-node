@@ -14,6 +14,18 @@ READ = Path.read_text
 
 
 class SelectionTests(unittest.TestCase):
+    def test_feature_group_requires_real_inventory_and_backend_selection(self):
+        result = MODULE.selection(MANIFEST)
+        self.assertEqual(len(result["featureOwnedGroups"]["HV-ENTITLEMENT-STORAGE-TWIN"]), 7)
+        MODULE.validate_group(result, "HV-ENTITLEMENT-STORAGE-TWIN", True)
+        with self.assertRaisesRegex(ValueError, "requires --server-twins"):
+            MODULE.validate_group(result, "HV-ENTITLEMENT-STORAGE-TWIN", False)
+        MODULE.validate_group(result, "HV-ENTITLEMENT-ROLLOUT-TWIN", True)
+        with self.assertRaisesRegex(ValueError, "reserved"):
+            MODULE.validate_group({**result, "reservedFeatureGroups": ["HV-FUTURE-TWIN"]}, "HV-FUTURE-TWIN", True)
+        with self.assertRaisesRegex(ValueError, "inventory mismatch"):
+            self.changed(lambda data: data["featureOwnedGroups"][0].update(scenarioIds=[]))
+
     def changed(self, mutate):
         data = json.loads(MANIFEST.read_text())
         mutate(data)

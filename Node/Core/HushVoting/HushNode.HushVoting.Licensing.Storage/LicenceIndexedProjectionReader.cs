@@ -74,7 +74,9 @@ public sealed class LicenceIndexedProjectionReader : ILicenceIndexedProjectionRe
             using var db = _contextFactory();
             var subjectRow = await db.Set<LicenceSubjectEntity>()
                 .AsNoTracking()
-                .Include(s => s.Assignments)
+                // The partial unique index permits at most one active row per subject.
+                // Retained history must not increase current-read materialization cost.
+                .Include(s => s.Assignments.Where(a => a.LifecycleStatus == LicencePersistenceVocabulary.LifecycleActive))
                 .SingleOrDefaultAsync(
                     s => s.SubjectType == subject.SubjectType
                          && s.CanonicalPublicSigningAddress == subject.CanonicalPublicSigningAddress,

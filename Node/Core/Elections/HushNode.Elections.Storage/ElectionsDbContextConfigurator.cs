@@ -14,6 +14,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
 
     public void Configure(ModelBuilder modelBuilder)
     {
+        ElectionEntitlementStorageConfiguration.Configure(modelBuilder);
         ConfigureElectionRecord(modelBuilder);
         ConfigureElectionDraftSnapshot(modelBuilder);
         ConfigureElectionEnvelopeAccess(modelBuilder);

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\..\HushVoting\HushNode.HushVoting.Licensing.Storage\HushNode.HushVoting.Licensing.Storage.csproj" />
     <ProjectReference Include="..\..\Blockchain\HushNode.Blockchain\HushNode.Blockchain.csproj" />
     <ProjectReference Include="..\..\Indexing\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />
     <ProjectReference Include="..\..\Reactions\HushNode.Reactions\HushNode.Reactions.csproj" />

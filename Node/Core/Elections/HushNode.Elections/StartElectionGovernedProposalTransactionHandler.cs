@@ -8,7 +8,8 @@ namespace HushNode.Elections;
 public class StartElectionGovernedProposalTransactionHandler(
     IElectionLifecycleService electionLifecycleService,
     IBlockchainCache blockchainCache,
-    ILogger<StartElectionGovernedProposalTransactionHandler> logger) : IStartElectionGovernedProposalTransactionHandler
+    ILogger<StartElectionGovernedProposalTransactionHandler> logger,
+    IElectionEntitlementTelemetry? telemetry = null) : IStartElectionGovernedProposalTransactionHandler
 {
     private readonly IElectionLifecycleService _electionLifecycleService = electionLifecycleService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
@@ -25,6 +26,7 @@ public class StartElectionGovernedProposalTransactionHandler(
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));
 
+        telemetry?.Record(EncryptedElectionEnvelopeActionTypes.StartGovernedProposal, result);
         if (!result.IsSuccess)
         {
             _logger.LogWarning(

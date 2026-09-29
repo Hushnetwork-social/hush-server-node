@@ -2583,6 +2583,8 @@ message ElectionCommandResponse {
   ElectionFinalizationShare FinalizationShare = 18;
   ElectionFinalizationReleaseEvidence FinalizationReleaseEvidence = 19;
   ElectionProtocolPackageBindingView ProtocolPackageBinding = 20;
+  // Closed FEAT-018 reason; empty preserves prior response semantics.
+  string EntitlementReason = 21;
 }
 
 message GetElectionOpenReadinessResponse {
@@ -2597,6 +2599,13 @@ message GetElectionOpenReadinessResponse {
   ElectionSp06EvidenceStatusView Sp06Evidence = 9;
   ElectionSp07EvidenceStatusView Sp07Evidence = 10;
   ElectionSp08ReleaseIntegrityStatusView Sp08ReleaseIntegrity = 11;
+}
+
+message ElectionScopedAccess {
+  string ElectionId = 1;
+  int32 SchemaVersion = 2;
+  repeated string AllowedOperations = 3;
+  string EntitlementReason = 4;
 }
 
 message GetElectionResponse {
@@ -2618,6 +2627,7 @@ message GetElectionResponse {
   repeated ElectionFinalizationReleaseEvidence FinalizationReleaseEvidenceRecords = 16;
   repeated ElectionResultArtifact ResultArtifacts = 17;
   ElectionProtocolPackageBindingView ProtocolPackageBinding = 18;
+  ElectionScopedAccess ScopedAccess = 19;
 }
 
 message SearchElectionDirectoryEntryView {

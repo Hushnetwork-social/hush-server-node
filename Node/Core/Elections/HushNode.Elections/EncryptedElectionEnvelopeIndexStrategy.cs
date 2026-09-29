@@ -16,7 +16,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
     IElectionLifecycleService electionLifecycleService,
     IBlockchainCache blockchainCache,
     IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
-    ILogger<EncryptedElectionEnvelopeIndexStrategy> logger) : IIndexStrategy
+    ILogger<EncryptedElectionEnvelopeIndexStrategy> logger,
+    IElectionEntitlementTelemetry? telemetry = null) : IIndexStrategy
 {
     private readonly IElectionEnvelopeCryptoService _envelopeCryptoService = envelopeCryptoService;
     private readonly IElectionLifecycleService _electionLifecycleService = electionLifecycleService;
@@ -31,9 +32,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
     {
         var decryptedEnvelope = _envelopeCryptoService.TryDecryptValidated(transaction);
         if (decryptedEnvelope is null)
-        {
-            return;
-        }
+            throw new ElectionIndexAuthorityException("Validated election envelope cannot be interpreted by this node.");
 
         ElectionCommandResult result = decryptedEnvelope.ActionType switch
         {
@@ -129,11 +128,10 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleRecordAnomalyEvidenceRedactionAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.RecordAnomalyAuditorRecipientRewrap =>
                 await HandleRecordAnomalyAuditorRecipientRewrapAsync(decryptedEnvelope),
-            _ => ElectionCommandResult.Failure(
-                ElectionCommandErrorCode.NotSupported,
-                $"Unsupported encrypted election action type {decryptedEnvelope.ActionType}."),
+            _ => throw new ElectionIndexAuthorityException("Validated election action is unsupported by this node."),
         };
 
+        telemetry?.Record(decryptedEnvelope.ActionType, result);
         if (!result.IsSuccess)
         {
             _logger.LogWarning(
@@ -238,7 +236,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             RosterEntries: importAction.RosterEntries,
             SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
-            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value,
+            Mode: importAction.Mode));
     }
 
     private async Task<ElectionCommandResult> HandleClaimRosterEntryAsync(
@@ -315,6 +314,9 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 registerAction.CommitmentHash,
                 registerAction.OrganizationVoterId));
 
+        if (result.EntitlementReason != ElectionEntitlementReason.None)
+            return ElectionEntitlementResults.Reject(result.EntitlementReason);
+
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(result.Election, rosterEntry: result.RosterEntry)
             : ElectionCommandResult.Failure(
@@ -363,6 +365,9 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 acceptAction.BallotDefinitionHash,
                 acceptAction.OrganizationVoterId));
 
+        if (result.EntitlementReason != ElectionEntitlementReason.None)
+            return ElectionEntitlementResults.Reject(result.EntitlementReason);
+
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(result.Election)
             : ElectionCommandResult.Failure(
@@ -410,6 +415,9 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 _blockchainCache.CurrentBlockId.Value,
                 registerAction.OrganizationVoterId));
 
+        if (result.EntitlementReason != ElectionEntitlementReason.None)
+            return ElectionEntitlementResults.Reject(result.EntitlementReason);
+
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(result.Election)
             : ElectionCommandResult.Failure(
@@ -453,6 +461,9 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 _blockchainCache.LastBlockIndex.Value,
                 _blockchainCache.CurrentBlockId.Value,
                 spoilAction.OrganizationVoterId));
+
+        if (result.EntitlementReason != ElectionEntitlementReason.None)
+            return ElectionEntitlementResults.Reject(result.EntitlementReason);
 
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(result.Election)

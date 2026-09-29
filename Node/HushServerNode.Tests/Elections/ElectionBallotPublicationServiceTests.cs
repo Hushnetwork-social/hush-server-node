@@ -21,6 +21,22 @@ namespace HushServerNode.Tests.Elections;
 public class ElectionBallotPublicationServiceTests
 {
     [Fact]
+    public async Task Publication_WithoutCapturedAuthority_CannotPublishOrCount()
+    {
+        var store = new PublicationStore();
+        var election = CreateOpenElection();
+        SeedAcceptedBallots(store, election, 1);
+        var crypto = new FakePublicationCryptoService();
+        var service = CreateService(store, crypto, new ElectionBallotPublicationOptions(1, 0, 1));
+        store.EntitlementCaptures.Clear();
+        var publish = () => service.ProcessPendingPublicationAsync(new BlockIndex(12));
+        await publish.Should().ThrowAsync<ElectionIndexAuthorityException>();
+        store.PublishedBallots.Should().BeEmpty();
+        store.BallotMemPoolEntries.Should().ContainSingle();
+        crypto.PrepareCallCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ProcessPendingPublicationAsync_OpenElectionBelowHighWater_LeavesBallotsQueued()
     {
         var store = new PublicationStore();
@@ -33,7 +49,7 @@ public class ElectionBallotPublicationServiceTests
 
         store.BallotMemPoolEntries.Should().HaveCount(1);
         store.PublishedBallots.Should().BeEmpty();
-        store.BoundaryArtifacts.Should().BeEmpty();
+        store.BoundaryArtifacts.Select(a => a.ArtifactType).Should().Equal(ElectionBoundaryArtifactType.Open);
         store.PublicationIssues.Should().BeEmpty();
         store.Elections[election.ElectionId].TallyReadyAt.Should().BeNull();
         crypto.PrepareCallCount.Should().Be(0);
@@ -56,7 +72,7 @@ public class ElectionBallotPublicationServiceTests
         store.PublishedBallots.Select(x => x.PublicationSequence).Should().Equal(1, 2, 3);
         store.PublishedBallots.Should().OnlyContain(x => x.EncryptedBallotPackage.EndsWith("|published", StringComparison.Ordinal));
         store.PublishedBallots.Should().OnlyContain(x => x.ProofBundle.EndsWith("|proof-published", StringComparison.Ordinal));
-        store.BoundaryArtifacts.Should().BeEmpty();
+        store.BoundaryArtifacts.Select(a => a.ArtifactType).Should().Equal(ElectionBoundaryArtifactType.Open);
         store.PublicationIssues.Should().BeEmpty();
         store.Elections[election.ElectionId].TallyReadyAt.Should().BeNull();
         crypto.ReplayCallCount.Should().Be(0);
@@ -151,8 +167,9 @@ public class ElectionBallotPublicationServiceTests
             "ballot-1|published");
         store.PublicationIssues.Should().BeEmpty();
 
-        store.BoundaryArtifacts.Should().ContainSingle();
-        var artifact = store.BoundaryArtifacts[0];
+        store.BoundaryArtifacts.Select(a => a.ArtifactType).Should().Equal(
+            ElectionBoundaryArtifactType.Open, ElectionBoundaryArtifactType.TallyReady);
+        var artifact = store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady);
         artifact.ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
         artifact.AcceptedBallotCount.Should().Be(3);
         artifact.PublishedBallotCount.Should().Be(3);
@@ -430,17 +447,18 @@ public class ElectionBallotPublicationServiceTests
         store.BallotMemPoolEntries.Should().BeEmpty();
         store.PublishedBallots.Should().BeEmpty();
         store.PublicationIssues.Should().BeEmpty();
-        store.BoundaryArtifacts.Should().ContainSingle();
-        store.BoundaryArtifacts[0].ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
-        store.BoundaryArtifacts[0].AcceptedBallotCount.Should().Be(0);
-        store.BoundaryArtifacts[0].PublishedBallotCount.Should().Be(0);
-        store.BoundaryArtifacts[0].FinalEncryptedTallyHash.Should().NotBeNull().And.NotBeEmpty();
+        store.BoundaryArtifacts.Select(a => a.ArtifactType).Should().Equal(
+            ElectionBoundaryArtifactType.Open, ElectionBoundaryArtifactType.TallyReady);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).AcceptedBallotCount.Should().Be(0);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).PublishedBallotCount.Should().Be(0);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).FinalEncryptedTallyHash.Should().NotBeNull().And.NotBeEmpty();
         store.Elections[election.ElectionId].TallyReadyAt.Should().NotBeNull();
         store.Elections[election.ElectionId].UnofficialResultArtifactId.Should().NotBeNull();
         store.ResultArtifacts.Should().ContainSingle();
         store.ResultArtifacts[0].ArtifactKind.Should().Be(ElectionResultArtifactKind.Unofficial);
         store.ResultArtifacts[0].Visibility.Should().Be(ElectionResultArtifactVisibility.ParticipantEncrypted);
-        store.ResultArtifacts[0].TallyReadyArtifactId.Should().Be(store.BoundaryArtifacts[0].Id);
+        store.ResultArtifacts[0].TallyReadyArtifactId.Should().Be(store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).Id);
         store.ResultArtifacts[0].EligibleToVoteCount.Should().Be(3);
         store.ResultArtifacts[0].DidNotVoteCount.Should().Be(3);
         store.ResultArtifacts[0].TotalVotedCount.Should().Be(0);
@@ -488,8 +506,9 @@ public class ElectionBallotPublicationServiceTests
 
         store.BallotMemPoolEntries.Should().BeEmpty();
         store.PublishedBallots.Should().HaveCount(2);
-        store.BoundaryArtifacts.Should().ContainSingle();
-        store.BoundaryArtifacts[0].ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
+        store.BoundaryArtifacts.Select(a => a.ArtifactType).Should().Equal(
+            ElectionBoundaryArtifactType.Open, ElectionBoundaryArtifactType.TallyReady);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
         store.ResultArtifacts.Should().ContainSingle();
         store.ResultArtifacts[0].ArtifactKind.Should().Be(ElectionResultArtifactKind.Unofficial);
         store.ResultArtifacts[0].TotalVotedCount.Should().Be(2);
@@ -594,11 +613,12 @@ public class ElectionBallotPublicationServiceTests
 
         await service.RepairClosedElectionResultsAsync(election.ElectionId);
 
-        store.BoundaryArtifacts.Should().ContainSingle();
-        store.BoundaryArtifacts[0].ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
-        store.BoundaryArtifacts[0].AcceptedBallotCount.Should().Be(2);
-        store.BoundaryArtifacts[0].PublishedBallotCount.Should().Be(2);
-        store.BoundaryArtifacts[0].FinalEncryptedTallyHash.Should().NotBeNull().And.NotBeEmpty();
+        store.BoundaryArtifacts.Select(a => a.ArtifactType).Should().Equal(
+            ElectionBoundaryArtifactType.Open, ElectionBoundaryArtifactType.TallyReady);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).AcceptedBallotCount.Should().Be(2);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).PublishedBallotCount.Should().Be(2);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).FinalEncryptedTallyHash.Should().NotBeNull().And.NotBeEmpty();
 
         store.ResultArtifacts.Should().ContainSingle();
         store.ResultArtifacts[0].ArtifactKind.Should().Be(ElectionResultArtifactKind.Unofficial);
@@ -861,6 +881,8 @@ public class ElectionBallotPublicationServiceTests
         IElectionPublicationWitnessDeletionService? publicationWitnessDeletionService = null,
         IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null)
     {
+        HistoricalOpenAuthorizationFixture.Seed(store.Elections, store.EntitlementCaptures,
+            store.BoundaryArtifacts, store.EligibilitySnapshots);
         var repository = CreateRepository(store);
         var provider = new FakeUnitOfWorkProvider(repository.Object);
 
@@ -1037,6 +1059,9 @@ public class ElectionBallotPublicationServiceTests
                     .Where(x => x.ElectionId == electionId)
                     .OrderBy(x => x.PublicationSequence)
                     .ToArray());
+
+        repository.Setup(x => x.GetEntitlementCaptureAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync((ElectionId electionId) => store.EntitlementCaptures.SingleOrDefault(c => c.ElectionId == electionId));
 
         repository
             .Setup(x => x.GetBoundaryArtifactsAsync(It.IsAny<ElectionId>()))
@@ -1710,6 +1735,7 @@ public class ElectionBallotPublicationServiceTests
     private sealed class PublicationStore
     {
         public Dictionary<ElectionId, ElectionRecord> Elections { get; } = [];
+        public List<ElectionEntitlementCapture> EntitlementCaptures { get; } = [];
         public List<ElectionAcceptedBallotRecord> AcceptedBallots { get; } = [];
         public List<ElectionBallotMemPoolRecord> BallotMemPoolEntries { get; } = [];
         public List<ElectionPublishedBallotRecord> PublishedBallots { get; } = [];

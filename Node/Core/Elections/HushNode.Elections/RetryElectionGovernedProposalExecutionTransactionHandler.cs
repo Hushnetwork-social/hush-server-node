@@ -8,7 +8,8 @@ namespace HushNode.Elections;
 public class RetryElectionGovernedProposalExecutionTransactionHandler(
     IElectionLifecycleService electionLifecycleService,
     IBlockchainCache blockchainCache,
-    ILogger<RetryElectionGovernedProposalExecutionTransactionHandler> logger) : IRetryElectionGovernedProposalExecutionTransactionHandler
+    ILogger<RetryElectionGovernedProposalExecutionTransactionHandler> logger,
+    IElectionEntitlementTelemetry? telemetry = null) : IRetryElectionGovernedProposalExecutionTransactionHandler
 {
     private readonly IElectionLifecycleService _electionLifecycleService = electionLifecycleService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
@@ -24,6 +25,7 @@ public class RetryElectionGovernedProposalExecutionTransactionHandler(
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));
 
+        telemetry?.Record(EncryptedElectionEnvelopeActionTypes.RetryGovernedProposalExecution, result);
         if (!result.IsSuccess)
         {
             _logger.LogWarning(

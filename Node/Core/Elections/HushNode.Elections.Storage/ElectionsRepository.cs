@@ -6,6 +6,50 @@ namespace HushNode.Elections.Storage;
 
 public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElectionsRepository
 {
+    public Task<ElectionOpenRejection?> GetOpenRejectionAsync(Guid transactionId) =>
+        Context.ElectionOpenRejections.AsNoTracking().SingleOrDefaultAsync(r => r.TransactionId == transactionId);
+
+    public Task AddOpenRejectionAsync(ElectionOpenRejection rejection)
+    {
+        if (!rejection.HasSupportedSemantics()) throw new InvalidOperationException("Unsupported negative Open outcome.");
+        Context.ElectionOpenRejections.Add(rejection);
+        return Task.CompletedTask;
+    }
+
+    public async Task BeginOpenAttemptAsync()
+    {
+        var transaction = Context.Database.CurrentTransaction ?? throw new InvalidOperationException("Open requires its owning transaction.");
+        // Flush prior valid approvals inside the still-uncommitted owning transaction. A
+        // business rejection can retain them; any storage fault rolls the whole transaction back.
+        await Context.SaveChangesAsync();
+        await transaction.CreateSavepointAsync("ElectionOpenAttempt");
+    }
+
+    public async Task RollbackOpenAttemptAsync()
+    {
+        await Context.Database.CurrentTransaction!.RollbackToSavepointAsync("ElectionOpenAttempt");
+        Context.ChangeTracker.Clear();
+    }
+
+    public Task ReleaseOpenAttemptAsync() => Context.Database.CurrentTransaction!.ReleaseSavepointAsync("ElectionOpenAttempt");
+    public Task<ElectionEntitlementCapture?> GetEntitlementCaptureAsync(ElectionId electionId) =>
+        Context.ElectionEntitlementCaptures.AsNoTracking().SingleOrDefaultAsync(e => e.ElectionId == electionId);
+
+    public Task<ElectionEvidenceWriteOutcome> AddEntitlementCaptureAsync(ElectionEntitlementCapture capture) =>
+        ElectionEntitlementStorage.AddCaptureAsync(Context, capture);
+
+    public Task<string?> GetElectionOwnerAsync(ElectionId electionId) => Context.Elections.AsNoTracking()
+        .Where(e => e.ElectionId == electionId).Select(e => (string?)e.OwnerPublicAddress).SingleOrDefaultAsync();
+
+    public Task<HushNode.HushVoting.Licensing.Storage.IndexedEntitlementReadResult> LockOwnerEntitlementAsync(string owner, DateTime executionUtc) =>
+        HushNode.HushVoting.Licensing.Storage.LicenceEnlistedProjectionReader.LockAndReadAsync(Context, owner, executionUtc);
+
+    public Task<ElectionRosterLinkBoundary?> GetFirstRosterLinkAsync(ElectionId electionId) =>
+        Context.ElectionRosterLinkBoundaries.AsNoTracking().SingleOrDefaultAsync(e => e.ElectionId == electionId);
+
+    public Task<ElectionEvidenceWriteOutcome> AddFirstRosterLinkAsync(ElectionRosterLinkBoundary boundary) =>
+        ElectionEntitlementStorage.AddFirstLinkAsync(Context, boundary);
+
     private static readonly ElectionAdminOnlyProtectedTallyCustodyLifecycleState[] CustodyReconciliationStates =
     [
         ElectionAdminOnlyProtectedTallyCustodyLifecycleState.ProviderUnavailable,
@@ -913,11 +957,15 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task DeleteRosterEntriesAsync(ElectionId electionId)
     {
+        if (Context.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("Roster replacement requires the caller's write transaction.");
         var existing = await Context.ElectionRosterEntries
             .Where(x => x.ElectionId == electionId)
             .ToListAsync();
 
         Context.ElectionRosterEntries.RemoveRange(existing);
+        // Flush key reuse inside the caller's still-uncommitted transaction.
+        await Context.SaveChangesAsync();
     }
 
     public async Task<IReadOnlyList<ElectionEligibilityActivationEventRecord>> GetEligibilityActivationEventsAsync(ElectionId electionId) =>

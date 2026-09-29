@@ -108,6 +108,10 @@ def validate_layer_tags(scenario, tags):
 
 
 def validate_group(result, group, server_twins):
+    if group in result.get("reservedFeatureGroups", []):
+        raise ValueError("Feature group is reserved but has no implemented scenarios: " + group)
+    if group in result.get("featureOwnedGroups", {}) and not server_twins:
+        raise ValueError("Feature storage/enforcement coverage requires --server-twins: " + group)
     if any(item["scenarioId"] == group for item in result["frontendTwins"]):
         raise ValueError("Selected entry remains a TypeScript HushVotingApp TwinTest; use the frontend runner: " + group)
     if group == QUALIFICATION_TAG[1:] or any(g["scenarioId"] == group for g in result["externalQualifications"]):
@@ -165,7 +169,23 @@ def selection(manifest_path):
                 web.append(sid)
     if len(seen) != manifest["sourceScenarioCount"] or not set(QUALIFICATION_GATES).issubset(seen):
         raise ValueError("Original scenario or qualification inventory is incomplete")
+    # New feature coverage is distinct from the historical migration denominator.
+    feature_groups = {}
+    for group in manifest.get("featureOwnedGroups", []):
+        actual = scenario_tags(manifest_path.parent / group["destination"])
+        ids = [tag[1:] for tags in actual.values() for tag in tags if tag.startswith("@HV-TWIN-")]
+        if (not actual or sorted(ids) != sorted(group["scenarioIds"])
+                or group["layer"] != "backend-twin"
+                or any(not {"@HushVoting", "@HV-SERVER-TWIN", "@" + group["group"]}.issubset(tags)
+                       or "@HV-E2E" in tags for tags in actual.values())
+                or group["group"] in feature_groups):
+            raise ValueError("Feature-owned scenario inventory mismatch: " + group["group"])
+        feature_groups[group["group"]] = ids
+    reserved = manifest.get("reservedFeatureGroups", [])
+    if set(reserved).intersection(feature_groups):
+        raise ValueError("Implemented group cannot remain reserved")
     return {"webScenarioIds": web, "backendScenarioIds": backend, "frontendTwins": frontend, "externalQualifications": gates,
+            "featureOwnedGroups": feature_groups, "reservedFeatureGroups": reserved,
             "qualificationAcceptance": "NOT_ESTABLISHED_BY_WEB_EXECUTION"}
 
 

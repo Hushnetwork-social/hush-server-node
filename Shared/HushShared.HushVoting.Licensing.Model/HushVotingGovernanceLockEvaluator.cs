@@ -54,6 +54,13 @@ public static class HushVotingGovernanceLockEvaluator
                 $"Governance option '{requestedOption.Value}' is not authorized by plan '{plan.Id.Value}'.");
         }
 
+        return EvaluateBoundary(isOpen, hasCeremonyArtifact);
+    }
+
+    /// <summary>Evaluate the immutable boundary after the caller has authorized the
+    /// requested option against the owner's pinned licence terms.</summary>
+    public static HushVotingGovernanceChangeEvaluation EvaluateBoundary(bool isOpen, bool hasCeremonyArtifact)
+    {
         if (isOpen)
         {
             return HushVotingGovernanceChangeEvaluation.Locked(

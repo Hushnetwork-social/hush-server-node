@@ -808,6 +808,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         };
 
         (_node, _blockControl, _grpcFactory) = await _fixture.StartNodeAsync(configurationOverrides: configurationOverrides);
+        await ElectionOwnerLicenceSetup.RegisterAsync(_node, _blockControl, _grpcFactory, TestIdentities.Alice);
         return _grpcFactory.CreateClient<HushElections.HushElectionsClient>();
     }
 

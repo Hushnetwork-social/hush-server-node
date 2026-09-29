@@ -30,6 +30,7 @@ internal sealed class HushVotingScenario : IAsyncDisposable
     public HushIdentity.HushIdentityClient Identities { get; private set; } = null!;
     public HushBlockchain.HushBlockchainClient Blockchain { get; private set; } = null!;
     public HushNetwork.proto.HushVotingLicence.HushVotingLicenceClient Licences { get; private set; } = null!;
+    public HushElections.HushElectionsClient Elections { get; private set; } = null!;
     public string BaseUrl { get; private set; } = "";
     private string _redis = "";
     private HushVotingTestRun? _run;
@@ -70,6 +71,9 @@ internal sealed class HushVotingScenario : IAsyncDisposable
             configurationOverrides: new Dictionary<string, string?>
             {
                 ["Elections:ProtocolPackages:ApprovedCatalogRelativePath"] = run.ProtocolCatalog,
+                // Private proof witnesses belong to the supervised run's temporary
+                // directory, which its EXIT cleanup removes, never the build tree.
+                ["Elections:Sp07PublicationProof:WorkRoot"] = Path.Combine(_temporaryRoot!, "proof-work"),
                 ["Logging:LogLevel:Default"] = "None",
                 ["Elections:DeploymentProof:LocalDevelopmentProfileIds"] = "admin-dev-1of1;admin-prod-1of1;dkg-dev-3of5;dkg-prod-3of5"
             }, configureTestServices: services =>
@@ -86,6 +90,7 @@ internal sealed class HushVotingScenario : IAsyncDisposable
         Blockchain = new HushBlockchain.HushBlockchainClient(_channel);
         Identities = new HushIdentity.HushIdentityClient(_channel);
         Licences = new HushNetwork.proto.HushVotingLicence.HushVotingLicenceClient(_channel);
+        Elections = new HushElections.HushElectionsClient(_channel);
 
         // Backend Twins share only the owned server/database lifecycle.
         if (!includeBrowser) return;
@@ -176,6 +181,19 @@ internal sealed class HushVotingScenario : IAsyncDisposable
             throw new InvalidOperationException("Chain reset requires the stopped backend-only owned node process.");
         await (_run ?? throw new InvalidOperationException("Scenario is not started.")).ResetStorageAsync();
         await NodeProcess.RestartAsync();
+    }
+
+    public async Task MoveOwnedStorageToNodeProcessAsync()
+    {
+        if (_run is null || Node is null || NodeProcess is not null || Page is not null)
+            throw new InvalidOperationException("Node-process handover requires the owned backend-only scenario.");
+        await HushVotingArtifactClient.RegisterAsync($"localhost:{Node.GrpcPort}");
+        _channel?.Dispose();
+        _channel = null;
+        await Node.DisposeAsync();
+        Node = null!;
+        NodeProcess = new HushVotingNodeProcess(_run.Postgres, _run.Redis, _run.ProtocolCatalog);
+        await NodeProcess.StartAsync(); // resetDatabase:false; the same owned PostgreSQL history survives.
     }
 
     public async Task UseRestartableBrowserAsync()

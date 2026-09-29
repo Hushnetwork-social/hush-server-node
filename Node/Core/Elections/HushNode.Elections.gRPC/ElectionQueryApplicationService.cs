@@ -237,6 +237,17 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             ErrorMessage = string.Empty,
         };
 
+        var scopedAccess = await ElectionScopedAccessProjector.ReadAsync(repository, election, normalizedActorPublicAddress);
+        if (scopedAccess is not null)
+        {
+            response.ScopedAccess = new ElectionScopedAccess
+            {
+                ElectionId = scopedAccess.ElectionId.ToString(), SchemaVersion = scopedAccess.SchemaVersion,
+                EntitlementReason = scopedAccess.EntitlementReason,
+            };
+            response.ScopedAccess.AllowedOperations.AddRange(scopedAccess.AllowedOperations);
+        }
+
         if (latestDraftSnapshot is not null)
         {
             response.LatestDraftSnapshot = latestDraftSnapshot.ToProto();

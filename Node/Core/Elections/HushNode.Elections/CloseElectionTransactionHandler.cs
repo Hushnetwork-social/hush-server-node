@@ -8,7 +8,8 @@ namespace HushNode.Elections;
 public class CloseElectionTransactionHandler(
     IElectionLifecycleService electionLifecycleService,
     IBlockchainCache blockchainCache,
-    ILogger<CloseElectionTransactionHandler> logger) : ICloseElectionTransactionHandler
+    ILogger<CloseElectionTransactionHandler> logger,
+    IElectionEntitlementTelemetry? telemetry = null) : ICloseElectionTransactionHandler
 {
     private readonly IElectionLifecycleService _electionLifecycleService = electionLifecycleService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
@@ -25,6 +26,7 @@ public class CloseElectionTransactionHandler(
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));
 
+        telemetry?.Record(EncryptedElectionEnvelopeActionTypes.CloseElection, result);
         if (!result.IsSuccess)
         {
             _logger.LogWarning(
