@@ -531,8 +531,8 @@ namespace HushNode.IntegrationTests.Features
     testRunner.And("the owner starts an \"open\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 103
-    testRunner.And("the integration test forces the election into a stale \"Closed\" state before the g" +
-                        "overned proposal executes", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("the integration test temporarily makes the active ceremony not ready before gover" +
+                        "ned execution", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 104
     testRunner.And("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
@@ -547,8 +547,7 @@ namespace HushNode.IntegrationTests.Features
     testRunner.Then("the governed proposal should record an execution failure for \"open\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 108
-    testRunner.When("the integration test restores the election to the \"Draft\" state for governed retr" +
-                        "y", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+    testRunner.When("the integration test restores the ready ceremony for governed retry", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 109
     testRunner.And("the owner retries the governed proposal execution through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");

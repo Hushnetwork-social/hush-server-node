@@ -100,12 +100,12 @@ Feature: FEAT-094 election lifecycle integration
     And the owner imports the default election roster through blockchain submission
     And the owner prepares a ready trustee ceremony through blockchain submission
     And the owner starts an "open" governed proposal through blockchain submission
-    And the integration test forces the election into a stale "Closed" state before the governed proposal executes
+    And the integration test temporarily makes the active ceremony not ready before governed execution
     And trustee "Bob" approves the governed proposal through blockchain submission
     And trustee "Charlie" approves the governed proposal through blockchain submission
     And trustee "Delta" approves the governed proposal through blockchain submission
     Then the governed proposal should record an execution failure for "open"
-    When the integration test restores the election to the "Draft" state for governed retry
+    When the integration test restores the ready ceremony for governed retry
     And the owner retries the governed proposal execution through blockchain submission
     Then the governed proposal should execute and transition the election to "Open"
 

@@ -53,6 +53,7 @@ public sealed class ElectionLifecycleIntegrationSteps
 
     private HushElections.HushElectionsClient? _client;
     private TestIdentity? _owner;
+    private ElectionCeremonyVersionRecord? _governedRetryCeremony;
     private string? _electionId;
     private string? _lastGovernedProposalId;
     private ElectionCommandResponse? _lastCommandResponse;
@@ -625,8 +626,15 @@ public sealed class ElectionLifecycleIntegrationSteps
     [When(@"the owner retries the governed proposal execution through blockchain submission")]
     public async Task WhenTheOwnerRetriesTheGovernedProposalExecutionThroughBlockchainSubmission()
     {
+        var before = await ReloadElectionAsync();
+        var approvalIds = before.GovernedProposalApprovals
+            .Where(x => x.ProposalId == GetLastGovernedProposalId()).Select(x => x.Id).ToArray();
+        approvalIds.Should().HaveCount(3);
         var response = await RetryGovernedProposalExecutionViaBlockchainAsync();
         var proposal = response.GovernedProposals.Single(x => x.Id == GetLastGovernedProposalId());
+        response.GovernedProposalApprovals.Where(x => x.ProposalId == proposal.Id)
+            .Select(x => x.Id).Should().BeEquivalentTo(approvalIds,
+                "owner retry must reuse the existing approvals rather than collecting replacements");
 
         _lastElectionResponse = response;
         _lastCommandResponse = new ElectionCommandResponse
@@ -646,71 +654,34 @@ public sealed class ElectionLifecycleIntegrationSteps
             draft: BuildTrusteeThresholdDraftSpecification(title));
     }
 
-    [When(@"the integration test forces the election into a stale ""(.*)"" state before the governed proposal executes")]
-    public async Task WhenTheIntegrationTestForcesTheElectionIntoAStaleStateBeforeTheGovernedProposalExecutes(string lifecycleState)
+    [When(@"the integration test temporarily makes the active ceremony not ready before governed execution")]
+    public async Task WhenTheActiveCeremonyTemporarilyBecomesNotReady()
     {
-        var now = DateTime.UtcNow;
+        // FEAT-096 retry fault injection must preserve FEAT-018 capture invariants.
+        // An unopened election cannot be fabricated as Closed without Open evidence.
         await using var scope = GetNode().Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
-
-        switch (lifecycleState.Trim().ToLowerInvariant())
+        var db = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var id = GetCurrentElectionId();
+        var election = await db.Set<ElectionRecord>().SingleAsync(x => x.ElectionId == id);
+        election.LifecycleState.Should().Be(ElectionLifecycleState.Draft);
+        _governedRetryCeremony = await db.Set<ElectionCeremonyVersionRecord>()
+            .AsNoTracking().SingleAsync(x => x.ElectionId == id && x.Status == ElectionCeremonyVersionStatus.Ready);
+        db.Set<ElectionCeremonyVersionRecord>().Update(_governedRetryCeremony with
         {
-            case "closed":
-                await dbContext.Database.ExecuteSqlRawAsync(
-                    """
-                    UPDATE "Elections"."ElectionRecord"
-                    SET "LifecycleState" = {0},
-                        "LastUpdatedAt" = {1},
-                        "OpenedAt" = COALESCE("OpenedAt", {1}),
-                        "ClosedAt" = {1},
-                        "FinalizedAt" = NULL,
-                        "TallyReadyAt" = NULL,
-                        "VoteAcceptanceLockedAt" = COALESCE("VoteAcceptanceLockedAt", {1})
-                    WHERE "ElectionId" = {2}
-                    """,
-                    "Closed",
-                    now,
-                    GetElectionId());
-                break;
-
-            default:
-                throw new ArgumentOutOfRangeException(nameof(lifecycleState), lifecycleState, "Unsupported forced lifecycle state.");
-        }
+            Status = ElectionCeremonyVersionStatus.InProgress,
+            CompletedAt = null,
+        });
+        await db.SaveChangesAsync();
     }
 
-    [When(@"the integration test restores the election to the ""(.*)"" state for governed retry")]
-    public async Task WhenTheIntegrationTestRestoresTheElectionToTheStateForGovernedRetry(string lifecycleState)
+    [When(@"the integration test restores the ready ceremony for governed retry")]
+    public async Task WhenTheReadyCeremonyIsRestoredForGovernedRetry()
     {
-        var now = DateTime.UtcNow;
+        _governedRetryCeremony.Should().NotBeNull();
         await using var scope = GetNode().Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
-
-        switch (lifecycleState.Trim().ToLowerInvariant())
-        {
-            case "draft":
-                await dbContext.Database.ExecuteSqlRawAsync(
-                    """
-                    UPDATE "Elections"."ElectionRecord"
-                    SET "LifecycleState" = {0},
-                        "LastUpdatedAt" = {1},
-                        "OpenedAt" = NULL,
-                        "ClosedAt" = NULL,
-                        "FinalizedAt" = NULL,
-                        "TallyReadyAt" = NULL,
-                        "OpenArtifactId" = NULL,
-                        "CloseArtifactId" = NULL,
-                        "FinalizeArtifactId" = NULL,
-                        "VoteAcceptanceLockedAt" = NULL
-                    WHERE "ElectionId" = {2}
-                    """,
-                    "Draft",
-                    now,
-                    GetElectionId());
-                break;
-
-            default:
-                throw new ArgumentOutOfRangeException(nameof(lifecycleState), lifecycleState, "Unsupported restored lifecycle state.");
-        }
+        var db = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        db.Set<ElectionCeremonyVersionRecord>().Update(_governedRetryCeremony!);
+        await db.SaveChangesAsync();
     }
 
     [When(@"the integration test deletes accepted ballot records while leaving (\d+) queued publication entries")]
