@@ -8,6 +8,16 @@ public static class ElectionEntitlementStorageConfiguration
 {
     public static void Configure(ModelBuilder builder)
     {
+        var checkpoint = builder.Entity<ElectionIndexCheckpoint>();
+        checkpoint.ToTable("ElectionIndexCheckpoint", "Elections");
+        checkpoint.HasKey(x => x.BlockHeight);
+        checkpoint.Property(x => x.BlockHeight).ValueGeneratedNever();
+        checkpoint.HasIndex(x => x.BlockId).IsUnique();
+        checkpoint.Property(x => x.BlockHash).HasMaxLength(256);
+        checkpoint.Property(x => x.HistoryDigestSha256).HasMaxLength(64);
+        checkpoint.Property(x => x.PolicyVersion).HasMaxLength(64);
+        foreach (var p in checkpoint.Metadata.GetProperties()) p.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+
         var capture = builder.Entity<ElectionEntitlementCapture>();
         capture.ToTable("ElectionEntitlementCapture", "Elections");
         capture.HasKey(x => x.ElectionId);

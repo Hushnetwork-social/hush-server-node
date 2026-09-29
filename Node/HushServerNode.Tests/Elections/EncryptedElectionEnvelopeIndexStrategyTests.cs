@@ -17,6 +17,24 @@ namespace HushServerNode.Tests.Elections;
 
 public class EncryptedElectionEnvelopeIndexStrategyTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ValidatedEnvelopeThatCannotBeInterpreted_FailsIndexingInsteadOfSilentlyCompleting(bool unsupportedAction)
+    {
+        var lifecycle = new Mock<IElectionLifecycleService>(MockBehavior.Strict);
+        var transaction = CreateValidatedTransaction(ElectionId.NewElectionId);
+        var crypto = new Mock<IElectionEnvelopeCryptoService>();
+        if (unsupportedAction) crypto.Setup(c => c.TryDecryptValidated(transaction)).Returns(
+            new DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>>(transaction, "unsupported", "{}"));
+        var strategy = new EncryptedElectionEnvelopeIndexStrategy(crypto.Object,
+            lifecycle.Object, Mock.Of<IBlockchainCache>(), Mock.Of<IUnitOfWorkProvider<ElectionsDbContext>>(),
+            Mock.Of<ILogger<EncryptedElectionEnvelopeIndexStrategy>>());
+        Func<Task> run = () => strategy.HandleAsync(transaction);
+        await run.Should().ThrowAsync<ElectionIndexAuthorityException>();
+        lifecycle.VerifyNoOtherCalls();
+    }
+
     [Fact]
     [Trait("Category", "FEAT-114")]
     public async Task HandleAsync_WithRegisterPreparedBallotCommitmentEnvelope_ForwardsSp04Request()

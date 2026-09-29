@@ -22,6 +22,7 @@ public static class ElectionsHostBuild
     {
         builder.ConfigureServices((hostContext, services) =>
         {
+            services.AddSingleton<IElectionEntitlementTelemetry, ElectionEntitlementTelemetry>();
             services.AddSingleton(CreateCeremonyOptions(hostContext.Configuration));
             services.AddSingleton(CreateProtocolPackageCatalogOptions(hostContext.Configuration));
             services.AddSingleton(CreateProtocolPackageCatalogRemoteSyncOptions(hostContext.Configuration));

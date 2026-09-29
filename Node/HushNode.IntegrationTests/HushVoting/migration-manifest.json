@@ -3683,9 +3683,32 @@
         "P018-3-03",
         "P018-3-04"
       ]
+    },
+    {
+      "group": "HV-ENTITLEMENT-ROLLOUT-TWIN",
+      "feature": "FEAT-018",
+      "phase": "P018-6-02",
+      "tasks": [
+        "T018-6-01",
+        "T018-6-02"
+      ],
+      "layer": "backend-twin",
+      "destination": "ServerTwins/entitlement-rollout.feature",
+      "scenarioIds": [
+        "HV-TWIN-ENT-ROLLOUT-001",
+        "HV-TWIN-ENT-ROLLOUT-002",
+        "HV-TWIN-ENT-ROLLOUT-003",
+        "HV-TWIN-ENT-ROLLOUT-004",
+        "HV-TWIN-ENT-ROLLOUT-005",
+        "HV-TWIN-ENT-ROLLOUT-006",
+        "HV-TWIN-ENT-ROLLOUT-007",
+        "HV-TWIN-ENT-ROLLOUT-008",
+        "HV-TWIN-ENT-ROLLOUT-009",
+        "HV-TWIN-ENT-ROLLOUT-010",
+        "HV-TWIN-ENT-ROLLOUT-011"
+      ],
+      "status": "verified-task-6-02"
     }
   ],
-  "reservedFeatureGroups": [
-    "HV-ENTITLEMENT-ROLLOUT-TWIN"
-  ]
+  "reservedFeatureGroups": []
 }

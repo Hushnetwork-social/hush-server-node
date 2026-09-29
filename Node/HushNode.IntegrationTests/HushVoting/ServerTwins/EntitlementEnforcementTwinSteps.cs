@@ -15,6 +15,7 @@ namespace HushVoting.IntegrationTests.ServerTwins;
 
 [Binding]
 [Scope(Tag = "HV-ENTITLEMENT-ENFORCEMENT-TWIN")]
+[Scope(Tag = "HV-ENTITLEMENT-ROLLOUT-TWIN")]
 internal sealed partial class EntitlementEnforcementTwinSteps(HushVotingScenario scenario)
 {
     private DerivedKeys _owner = null!;

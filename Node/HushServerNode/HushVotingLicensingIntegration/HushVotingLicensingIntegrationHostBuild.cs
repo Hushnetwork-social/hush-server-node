@@ -44,6 +44,13 @@ public static class HushVotingLicensingIntegrationHostBuild
         services.AddSingleton(sp => BuildLicenceTelemetry(sp));
         services.AddSingleton(sp => BuildLicenceServiceConfiguration(sp));
         services.AddSingleton(sp => new LicenceCatalogueArchive([sp.GetRequiredService<LicenceServiceConfiguration>()]));
+        services.AddSingleton<HushNode.Indexing.Interfaces.IBlockIndexCompletionRecorder>(sp =>
+            new ElectionIndexCompletionRecorder(() => CreateFreshDbContext(sp)));
+        services.AddSingleton(sp => new ElectionEntitlementRolloutReadiness(() => CreateFreshDbContext(sp),
+            sp.GetRequiredService<LicenceCatalogueArchive>(),
+            sp.GetRequiredService<IHushVotingLicenceTransactionValidator>(),
+            sp.GetRequiredService<HushNode.Elections.IElectionEnvelopeCryptoService>()));
+        services.AddSingleton<Olimpo.IBootstrapper, ElectionEntitlementRolloutBootstrapper>();
         // Rights originate only in committed signed licence transactions. The legacy
         // FEAT-013 direct-write service remains outside the runtime composition.
         services.AddSingleton<ILicenceIndexedProjectionReader>(sp =>

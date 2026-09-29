@@ -163,7 +163,11 @@ public sealed class HushVotingLicensingHostIntegrationTests
         // FEAT-018 T018-3-01 / G01: only indexed signed transactions originate rights.
         services.Should().NotContain(d => d.ServiceType == typeof(LicenceEntitlementService));
         services.Should().ContainSingle(d => d.ServiceType == typeof(HushVotingLicenceRolloutReadinessBootstrapper));
-        services.Where(d => d.ServiceType == typeof(Olimpo.IBootstrapper)).Should().ContainSingle();
+        services.Where(d => d.ServiceType == typeof(Olimpo.IBootstrapper)).Should().HaveCount(2);
+        services.Should().ContainSingle(d => d.ServiceType == typeof(Olimpo.IBootstrapper)
+            && d.ImplementationType == typeof(ElectionEntitlementRolloutBootstrapper));
+        services.Should().ContainSingle(d => d.ServiceType == typeof(HushNode.Indexing.Interfaces.IBlockIndexCompletionRecorder));
+        services.Should().ContainSingle(d => d.ServiceType == typeof(ElectionEntitlementRolloutReadiness));
         services.Should().NotContain(d => d.ServiceType == typeof(LicensingDbContextConfigurator));
     }
 

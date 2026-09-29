@@ -732,7 +732,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                         sp.GetRequiredService<IEnumerable<IIndexStrategy>>(),
                         sp.GetRequiredService<IEventAggregator>(),
                         onBlockFinalized,
-                        sp.GetServices<IBlockContextIndexStrategy>())));
+                        sp.GetServices<IBlockContextIndexStrategy>(),
+                        sp.GetServices<IBlockIndexCompletionRecorder>())));
             });
 
             // Add diagnostic logger provider if supplied

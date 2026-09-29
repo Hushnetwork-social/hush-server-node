@@ -12,17 +12,20 @@ public class IndexingDispatcherService :
     private readonly IEnumerable<IBlockContextIndexStrategy> _blockContextStrategies;
     private readonly IEventAggregator _eventAggregator;
     private readonly Action? _onBlockIndexCompleted;
+    private readonly IEnumerable<IBlockIndexCompletionRecorder> _completionRecorders;
 
     public IndexingDispatcherService(
         IEnumerable<IIndexStrategy> indexStrategies,
         IEventAggregator eventAggregator,
         Action? onBlockIndexCompleted = null,
-        IEnumerable<IBlockContextIndexStrategy>? blockContextStrategies = null)
+        IEnumerable<IBlockContextIndexStrategy>? blockContextStrategies = null,
+        IEnumerable<IBlockIndexCompletionRecorder>? completionRecorders = null)
     {
         this._indexStrategies = indexStrategies;
         this._blockContextStrategies = blockContextStrategies ?? [];
         this._eventAggregator = eventAggregator;
         this._onBlockIndexCompleted = onBlockIndexCompleted;
+        this._completionRecorders = completionRecorders ?? [];
 
         this._eventAggregator.Subscribe(this);
     }
@@ -53,6 +56,12 @@ public class IndexingDispatcherService :
 
             await Task.WhenAll(strategyTasks);
         }
+
+        // Persist completion before notifying schedulers. The chain head was written before
+        // dispatch and cannot itself prove that indexing finished.
+        foreach (var recorder in _completionRecorders)
+            await recorder.RecordAsync(message.Block.BlockIndex.Value, message.Block.BlockId.Value, message.Block.Hash,
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(message.Block.ToJson()))));
 
         // Signal that all indexing for this block is complete
         Console.WriteLine($"[E2E] IndexingDispatcherService: Publishing BlockIndexCompletedEvent for block {message.Block.BlockIndex.Value}");

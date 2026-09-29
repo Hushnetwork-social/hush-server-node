@@ -15,6 +15,41 @@ namespace HushServerNode.Tests;
 
 public class IndexingDispatcherServiceTests
 {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task DurableCompletion_MustFollowHandlers_AndPrecedePublication(bool handlerFails, bool recorderFails)
+    {
+        var events = new Mock<IEventAggregator>();
+        var strategy = new Mock<IIndexStrategy>();
+        var recorder = new Mock<IBlockIndexCompletionRecorder>();
+        var block = CreateBlock(CreateTransaction());
+        var order = new List<string>();
+        strategy.Setup(x => x.CanHandle(It.IsAny<AbstractTransaction>())).Returns(true);
+        strategy.Setup(x => x.HandleAsync(It.IsAny<AbstractTransaction>())).Returns(() =>
+        {
+            order.Add("handler");
+            return handlerFails ? Task.FromException(new InvalidOperationException("handler fault")) : Task.CompletedTask;
+        });
+        recorder.Setup(x => x.RecordAsync(block.BlockIndex.Value, block.BlockId.Value, block.Hash, It.IsAny<string>())).Returns(() =>
+        {
+            order.Add("durable");
+            return recorderFails ? Task.FromException(new InvalidOperationException("checkpoint fault")) : Task.CompletedTask;
+        });
+        events.Setup(x => x.PublishAsync(It.IsAny<BlockIndexCompletedEvent>())).Returns(() =>
+        {
+            order.Add("published");
+            return Task.CompletedTask;
+        });
+        var dispatcher = new IndexingDispatcherService([strategy.Object], events.Object,
+            completionRecorders: [recorder.Object]);
+        Func<Task> run = () => dispatcher.HandleAsync(new BlockCreatedEvent(block));
+        if (handlerFails || recorderFails) await run.Should().ThrowAsync<InvalidOperationException>();
+        else await run();
+        order.Should().Equal(handlerFails ? ["handler"] : recorderFails ? ["handler", "durable"] : ["handler", "durable", "published"]);
+    }
+
     [Fact]
     public async Task HandleAsync_ShouldProcessTransactionsSequentially_AndPublishCompletionAfterAllHandlers()
     {

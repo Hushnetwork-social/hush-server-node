@@ -16,7 +16,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
     IElectionLifecycleService electionLifecycleService,
     IBlockchainCache blockchainCache,
     IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
-    ILogger<EncryptedElectionEnvelopeIndexStrategy> logger) : IIndexStrategy
+    ILogger<EncryptedElectionEnvelopeIndexStrategy> logger,
+    IElectionEntitlementTelemetry? telemetry = null) : IIndexStrategy
 {
     private readonly IElectionEnvelopeCryptoService _envelopeCryptoService = envelopeCryptoService;
     private readonly IElectionLifecycleService _electionLifecycleService = electionLifecycleService;
@@ -31,9 +32,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
     {
         var decryptedEnvelope = _envelopeCryptoService.TryDecryptValidated(transaction);
         if (decryptedEnvelope is null)
-        {
-            return;
-        }
+            throw new ElectionIndexAuthorityException("Validated election envelope cannot be interpreted by this node.");
 
         ElectionCommandResult result = decryptedEnvelope.ActionType switch
         {
@@ -129,11 +128,10 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleRecordAnomalyEvidenceRedactionAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.RecordAnomalyAuditorRecipientRewrap =>
                 await HandleRecordAnomalyAuditorRecipientRewrapAsync(decryptedEnvelope),
-            _ => ElectionCommandResult.Failure(
-                ElectionCommandErrorCode.NotSupported,
-                $"Unsupported encrypted election action type {decryptedEnvelope.ActionType}."),
+            _ => throw new ElectionIndexAuthorityException("Validated election action is unsupported by this node."),
         };
 
+        telemetry?.Record(decryptedEnvelope.ActionType, result);
         if (!result.IsSuccess)
         {
             _logger.LogWarning(
