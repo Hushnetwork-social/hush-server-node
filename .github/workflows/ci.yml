@@ -102,9 +102,9 @@ jobs:
       uses: actions/checkout@v5
       with:
         repository: Hushnetwork-social/hush-voting-web-client
-        # Validated companion revision for this migration; keep CI reproducible
+        # Validated FEAT-018 companion revision; keep CI reproducible
         # while the two independently versioned repositories are published.
-        ref: 3667e6a7c77057d7d8f72fa5aa30a14044330c25
+        ref: 2e610f6c4f4126ff5902384b651970801929ffdd
         path: hush-voting-web-client
     - uses: actions/setup-dotnet@v5
       with:
