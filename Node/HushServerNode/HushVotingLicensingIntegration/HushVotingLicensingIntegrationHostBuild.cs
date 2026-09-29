@@ -43,6 +43,10 @@ public static class HushVotingLicensingIntegrationHostBuild
 
         services.AddSingleton(sp => BuildLicenceTelemetry(sp));
         services.AddSingleton(sp => BuildLicenceServiceConfiguration(sp));
+        // v1.0.0 is the only approved release shipped by this host. A catalogue
+        // upgrade must retain every previously approved version/digest here;
+        // replacing this entry with only the new current release is not supported.
+        // Readiness/replay deliberately refuse missing history, never substitute it.
         services.AddSingleton(sp => new LicenceCatalogueArchive([sp.GetRequiredService<LicenceServiceConfiguration>()]));
         services.AddSingleton<HushNode.Indexing.Interfaces.IBlockIndexCompletionRecorder>(sp =>
             new ElectionIndexCompletionRecorder(() => CreateFreshDbContext(sp)));

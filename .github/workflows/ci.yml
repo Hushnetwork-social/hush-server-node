@@ -104,7 +104,7 @@ jobs:
         repository: Hushnetwork-social/hush-voting-web-client
         # Validated FEAT-018 companion revision; keep CI reproducible
         # while the two independently versioned repositories are published.
-        ref: 2e610f6c4f4126ff5902384b651970801929ffdd
+        ref: 9c1e8e36e102d1efb8f3c33e0bd07bcbdcb3e5da
         path: hush-voting-web-client
     - uses: actions/setup-dotnet@v5
       with:

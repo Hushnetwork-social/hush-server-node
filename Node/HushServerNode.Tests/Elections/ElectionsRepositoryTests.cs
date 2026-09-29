@@ -1147,7 +1147,7 @@ public class ElectionsRepositoryTests
     }
 
     [Fact]
-    public async Task DeleteRosterEntriesAsync_ShouldRemovePriorImportRows()
+    public async Task DeleteRosterEntriesAsync_WithoutWriteTransaction_ShouldRejectAndPreservePriorRows()
     {
         using var context = CreateContext();
         var repository = CreateRepository(context);
@@ -1166,12 +1166,18 @@ public class ElectionsRepositoryTests
             contactValue: "+15555550124"));
         await context.SaveChangesAsync();
 
-        await repository.DeleteRosterEntriesAsync(election.ElectionId);
-        await context.SaveChangesAsync();
+        // FEAT-018 AC-018-003/006: replacement must be atomic with the import.
+        // EF InMemory cannot supply a real transaction. Successful replacement is
+        // exercised against PostgreSQL by HV-TWIN-ENT-ENFORCEMENT-005/007.
+        var delete = () => repository.DeleteRosterEntriesAsync(election.ElectionId);
+        await delete.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Roster replacement requires the caller's write transaction.");
+        context.ChangeTracker.HasChanges().Should().BeFalse();
 
         var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
 
-        rosterEntries.Should().BeEmpty();
+        rosterEntries.Select(entry => entry.OrganizationVoterId)
+            .Should().BeEquivalentTo("VOTER-1001", "VOTER-1002");
     }
 
     [Fact]

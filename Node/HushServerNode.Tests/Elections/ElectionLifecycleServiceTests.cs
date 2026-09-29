@@ -393,6 +393,24 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task ImportRosterAsync_WithoutCanonicalExecutionContext_RejectsWithoutMutation()
+    {
+        var store = new ElectionStore { ExecutionContext = null };
+        var service = CreateService(store);
+        var election = CreateAdminElection();
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, CreateRosterEntry(election, "1001"));
+
+        var result = await service.ImportRosterAsync(new ImportElectionRosterRequest(
+            election.ElectionId, "owner-address", [CreateRosterImportItem("2001")]));
+
+        result.IsSuccess.Should().BeFalse();
+        result.EntitlementReason.Should().Be(ElectionEntitlementReason.AuthorityUnavailable);
+        store.RosterImportEvidences.Should().BeEmpty();
+        store.RosterEntries.Select(entry => entry.OrganizationVoterId).Should().Equal("1001");
+    }
+
+    [Fact]
     public async Task ImportRosterAsync_WithDraftElection_AppendsNewRosterEntries()
     {
         var store = new ElectionStore();
