@@ -821,6 +821,43 @@ namespace HushNode.IntegrationTests.HushVoting.ServerTwins
             this.ScenarioCleanup();
         }
 
+        [Xunit.SkippableFactAttribute(DisplayName="Captured Open rights survive expiry through voting and completion")]
+        [Xunit.TraitAttribute("FeatureTitle", "Election entitlement lifecycle enforcement")]
+        [Xunit.TraitAttribute("Description", "Captured Open rights survive expiry through voting and completion")]
+        [Xunit.TraitAttribute("Category", "HV-TWIN-ENT-ENFORCEMENT-021")]
+        public void CapturedOpenRightsSurviveExpiryThroughVotingAndCompletion()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "HV-TWIN-ENT-ENFORCEMENT-021"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Captured Open rights survive expiry through voting and completion", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 129
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 130
+    testRunner.Given("an encrypted Open-ready election with an annual owner licence", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 131
+    testRunner.And("a second independently registered voter is eligible before Open", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 132
+    testRunner.When("its owner expires and a valid prepared ballot is cast before actual Close", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 133
+    testRunner.Then("captured rights permit Close counting and finalization but reject another ballot " +
+                        "after Close", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

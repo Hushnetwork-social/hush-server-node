@@ -89,6 +89,10 @@ public sealed class ElectionBallotPublicationService(
                 continue;
             }
 
+            var captureReason = await ElectionCapturedEntitlementAuthority.CheckAsync(repository, election);
+            if (captureReason != ElectionEntitlementReason.None)
+                throw new ElectionIndexAuthorityException("Publication requires consistent captured Open authorization.");
+
             var pendingEntries = await repository.GetBallotMemPoolEntriesAsync(electionId);
             if (pendingEntries.Count == 0)
             {
@@ -236,6 +240,10 @@ public sealed class ElectionBallotPublicationService(
         {
             return;
         }
+
+        var captureReason = await ElectionCapturedEntitlementAuthority.CheckAsync(repository, election);
+        if (captureReason != ElectionEntitlementReason.None)
+            throw new ElectionIndexAuthorityException("Publication requires consistent captured Open authorization.");
 
         var unofficialResult = election.UnofficialResultArtifactId.HasValue
             ? await repository.GetResultArtifactAsync(election.UnofficialResultArtifactId.Value)

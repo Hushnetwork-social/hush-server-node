@@ -70,6 +70,9 @@ internal sealed class HushVotingScenario : IAsyncDisposable
             configurationOverrides: new Dictionary<string, string?>
             {
                 ["Elections:ProtocolPackages:ApprovedCatalogRelativePath"] = run.ProtocolCatalog,
+                // Private proof witnesses belong to the supervised run's temporary
+                // directory, which its EXIT cleanup removes, never the build tree.
+                ["Elections:Sp07PublicationProof:WorkRoot"] = Path.Combine(_temporaryRoot!, "proof-work"),
                 ["Logging:LogLevel:Default"] = "None",
                 ["Elections:DeploymentProof:LocalDevelopmentProfileIds"] = "admin-dev-1of1;admin-prod-1of1;dkg-dev-3of5;dkg-prod-3of5"
             }, configureTestServices: services =>

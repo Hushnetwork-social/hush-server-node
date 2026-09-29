@@ -124,3 +124,10 @@ Feature: Election entitlement lifecycle enforcement
     Given an encrypted governed Open with two earlier trustee approvals
     When the final signed trustee approval executes 1 seconds from owner expiry
     Then governed Open uses execution-time owner rights and preserves its proposal reference
+
+  @HV-TWIN-ENT-ENFORCEMENT-021
+  Scenario: Captured Open rights survive expiry through voting and completion
+    Given an encrypted Open-ready election with an annual owner licence
+    And a second independently registered voter is eligible before Open
+    When its owner expires and a valid prepared ballot is cast before actual Close
+    Then captured rights permit Close counting and finalization but reject another ballot after Close

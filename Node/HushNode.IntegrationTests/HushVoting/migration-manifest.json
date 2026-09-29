@@ -128,7 +128,7 @@
       "group": "credential-file-restore",
       "scenarios": [
         {
-          "title": "AC-009-001 — HV-DAT-ENTRY",
+          "title": "AC-009-001 \u2014 HV-DAT-ENTRY",
           "tags": [
             "@FEAT-009",
             "@AC-009-001",
@@ -138,7 +138,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
         },
         {
-          "title": "AC-009-002 — HV-DAT-ENTRY",
+          "title": "AC-009-002 \u2014 HV-DAT-ENTRY",
           "tags": [
             "@FEAT-009",
             "@AC-009-002",
@@ -148,7 +148,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
         },
         {
-          "title": "AC-009-003 — HV-DAT-ENTRY",
+          "title": "AC-009-003 \u2014 HV-DAT-ENTRY",
           "tags": [
             "@FEAT-009",
             "@AC-009-003",
@@ -158,7 +158,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
         },
         {
-          "title": "AC-009-004 — HV-DAT-PICKER",
+          "title": "AC-009-004 \u2014 HV-DAT-PICKER",
           "tags": [
             "@FEAT-009",
             "@AC-009-004",
@@ -168,7 +168,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
         },
         {
-          "title": "AC-009-005 — HV-DAT-PICKER",
+          "title": "AC-009-005 \u2014 HV-DAT-PICKER",
           "tags": [
             "@FEAT-009",
             "@AC-009-005",
@@ -178,7 +178,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
         },
         {
-          "title": "AC-009-006 — HV-DAT-PICKER",
+          "title": "AC-009-006 \u2014 HV-DAT-PICKER",
           "tags": [
             "@FEAT-009",
             "@AC-009-006",
@@ -188,7 +188,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
         },
         {
-          "title": "AC-009-007 — HV-DAT-READ",
+          "title": "AC-009-007 \u2014 HV-DAT-READ",
           "tags": [
             "@FEAT-009",
             "@AC-009-007",
@@ -198,7 +198,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
         },
         {
-          "title": "AC-009-008 — HV-DAT-PICKER",
+          "title": "AC-009-008 \u2014 HV-DAT-PICKER",
           "tags": [
             "@FEAT-009",
             "@AC-009-008",
@@ -209,7 +209,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/entry-picker-read.feature"
         },
         {
-          "title": "AC-009-009 — HV-DAT-PICKER",
+          "title": "AC-009-009 \u2014 HV-DAT-PICKER",
           "tags": [
             "@FEAT-009",
             "@AC-009-009",
@@ -220,7 +220,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/entry-picker-read.feature"
         },
         {
-          "title": "AC-009-010 — HV-DAT-READ",
+          "title": "AC-009-010 \u2014 HV-DAT-READ",
           "tags": [
             "@FEAT-009",
             "@AC-009-010",
@@ -230,7 +230,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
         },
         {
-          "title": "AC-009-011 — HV-DAT-READ",
+          "title": "AC-009-011 \u2014 HV-DAT-READ",
           "tags": [
             "@FEAT-009",
             "@AC-009-011",
@@ -240,7 +240,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
         },
         {
-          "title": "AC-009-012 — HV-DAT-TEMP",
+          "title": "AC-009-012 \u2014 HV-DAT-TEMP",
           "tags": [
             "@FEAT-009",
             "@AC-009-012",
@@ -251,7 +251,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/entry-picker-read.feature"
         },
         {
-          "title": "AC-009-035 — HV-DAT-SOURCE",
+          "title": "AC-009-035 \u2014 HV-DAT-SOURCE",
           "tags": [
             "@FEAT-009",
             "@AC-009-035",
@@ -261,7 +261,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
         },
         {
-          "title": "AC-009-036 — HV-DAT-SOURCE",
+          "title": "AC-009-036 \u2014 HV-DAT-SOURCE",
           "tags": [
             "@FEAT-009",
             "@AC-009-036",
@@ -271,7 +271,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENTRY-MIGRATED/HV-DAT-ENTRY-MIGRATED.trx"
         },
         {
-          "title": "AC-009-037 — HV-DAT-SOURCE",
+          "title": "AC-009-037 \u2014 HV-DAT-SOURCE",
           "tags": [
             "@FEAT-009",
             "@AC-009-037",
@@ -312,7 +312,7 @@
       "group": "credential-file-restore",
       "scenarios": [
         {
-          "title": "AC-009-013 — HV-DAT-ENVELOPE",
+          "title": "AC-009-013 \u2014 HV-DAT-ENVELOPE",
           "tags": [
             "@FEAT-009",
             "@AC-009-013",
@@ -322,7 +322,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
         },
         {
-          "title": "AC-009-014 — HV-DAT-ENVELOPE",
+          "title": "AC-009-014 \u2014 HV-DAT-ENVELOPE",
           "tags": [
             "@FEAT-009",
             "@AC-009-014",
@@ -332,7 +332,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
         },
         {
-          "title": "AC-009-015 — HV-DAT-ENVELOPE",
+          "title": "AC-009-015 \u2014 HV-DAT-ENVELOPE",
           "tags": [
             "@FEAT-009",
             "@AC-009-015",
@@ -342,7 +342,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
         },
         {
-          "title": "AC-009-016 — HV-DAT-PASSWORD",
+          "title": "AC-009-016 \u2014 HV-DAT-PASSWORD",
           "tags": [
             "@FEAT-009",
             "@AC-009-016",
@@ -352,7 +352,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
         },
         {
-          "title": "AC-009-017 — HV-DAT-PASSWORD",
+          "title": "AC-009-017 \u2014 HV-DAT-PASSWORD",
           "tags": [
             "@FEAT-009",
             "@AC-009-017",
@@ -362,7 +362,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
         },
         {
-          "title": "AC-009-018 — HV-DAT-PASSWORD",
+          "title": "AC-009-018 \u2014 HV-DAT-PASSWORD",
           "tags": [
             "@FEAT-009",
             "@AC-009-018",
@@ -372,7 +372,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
         },
         {
-          "title": "AC-009-019 — HV-DAT-AUTH",
+          "title": "AC-009-019 \u2014 HV-DAT-AUTH",
           "tags": [
             "@FEAT-009",
             "@AC-009-019",
@@ -382,7 +382,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
         },
         {
-          "title": "AC-009-020 — HV-DAT-BACKOFF",
+          "title": "AC-009-020 \u2014 HV-DAT-BACKOFF",
           "tags": [
             "@FEAT-009",
             "@AC-009-020",
@@ -392,7 +392,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
         },
         {
-          "title": "AC-009-021 — HV-DAT-BACKOFF",
+          "title": "AC-009-021 \u2014 HV-DAT-BACKOFF",
           "tags": [
             "@FEAT-009",
             "@AC-009-021",
@@ -402,7 +402,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-ENVELOPE-AUTH/HV-DAT-ENVELOPE-AUTH.trx"
         },
         {
-          "title": "AC-009-022 — HV-DAT-AUTH",
+          "title": "AC-009-022 \u2014 HV-DAT-AUTH",
           "tags": [
             "@FEAT-009",
             "@AC-009-022",
@@ -427,7 +427,7 @@
       "group": "credential-file-restore",
       "scenarios": [
         {
-          "title": "AC-009-038 — HV-DAT-LOOKUP",
+          "title": "AC-009-038 \u2014 HV-DAT-LOOKUP",
           "tags": [
             "@FEAT-009",
             "@AC-009-038",
@@ -437,7 +437,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
         },
         {
-          "title": "AC-009-039 — HV-DAT-LOOKUP",
+          "title": "AC-009-039 \u2014 HV-DAT-LOOKUP",
           "tags": [
             "@FEAT-009",
             "@AC-009-039",
@@ -447,7 +447,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
         },
         {
-          "title": "AC-009-040 — HV-DAT-LOOKUP",
+          "title": "AC-009-040 \u2014 HV-DAT-LOOKUP",
           "tags": [
             "@FEAT-009",
             "@AC-009-040",
@@ -457,7 +457,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
         },
         {
-          "title": "AC-009-041 — HV-DAT-LOOKUP",
+          "title": "AC-009-041 \u2014 HV-DAT-LOOKUP",
           "tags": [
             "@FEAT-009",
             "@AC-009-041",
@@ -469,7 +469,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
         },
         {
-          "title": "AC-009-042 — HV-DAT-LOOKUP",
+          "title": "AC-009-042 \u2014 HV-DAT-LOOKUP",
           "tags": [
             "@FEAT-009",
             "@AC-009-042",
@@ -479,7 +479,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
         },
         {
-          "title": "AC-009-043 — HV-DAT-RESET",
+          "title": "AC-009-043 \u2014 HV-DAT-RESET",
           "tags": [
             "@FEAT-009",
             "@AC-009-043",
@@ -489,7 +489,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
         },
         {
-          "title": "AC-009-044 — HV-DAT-RESET",
+          "title": "AC-009-044 \u2014 HV-DAT-RESET",
           "tags": [
             "@FEAT-009",
             "@AC-009-044",
@@ -499,7 +499,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
         },
         {
-          "title": "AC-009-045 — HV-DAT-RESET",
+          "title": "AC-009-045 \u2014 HV-DAT-RESET",
           "tags": [
             "@FEAT-009",
             "@AC-009-045",
@@ -509,7 +509,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
         },
         {
-          "title": "AC-009-046 — HV-DAT-SIGNATURE",
+          "title": "AC-009-046 \u2014 HV-DAT-SIGNATURE",
           "tags": [
             "@FEAT-009",
             "@AC-009-046",
@@ -519,7 +519,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
         },
         {
-          "title": "AC-009-047 — HV-DAT-SIGNATURE",
+          "title": "AC-009-047 \u2014 HV-DAT-SIGNATURE",
           "tags": [
             "@FEAT-009",
             "@AC-009-047",
@@ -529,7 +529,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
         },
         {
-          "title": "AC-009-048 — HV-DAT-SIGNATURE",
+          "title": "AC-009-048 \u2014 HV-DAT-SIGNATURE",
           "tags": [
             "@FEAT-009",
             "@AC-009-048",
@@ -539,7 +539,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-LOOKUP-MIGRATED/HV-DAT-LOOKUP-MIGRATED.trx"
         },
         {
-          "title": "AC-009-049 — HV-DAT-SEPARATION",
+          "title": "AC-009-049 \u2014 HV-DAT-SEPARATION",
           "tags": [
             "@FEAT-009",
             "@AC-009-049",
@@ -549,7 +549,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-050 — HV-DAT-SEPARATION",
+          "title": "AC-009-050 \u2014 HV-DAT-SEPARATION",
           "tags": [
             "@FEAT-009",
             "@AC-009-050",
@@ -559,7 +559,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-051 — HV-DAT-PROTECT",
+          "title": "AC-009-051 \u2014 HV-DAT-PROTECT",
           "tags": [
             "@FEAT-009",
             "@AC-009-051",
@@ -569,7 +569,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-052 — HV-DAT-PROTECT",
+          "title": "AC-009-052 \u2014 HV-DAT-PROTECT",
           "tags": [
             "@FEAT-009",
             "@AC-009-052",
@@ -580,7 +580,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
         },
         {
-          "title": "AC-009-053 — HV-DAT-PROTECT",
+          "title": "AC-009-053 \u2014 HV-DAT-PROTECT",
           "tags": [
             "@FEAT-009",
             "@AC-009-053",
@@ -591,7 +591,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
         },
         {
-          "title": "AC-009-054 — HV-DAT-SESSION",
+          "title": "AC-009-054 \u2014 HV-DAT-SESSION",
           "tags": [
             "@FEAT-009",
             "@AC-009-054",
@@ -602,7 +602,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
         },
         {
-          "title": "AC-009-055 — HV-DAT-PROTECT",
+          "title": "AC-009-055 \u2014 HV-DAT-PROTECT",
           "tags": [
             "@FEAT-009",
             "@AC-009-055",
@@ -612,7 +612,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-056 — HV-DAT-STAGE",
+          "title": "AC-009-056 \u2014 HV-DAT-STAGE",
           "tags": [
             "@FEAT-009",
             "@AC-009-056",
@@ -622,7 +622,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-057 — HV-DAT-STAGE",
+          "title": "AC-009-057 \u2014 HV-DAT-STAGE",
           "tags": [
             "@FEAT-009",
             "@AC-009-057",
@@ -632,7 +632,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-058 — HV-DAT-STAGE",
+          "title": "AC-009-058 \u2014 HV-DAT-STAGE",
           "tags": [
             "@FEAT-009",
             "@AC-009-058",
@@ -642,7 +642,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-059 — HV-DAT-STAGE",
+          "title": "AC-009-059 \u2014 HV-DAT-STAGE",
           "tags": [
             "@FEAT-009",
             "@AC-009-059",
@@ -652,7 +652,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-060 — HV-DAT-SESSION",
+          "title": "AC-009-060 \u2014 HV-DAT-SESSION",
           "tags": [
             "@FEAT-009",
             "@AC-009-060",
@@ -663,7 +663,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
         },
         {
-          "title": "AC-009-061 — HV-DAT-STAGE",
+          "title": "AC-009-061 \u2014 HV-DAT-STAGE",
           "tags": [
             "@FEAT-009",
             "@AC-009-061",
@@ -675,7 +675,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/lookup-profile-protection.feature"
         },
         {
-          "title": "AC-009-062 — HV-DAT-RESUME",
+          "title": "AC-009-062 \u2014 HV-DAT-RESUME",
           "tags": [
             "@FEAT-009",
             "@AC-009-062",
@@ -685,7 +685,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PROTECTION-MIGRATED/HV-DAT-PROTECTION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-063 — HV-DAT-RESUME",
+          "title": "AC-009-063 \u2014 HV-DAT-RESUME",
           "tags": [
             "@FEAT-009",
             "@AC-009-063",
@@ -744,7 +744,7 @@
       "group": "credential-file-restore",
       "scenarios": [
         {
-          "title": "AC-009-064 — HV-DAT-NAV",
+          "title": "AC-009-064 \u2014 HV-DAT-NAV",
           "tags": [
             "@FEAT-009",
             "@AC-009-064",
@@ -754,7 +754,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-065 — HV-DAT-NAV",
+          "title": "AC-009-065 \u2014 HV-DAT-NAV",
           "tags": [
             "@FEAT-009",
             "@AC-009-065",
@@ -764,7 +764,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-066 — HV-DAT-NAV",
+          "title": "AC-009-066 \u2014 HV-DAT-NAV",
           "tags": [
             "@FEAT-009",
             "@AC-009-066",
@@ -774,7 +774,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-067 — HV-DAT-NAV",
+          "title": "AC-009-067 \u2014 HV-DAT-NAV",
           "tags": [
             "@FEAT-009",
             "@AC-009-067",
@@ -784,7 +784,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-068 — HV-DAT-NAV",
+          "title": "AC-009-068 \u2014 HV-DAT-NAV",
           "tags": [
             "@FEAT-009",
             "@AC-009-068",
@@ -794,7 +794,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-069 — HV-DAT-NAV",
+          "title": "AC-009-069 \u2014 HV-DAT-NAV",
           "tags": [
             "@FEAT-009",
             "@AC-009-069",
@@ -805,7 +805,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
         },
         {
-          "title": "AC-009-070 — HV-DAT-OWNER",
+          "title": "AC-009-070 \u2014 HV-DAT-OWNER",
           "tags": [
             "@FEAT-009",
             "@AC-009-070",
@@ -816,7 +816,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
         },
         {
-          "title": "AC-009-071 — HV-DAT-CLEANUP",
+          "title": "AC-009-071 \u2014 HV-DAT-CLEANUP",
           "tags": [
             "@FEAT-009",
             "@AC-009-071",
@@ -826,7 +826,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-072 — HV-DAT-CLEANUP",
+          "title": "AC-009-072 \u2014 HV-DAT-CLEANUP",
           "tags": [
             "@FEAT-009",
             "@AC-009-072",
@@ -836,7 +836,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-073 — HV-DAT-EXTERNAL",
+          "title": "AC-009-073 \u2014 HV-DAT-EXTERNAL",
           "tags": [
             "@FEAT-009",
             "@AC-009-073",
@@ -846,7 +846,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-PUBLIC-CONFORMANCE/HV-DAT-PUBLIC-CONFORMANCE.trx"
         },
         {
-          "title": "AC-009-074 — HV-DAT-EXTERNAL",
+          "title": "AC-009-074 \u2014 HV-DAT-EXTERNAL",
           "tags": [
             "@FEAT-009",
             "@AC-009-074",
@@ -857,7 +857,7 @@
           "note": "AUD-115: user-approved generated Web corpus with known test-only password, P-01/P-02 and both mnemonic shapes. Real browser/node activation, all-source/representative coverage, local fixture refusal and unchanged bytes pass. Generated fixtures are retained as test artifacts. No historical-user-backup or native-device qualification is claimed."
         },
         {
-          "title": "AC-009-075 — HV-DAT-EXTERNAL",
+          "title": "AC-009-075 \u2014 HV-DAT-EXTERNAL",
           "tags": [
             "@FEAT-009",
             "@AC-009-075",
@@ -868,7 +868,7 @@
           "note": "AUD-115: user-approved generated Web corpus with known test-only password, P-01/P-02 and both mnemonic shapes. Real browser/node activation, all-source/representative coverage, local fixture refusal and unchanged bytes pass. Generated fixtures are retained as test artifacts. No historical-user-backup or native-device qualification is claimed."
         },
         {
-          "title": "AC-009-076 — HV-DAT-EXTERNAL",
+          "title": "AC-009-076 \u2014 HV-DAT-EXTERNAL",
           "tags": [
             "@FEAT-009",
             "@AC-009-076",
@@ -879,7 +879,7 @@
           "note": "AUD-115: user-approved generated Web corpus with known test-only password, P-01/P-02 and both mnemonic shapes. Real browser/node activation, all-source/representative coverage, local fixture refusal and unchanged bytes pass. Generated fixtures are retained as test artifacts. No historical-user-backup or native-device qualification is claimed."
         },
         {
-          "title": "AC-009-077 — HV-DAT-EXTERNAL",
+          "title": "AC-009-077 \u2014 HV-DAT-EXTERNAL",
           "tags": [
             "@FEAT-009",
             "@AC-009-077",
@@ -890,7 +890,7 @@
           "note": "AUD-115: user-approved generated Web corpus with known test-only password, P-01/P-02 and both mnemonic shapes. Real browser/node activation, all-source/representative coverage, local fixture refusal and unchanged bytes pass. Generated fixtures are retained as test artifacts. No historical-user-backup or native-device qualification is claimed."
         },
         {
-          "title": "AC-009-078 — HV-DAT-SECURITY",
+          "title": "AC-009-078 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-078",
@@ -901,7 +901,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
         },
         {
-          "title": "AC-009-079 — HV-DAT-SECURITY",
+          "title": "AC-009-079 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-079",
@@ -912,7 +912,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
         },
         {
-          "title": "AC-009-080 — HV-DAT-SECURITY",
+          "title": "AC-009-080 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-080",
@@ -923,7 +923,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
         },
         {
-          "title": "AC-009-081 — HV-DAT-SECURITY",
+          "title": "AC-009-081 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-081",
@@ -935,7 +935,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ORIGINAL-IDENTITY-TWIN/HV-ORIGINAL-IDENTITY-TWIN.trx"
         },
         {
-          "title": "AC-009-082 — HV-DAT-SECURITY",
+          "title": "AC-009-082 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-082",
@@ -946,7 +946,7 @@
           "artifactEvidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-NAVIGATION-MIGRATED/HV-DAT-NAVIGATION-MIGRATED.artifacts.json"
         },
         {
-          "title": "AC-009-083 — HV-DAT-SECURITY",
+          "title": "AC-009-083 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-083",
@@ -957,7 +957,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
         },
         {
-          "title": "AC-009-084 — HV-DAT-SECURITY",
+          "title": "AC-009-084 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-084",
@@ -970,7 +970,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
         },
         {
-          "title": "AC-009-085 — HV-DAT-SECURITY",
+          "title": "AC-009-085 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-085",
@@ -982,7 +982,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
         },
         {
-          "title": "AC-009-086 — HV-DAT-SECURITY",
+          "title": "AC-009-086 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-086",
@@ -994,7 +994,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/nav-owner-cleanup-security.feature"
         },
         {
-          "title": "AC-009-087 — HV-DAT-SECURITY",
+          "title": "AC-009-087 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-087",
@@ -1005,7 +1005,7 @@
           "note": "AUD-119: complete named backend TwinTest prerequisite verified by exact ID/title/outcome/provenance/artifact evidence, followed by this real Web missing-profile identity/protection/indexing/licence journey. Whole-product release and other native/external criteria are not evaluated. TypeScript original retired."
         },
         {
-          "title": "AC-009-088 — HV-DAT-SECURITY",
+          "title": "AC-009-088 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-088",
@@ -1016,7 +1016,7 @@
           "note": "AUD-110: real Web/node journey followed by content-addressed exact input pins, manifest-member verification, independent reread and mutation canaries. This pin-recording criterion does not assert release admission or handoff semantic qualification; external states remain unchanged. TypeScript original retired."
         },
         {
-          "title": "AC-009-089 — HV-DAT-SECURITY",
+          "title": "AC-009-089 \u2014 HV-DAT-SECURITY",
           "tags": [
             "@FEAT-009",
             "@AC-009-089",
@@ -1077,7 +1077,7 @@
           "TestResults/HushVoting/100f03d8-ec7d-472a-a4f9-f6a99c7d6873/HV-GENERATED-CORPUS.trx",
           "TestResults/HushVoting/aud119-release-post/HV-BACKEND-RELEASE/HV-BACKEND-RELEASE.trx"
         ],
-        "bindingNote": " AUD-110 retires its release-pin original after live browser/server pin validation. The dedicated command passes 3/3 again after retirement; other incomplete qualification handlers are retained. AUD-115 retires AC074–AC077 using the user-approved generated Web corpus and removes their three exclusive no-op TypeScript handlers; historical/native qualification is not claimed. AUD-119 retires the backend release-prerequisite original only after all owned backend cases and its actual missing-profile Web consumer pass; other criteria remain pending."
+        "bindingNote": " AUD-110 retires its release-pin original after live browser/server pin validation. The dedicated command passes 3/3 again after retirement; other incomplete qualification handlers are retained. AUD-115 retires AC074\u2013AC077 using the user-approved generated Web corpus and removes their three exclusive no-op TypeScript handlers; historical/native qualification is not claimed. AUD-119 retires the backend release-prerequisite original only after all owned backend cases and its actual missing-profile Web consumer pass; other criteria remain pending."
       }
     },
     {
@@ -1087,7 +1087,7 @@
       "group": "credential-file-restore",
       "scenarios": [
         {
-          "title": "AC-009-023 — HV-DAT-SCHEMA",
+          "title": "AC-009-023 \u2014 HV-DAT-SCHEMA",
           "tags": [
             "@FEAT-009",
             "@AC-009-023",
@@ -1097,7 +1097,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-024 — HV-DAT-KEYS",
+          "title": "AC-009-024 \u2014 HV-DAT-KEYS",
           "tags": [
             "@FEAT-009",
             "@AC-009-024",
@@ -1107,7 +1107,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-025 — HV-DAT-KEYS",
+          "title": "AC-009-025 \u2014 HV-DAT-KEYS",
           "tags": [
             "@FEAT-009",
             "@AC-009-025",
@@ -1117,7 +1117,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-026 — HV-DAT-KEYS",
+          "title": "AC-009-026 \u2014 HV-DAT-KEYS",
           "tags": [
             "@FEAT-009",
             "@AC-009-026",
@@ -1128,7 +1128,7 @@
           "frontendSource": "hush-voting-web-client/features/credential-file-restore/schema-keys-mnemonic.feature"
         },
         {
-          "title": "AC-009-027 — HV-DAT-MNEMONIC",
+          "title": "AC-009-027 \u2014 HV-DAT-MNEMONIC",
           "tags": [
             "@FEAT-009",
             "@AC-009-027",
@@ -1138,7 +1138,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-028 — HV-DAT-MNEMONIC",
+          "title": "AC-009-028 \u2014 HV-DAT-MNEMONIC",
           "tags": [
             "@FEAT-009",
             "@AC-009-028",
@@ -1148,7 +1148,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-029 — HV-DAT-KEYS",
+          "title": "AC-009-029 \u2014 HV-DAT-KEYS",
           "tags": [
             "@FEAT-009",
             "@AC-009-029",
@@ -1158,7 +1158,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-030 — HV-DAT-KEYS",
+          "title": "AC-009-030 \u2014 HV-DAT-KEYS",
           "tags": [
             "@FEAT-009",
             "@AC-009-030",
@@ -1168,7 +1168,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-031 — HV-DAT-SCHEMA",
+          "title": "AC-009-031 \u2014 HV-DAT-SCHEMA",
           "tags": [
             "@FEAT-009",
             "@AC-009-031",
@@ -1178,7 +1178,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-032 — HV-DAT-KEYS",
+          "title": "AC-009-032 \u2014 HV-DAT-KEYS",
           "tags": [
             "@FEAT-009",
             "@AC-009-032",
@@ -1188,7 +1188,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-033 — HV-DAT-MNEMONIC",
+          "title": "AC-009-033 \u2014 HV-DAT-MNEMONIC",
           "tags": [
             "@FEAT-009",
             "@AC-009-033",
@@ -1198,7 +1198,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-DAT-VALIDATION-MIGRATED/HV-DAT-VALIDATION-MIGRATED.trx"
         },
         {
-          "title": "AC-009-034 — HV-DAT-MNEMONIC",
+          "title": "AC-009-034 \u2014 HV-DAT-MNEMONIC",
           "tags": [
             "@FEAT-009",
             "@AC-009-034",
@@ -2532,7 +2532,7 @@
       "group": "recovery-words",
       "scenarios": [
         {
-          "title": "AC-008-016 — HV-RW-CUSTODY",
+          "title": "AC-008-016 \u2014 HV-RW-CUSTODY",
           "tags": [
             "@FEAT-008",
             "@AC-008-016",
@@ -2542,7 +2542,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
         },
         {
-          "title": "AC-008-017 — HV-RW-CUSTODY",
+          "title": "AC-008-017 \u2014 HV-RW-CUSTODY",
           "tags": [
             "@FEAT-008",
             "@AC-008-017",
@@ -2554,7 +2554,7 @@
           "note": "AUD-101: real Web recovery observes React props/hooks/context, allowed phrase handoff, worker replies, actual HTTP traffic, history, browser/worker storage and logs through typed input, replacement paste, candidate selection, protection and real identity/licence indexing. Detached inputs clear and independently decrypted retained slots contain only the expected concrete keys. A narrow pending-paste DOM-custody fix follows failing App and browser regressions. No native or whole-feature readiness claim."
         },
         {
-          "title": "AC-008-018 — HV-RW-CANDIDATES",
+          "title": "AC-008-018 \u2014 HV-RW-CANDIDATES",
           "tags": [
             "@FEAT-008",
             "@AC-008-018",
@@ -2564,7 +2564,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
         },
         {
-          "title": "AC-008-019 — HV-RW-CANDIDATES",
+          "title": "AC-008-019 \u2014 HV-RW-CANDIDATES",
           "tags": [
             "@FEAT-008",
             "@AC-008-019",
@@ -2574,7 +2574,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
         },
         {
-          "title": "AC-008-020 — HV-RW-CANDIDATES",
+          "title": "AC-008-020 \u2014 HV-RW-CANDIDATES",
           "tags": [
             "@FEAT-008",
             "@AC-008-020",
@@ -2584,7 +2584,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
         },
         {
-          "title": "AC-008-021 — HV-RW-CANDIDATES",
+          "title": "AC-008-021 \u2014 HV-RW-CANDIDATES",
           "tags": [
             "@FEAT-008",
             "@AC-008-021",
@@ -2594,7 +2594,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
         },
         {
-          "title": "AC-008-022 — HV-RW-CONTROL",
+          "title": "AC-008-022 \u2014 HV-RW-CONTROL",
           "tags": [
             "@FEAT-008",
             "@AC-008-022",
@@ -2605,7 +2605,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/custody-candidates.feature"
         },
         {
-          "title": "AC-008-023 — HV-RW-CUSTODY",
+          "title": "AC-008-023 \u2014 HV-RW-CUSTODY",
           "tags": [
             "@FEAT-008",
             "@AC-008-023",
@@ -2647,7 +2647,7 @@
       "group": "recovery-words",
       "scenarios": [
         {
-          "title": "AC-008-001 — HV-RW-ENTRY-GUARD",
+          "title": "AC-008-001 \u2014 HV-RW-ENTRY-GUARD",
           "tags": [
             "@FEAT-008",
             "@AC-008-001",
@@ -2657,7 +2657,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-002 — HV-RW-ENTRY-GUARD",
+          "title": "AC-008-002 \u2014 HV-RW-ENTRY-GUARD",
           "tags": [
             "@FEAT-008",
             "@AC-008-002",
@@ -2667,7 +2667,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-003 — HV-RW-ENTRY-GUARD",
+          "title": "AC-008-003 \u2014 HV-RW-ENTRY-GUARD",
           "tags": [
             "@FEAT-008",
             "@AC-008-003",
@@ -2677,7 +2677,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-004 — HV-RW-ENTRY-GUARD",
+          "title": "AC-008-004 \u2014 HV-RW-ENTRY-GUARD",
           "tags": [
             "@FEAT-008",
             "@AC-008-004",
@@ -2688,7 +2688,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/entry-input-validation.feature"
         },
         {
-          "title": "AC-008-005 — HV-RW-INPUT",
+          "title": "AC-008-005 \u2014 HV-RW-INPUT",
           "tags": [
             "@FEAT-008",
             "@AC-008-005",
@@ -2698,7 +2698,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-006 — HV-RW-VALIDATE",
+          "title": "AC-008-006 \u2014 HV-RW-VALIDATE",
           "tags": [
             "@FEAT-008",
             "@AC-008-006",
@@ -2708,7 +2708,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-007 — HV-RW-VALIDATE",
+          "title": "AC-008-007 \u2014 HV-RW-VALIDATE",
           "tags": [
             "@FEAT-008",
             "@AC-008-007",
@@ -2718,7 +2718,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-008 — HV-RW-PASTE",
+          "title": "AC-008-008 \u2014 HV-RW-PASTE",
           "tags": [
             "@FEAT-008",
             "@AC-008-008",
@@ -2728,7 +2728,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-009 — HV-RW-PASTE",
+          "title": "AC-008-009 \u2014 HV-RW-PASTE",
           "tags": [
             "@FEAT-008",
             "@AC-008-009",
@@ -2738,7 +2738,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-010 — HV-RW-PASTE",
+          "title": "AC-008-010 \u2014 HV-RW-PASTE",
           "tags": [
             "@FEAT-008",
             "@AC-008-010",
@@ -2748,7 +2748,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-011 — HV-RW-PASTE",
+          "title": "AC-008-011 \u2014 HV-RW-PASTE",
           "tags": [
             "@FEAT-008",
             "@AC-008-011",
@@ -2758,7 +2758,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-012 — HV-RW-PASTE",
+          "title": "AC-008-012 \u2014 HV-RW-PASTE",
           "tags": [
             "@FEAT-008",
             "@AC-008-012",
@@ -2768,7 +2768,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-013 — HV-RW-INPUT",
+          "title": "AC-008-013 \u2014 HV-RW-INPUT",
           "tags": [
             "@FEAT-008",
             "@AC-008-013",
@@ -2778,7 +2778,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-014 — HV-RW-INPUT",
+          "title": "AC-008-014 \u2014 HV-RW-INPUT",
           "tags": [
             "@FEAT-008",
             "@AC-008-014",
@@ -2788,7 +2788,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RECOVERY-INPUT-MIGRATED/HV-RECOVERY-INPUT-MIGRATED.trx"
         },
         {
-          "title": "AC-008-015 — HV-RW-VALIDATE",
+          "title": "AC-008-015 \u2014 HV-RW-VALIDATE",
           "tags": [
             "@FEAT-008",
             "@AC-008-015",
@@ -2831,7 +2831,7 @@
       "group": "recovery-words",
       "scenarios": [
         {
-          "title": "AC-008-024 — HV-RW-LOOKUP",
+          "title": "AC-008-024 \u2014 HV-RW-LOOKUP",
           "tags": [
             "@FEAT-008",
             "@AC-008-024",
@@ -2841,7 +2841,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-025 — HV-RW-LOOKUP",
+          "title": "AC-008-025 \u2014 HV-RW-LOOKUP",
           "tags": [
             "@FEAT-008",
             "@AC-008-025",
@@ -2851,7 +2851,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-026 — HV-RW-LOOKUP",
+          "title": "AC-008-026 \u2014 HV-RW-LOOKUP",
           "tags": [
             "@FEAT-008",
             "@AC-008-026",
@@ -2861,7 +2861,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-027 — HV-RW-LOOKUP",
+          "title": "AC-008-027 \u2014 HV-RW-LOOKUP",
           "tags": [
             "@FEAT-008",
             "@AC-008-027",
@@ -2871,7 +2871,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-028 — HV-RW-LOOKUP",
+          "title": "AC-008-028 \u2014 HV-RW-LOOKUP",
           "tags": [
             "@FEAT-008",
             "@AC-008-028",
@@ -2881,7 +2881,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-029 — HV-RW-SELECT",
+          "title": "AC-008-029 \u2014 HV-RW-SELECT",
           "tags": [
             "@FEAT-008",
             "@AC-008-029",
@@ -2891,7 +2891,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-030 — HV-RW-SELECT",
+          "title": "AC-008-030 \u2014 HV-RW-SELECT",
           "tags": [
             "@FEAT-008",
             "@AC-008-030",
@@ -2901,7 +2901,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-031 — HV-RW-SELECT",
+          "title": "AC-008-031 \u2014 HV-RW-SELECT",
           "tags": [
             "@FEAT-008",
             "@AC-008-031",
@@ -2911,7 +2911,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-032 — HV-RW-SELECT",
+          "title": "AC-008-032 \u2014 HV-RW-SELECT",
           "tags": [
             "@FEAT-008",
             "@AC-008-032",
@@ -2921,7 +2921,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-033 — HV-RW-SELECT",
+          "title": "AC-008-033 \u2014 HV-RW-SELECT",
           "tags": [
             "@FEAT-008",
             "@AC-008-033",
@@ -2931,7 +2931,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-034 — HV-RW-PROFILE",
+          "title": "AC-008-034 \u2014 HV-RW-PROFILE",
           "tags": [
             "@FEAT-008",
             "@AC-008-034",
@@ -2941,7 +2941,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-035 — HV-RW-PROFILE",
+          "title": "AC-008-035 \u2014 HV-RW-PROFILE",
           "tags": [
             "@FEAT-008",
             "@AC-008-035",
@@ -2951,7 +2951,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-057 — HV-RW-RECREATE",
+          "title": "AC-008-057 \u2014 HV-RW-RECREATE",
           "tags": [
             "@FEAT-008",
             "@AC-008-057",
@@ -2961,7 +2961,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-058 — HV-RW-RECREATE",
+          "title": "AC-008-058 \u2014 HV-RW-RECREATE",
           "tags": [
             "@FEAT-008",
             "@AC-008-058",
@@ -2971,7 +2971,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-059 — HV-RW-RECREATE",
+          "title": "AC-008-059 \u2014 HV-RW-RECREATE",
           "tags": [
             "@FEAT-008",
             "@AC-008-059",
@@ -2981,7 +2981,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-PROFILES/HV-RW-PROFILES.trx"
         },
         {
-          "title": "AC-008-061 — HV-RW-RECREATE",
+          "title": "AC-008-061 \u2014 HV-RW-RECREATE",
           "tags": [
             "@FEAT-008",
             "@AC-008-061",
@@ -3009,7 +3009,7 @@
       "group": "recovery-words",
       "scenarios": [
         {
-          "title": "AC-008-036 — HV-RW-PASSWORD",
+          "title": "AC-008-036 \u2014 HV-RW-PASSWORD",
           "tags": [
             "@FEAT-008",
             "@AC-008-036",
@@ -3019,7 +3019,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
         },
         {
-          "title": "AC-008-037 — HV-RW-STAGE",
+          "title": "AC-008-037 \u2014 HV-RW-STAGE",
           "tags": [
             "@FEAT-008",
             "@AC-008-037",
@@ -3029,7 +3029,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-STAGE-001/HV-RW-STAGE-001.trx"
         },
         {
-          "title": "AC-008-038 — HV-RW-SESSION",
+          "title": "AC-008-038 \u2014 HV-RW-SESSION",
           "tags": [
             "@FEAT-008",
             "@AC-008-038",
@@ -3040,7 +3040,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-040 — HV-RW-PASSWORD",
+          "title": "AC-008-040 \u2014 HV-RW-PASSWORD",
           "tags": [
             "@FEAT-008",
             "@AC-008-040",
@@ -3051,7 +3051,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-041 — HV-RW-PASSWORD",
+          "title": "AC-008-041 \u2014 HV-RW-PASSWORD",
           "tags": [
             "@FEAT-008",
             "@AC-008-041",
@@ -3062,7 +3062,7 @@
           "acceptanceReview": "AUD-117 proves the Web device-password wrapping hierarchy, exact recovered keys, browser process loss and canonical-equivalent fresh unlock. Full shared password-policy inputs/strength integration and native sequential wrapping remain under FEAT-032 and the owning platform requirements; no whole-FEAT/EPIC readiness claim."
         },
         {
-          "title": "AC-008-042 — HV-RW-PASSKEY",
+          "title": "AC-008-042 \u2014 HV-RW-PASSKEY",
           "tags": [
             "@FEAT-008",
             "@AC-008-042",
@@ -3073,7 +3073,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-043 — HV-RW-PASSKEY",
+          "title": "AC-008-043 \u2014 HV-RW-PASSKEY",
           "tags": [
             "@FEAT-008",
             "@AC-008-043",
@@ -3084,7 +3084,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-044 — HV-RW-PASSKEY",
+          "title": "AC-008-044 \u2014 HV-RW-PASSKEY",
           "tags": [
             "@FEAT-008",
             "@AC-008-044",
@@ -3095,7 +3095,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-045 — HV-RW-PASSKEY",
+          "title": "AC-008-045 \u2014 HV-RW-PASSKEY",
           "tags": [
             "@FEAT-008",
             "@AC-008-045",
@@ -3106,7 +3106,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-046 — HV-RW-PASSKEY",
+          "title": "AC-008-046 \u2014 HV-RW-PASSKEY",
           "tags": [
             "@FEAT-008",
             "@AC-008-046",
@@ -3117,7 +3117,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-047 — HV-RW-PASSKEY",
+          "title": "AC-008-047 \u2014 HV-RW-PASSKEY",
           "tags": [
             "@FEAT-008",
             "@AC-008-047",
@@ -3128,7 +3128,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-048 — HV-RW-NATIVE-PASSWORDLESS",
+          "title": "AC-008-048 \u2014 HV-RW-NATIVE-PASSWORDLESS",
           "tags": [
             "@FEAT-008",
             "@AC-008-048",
@@ -3139,7 +3139,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-049 — HV-RW-NATIVE-PASSWORDLESS",
+          "title": "AC-008-049 \u2014 HV-RW-NATIVE-PASSWORDLESS",
           "tags": [
             "@FEAT-008",
             "@AC-008-049",
@@ -3150,7 +3150,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-050 — HV-RW-NATIVE-PASSWORDLESS",
+          "title": "AC-008-050 \u2014 HV-RW-NATIVE-PASSWORDLESS",
           "tags": [
             "@FEAT-008",
             "@AC-008-050",
@@ -3161,7 +3161,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-051 — HV-RW-SESSION",
+          "title": "AC-008-051 \u2014 HV-RW-SESSION",
           "tags": [
             "@FEAT-008",
             "@AC-008-051",
@@ -3172,7 +3172,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-053 — HV-RW-STAGE",
+          "title": "AC-008-053 \u2014 HV-RW-STAGE",
           "tags": [
             "@FEAT-008",
             "@AC-008-053",
@@ -3182,7 +3182,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
         },
         {
-          "title": "AC-008-054 — HV-RW-STAGE",
+          "title": "AC-008-054 \u2014 HV-RW-STAGE",
           "tags": [
             "@FEAT-008",
             "@AC-008-054",
@@ -3192,7 +3192,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
         },
         {
-          "title": "AC-008-055 — HV-RW-STAGE",
+          "title": "AC-008-055 \u2014 HV-RW-STAGE",
           "tags": [
             "@FEAT-008",
             "@AC-008-055",
@@ -3202,7 +3202,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CUSTODY-STAGING-MIGRATED/HV-RW-CUSTODY-STAGING-MIGRATED.trx"
         },
         {
-          "title": "AC-008-060 — HV-RW-SESSION",
+          "title": "AC-008-060 \u2014 HV-RW-SESSION",
           "tags": [
             "@FEAT-008",
             "@AC-008-060",
@@ -3213,7 +3213,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/protection-staging-session.feature"
         },
         {
-          "title": "AC-008-081 — HV-RW-PASSKEY",
+          "title": "AC-008-081 \u2014 HV-RW-PASSKEY",
           "tags": [
             "@FEAT-008",
             "@AC-008-081",
@@ -3265,7 +3265,7 @@
       "group": "recovery-words",
       "scenarios": [
         {
-          "title": "AC-008-039 — HV-RW-SECURITY",
+          "title": "AC-008-039 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-039",
@@ -3275,7 +3275,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
         },
         {
-          "title": "AC-008-052 — HV-RW-SECURITY",
+          "title": "AC-008-052 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-052",
@@ -3285,7 +3285,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
         },
         {
-          "title": "AC-008-056 — HV-RW-RESUME",
+          "title": "AC-008-056 \u2014 HV-RW-RESUME",
           "tags": [
             "@FEAT-008",
             "@AC-008-056",
@@ -3295,7 +3295,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
         },
         {
-          "title": "AC-008-062 — HV-RW-RESUME",
+          "title": "AC-008-062 \u2014 HV-RW-RESUME",
           "tags": [
             "@FEAT-008",
             "@AC-008-062",
@@ -3307,7 +3307,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-063 — HV-RW-RESUME",
+          "title": "AC-008-063 \u2014 HV-RW-RESUME",
           "tags": [
             "@FEAT-008",
             "@AC-008-063",
@@ -3317,7 +3317,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
         },
         {
-          "title": "AC-008-064 — HV-RW-NAV",
+          "title": "AC-008-064 \u2014 HV-RW-NAV",
           "tags": [
             "@FEAT-008",
             "@AC-008-064",
@@ -3327,7 +3327,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
         },
         {
-          "title": "AC-008-065 — HV-RW-NAV",
+          "title": "AC-008-065 \u2014 HV-RW-NAV",
           "tags": [
             "@FEAT-008",
             "@AC-008-065",
@@ -3338,7 +3338,7 @@
           "acceptanceReview": "Web browser/in-app Back and stale/forged history replacement passes; Android Back qualification (FEAT-008 Phase 6 Tasks 6.5/6.6), persisted page-cache revalidation (FEAT-024), and full acceptance review remain open."
         },
         {
-          "title": "AC-008-066 — HV-RW-OWNER",
+          "title": "AC-008-066 \u2014 HV-RW-OWNER",
           "tags": [
             "@FEAT-008",
             "@AC-008-066",
@@ -3349,7 +3349,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-067 — HV-RW-OWNER",
+          "title": "AC-008-067 \u2014 HV-RW-OWNER",
           "tags": [
             "@FEAT-008",
             "@AC-008-067",
@@ -3360,7 +3360,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-068 — HV-RW-CLEANUP",
+          "title": "AC-008-068 \u2014 HV-RW-CLEANUP",
           "tags": [
             "@FEAT-008",
             "@AC-008-068",
@@ -3370,7 +3370,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.trx"
         },
         {
-          "title": "AC-008-069 — HV-RW-CLEANUP",
+          "title": "AC-008-069 \u2014 HV-RW-CLEANUP",
           "tags": [
             "@FEAT-008",
             "@AC-008-069",
@@ -3381,7 +3381,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-070 — HV-RW-CLEANUP",
+          "title": "AC-008-070 \u2014 HV-RW-CLEANUP",
           "tags": [
             "@FEAT-008",
             "@AC-008-070",
@@ -3391,7 +3391,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-CLEANUP-QUARANTINE/HV-RW-CLEANUP-QUARANTINE.trx"
         },
         {
-          "title": "AC-008-071 — HV-RW-SECURITY",
+          "title": "AC-008-071 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-071",
@@ -3401,7 +3401,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-SECURITY-003/HV-RW-SECURITY-003.trx"
         },
         {
-          "title": "AC-008-072 — HV-RW-MIGRATION",
+          "title": "AC-008-072 \u2014 HV-RW-MIGRATION",
           "tags": [
             "@FEAT-008",
             "@AC-008-072",
@@ -3413,7 +3413,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-073 — HV-RW-SECURITY",
+          "title": "AC-008-073 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-073",
@@ -3424,7 +3424,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-074 — HV-RW-SECURITY",
+          "title": "AC-008-074 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-074",
@@ -3435,7 +3435,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-075 — HV-RW-SECURITY",
+          "title": "AC-008-075 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-075",
@@ -3446,7 +3446,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-076 — HV-RW-SECURITY",
+          "title": "AC-008-076 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-076",
@@ -3458,7 +3458,7 @@
           "evidence": "TestResults/HushVoting/aud126-current-serial/HV-ORIGINAL-IDENTITY-TWIN/HV-ORIGINAL-IDENTITY-TWIN.trx"
         },
         {
-          "title": "AC-008-077 — HV-RW-SECURITY",
+          "title": "AC-008-077 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-077",
@@ -3469,7 +3469,7 @@
           "artifactEvidence": "TestResults/HushVoting/aud126-current-serial/HV-RW-LIFECYCLE-MIGRATED/HV-RW-LIFECYCLE-MIGRATED.artifacts.json"
         },
         {
-          "title": "AC-008-078 — HV-RW-SECURITY",
+          "title": "AC-008-078 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-078",
@@ -3480,7 +3480,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-079 — HV-RW-SECURITY",
+          "title": "AC-008-079 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-079",
@@ -3493,7 +3493,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-080 — HV-RW-SECURITY",
+          "title": "AC-008-080 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-080",
@@ -3505,7 +3505,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-082 — HV-RW-MIGRATION",
+          "title": "AC-008-082 \u2014 HV-RW-MIGRATION",
           "tags": [
             "@FEAT-008",
             "@AC-008-082",
@@ -3517,7 +3517,7 @@
           "frontendSource": "hush-voting-web-client/features/recovery-words/resume-nav-owner-cleanup-migration-security.feature"
         },
         {
-          "title": "AC-008-083 — HV-RW-SECURITY",
+          "title": "AC-008-083 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-083",
@@ -3528,7 +3528,7 @@
           "note": "AUD-119: complete named backend TwinTest prerequisite verified by exact ID/title/outcome/provenance/artifact evidence, followed by this real Web missing-profile identity/protection/indexing/licence journey. Whole-product release and other native/external criteria are not evaluated. TypeScript original retired."
         },
         {
-          "title": "AC-008-084 — HV-RW-SECURITY",
+          "title": "AC-008-084 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-084",
@@ -3539,7 +3539,7 @@
           "note": "AUD-110: real Web/node journey followed by content-addressed exact input pins, manifest-member verification, independent reread and mutation canaries. This pin-recording criterion does not assert release admission or handoff semantic qualification; external states remain unchanged. TypeScript original retired."
         },
         {
-          "title": "AC-008-085 — HV-RW-SECURITY",
+          "title": "AC-008-085 \u2014 HV-RW-SECURITY",
           "tags": [
             "@FEAT-008",
             "@AC-008-085",
@@ -3649,7 +3649,8 @@
       "phase": "P018-3-02",
       "tasks": [
         "T018-3-02",
-        "T018-3-03"
+        "T018-3-03",
+        "T018-3-04"
       ],
       "layer": "backend-twin",
       "destination": "ServerTwins/entitlement-enforcement.feature",
@@ -3673,9 +3674,15 @@
         "HV-TWIN-ENT-ENFORCEMENT-017",
         "HV-TWIN-ENT-ENFORCEMENT-018",
         "HV-TWIN-ENT-ENFORCEMENT-019",
-        "HV-TWIN-ENT-ENFORCEMENT-020"
+        "HV-TWIN-ENT-ENFORCEMENT-020",
+        "HV-TWIN-ENT-ENFORCEMENT-021"
       ],
-      "status": "draft-and-open-20-verified-captured-completion-pending"
+      "status": "verified-tasks-3-02-3-03-3-04",
+      "phaseCriteria": [
+        "P018-3-02",
+        "P018-3-03",
+        "P018-3-04"
+      ]
     }
   ],
   "reservedFeatureGroups": [

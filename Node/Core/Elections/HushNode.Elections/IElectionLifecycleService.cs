@@ -661,6 +661,7 @@ public record ElectionCommandResult
 
 public record ElectionCommitmentRegistrationResult
 {
+    public ElectionEntitlementReason EntitlementReason { get; init; }
     public bool IsSuccess { get; init; }
     public ElectionCommitmentRegistrationFailureReason FailureReason { get; init; }
     public string? ErrorMessage { get; init; }
@@ -694,6 +695,7 @@ public record ElectionCommitmentRegistrationResult
 
 public record ElectionCastAcceptanceResult
 {
+    public ElectionEntitlementReason EntitlementReason { get; init; }
     public bool IsSuccess { get; init; }
     public ElectionCastAcceptanceFailureReason FailureReason { get; init; }
     public string? ErrorMessage { get; init; }
@@ -733,6 +735,7 @@ public record ElectionCastAcceptanceResult
 
 public record ElectionPreparedBallotCommitmentResult
 {
+    public ElectionEntitlementReason EntitlementReason { get; init; }
     public bool IsSuccess { get; init; }
     public ElectionPreparedBallotCommitmentFailureReason FailureReason { get; init; }
     public string? ErrorMessage { get; init; }
@@ -763,6 +766,7 @@ public record ElectionPreparedBallotCommitmentResult
 
 public record ElectionSpoilPreparedBallotResult
 {
+    public ElectionEntitlementReason EntitlementReason { get; init; }
     public bool IsSuccess { get; init; }
     public ElectionSpoilPreparedBallotFailureReason FailureReason { get; init; }
     public string? ErrorMessage { get; init; }

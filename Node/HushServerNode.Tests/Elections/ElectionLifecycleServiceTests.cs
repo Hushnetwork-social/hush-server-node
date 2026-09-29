@@ -484,6 +484,7 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = election;
         AddRosterEntries(store, CreateRosterEntry(election, "2001"));
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.ClaimRosterEntryAsync(new ClaimElectionRosterEntryRequest(
             election.ElectionId,
             "voter-address",
@@ -564,6 +565,7 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = election;
         AddRosterEntries(store, CreateRosterEntry(election, "2001"));
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.ClaimRosterEntryAsync(new ClaimElectionRosterEntryRequest(
             election.ElectionId,
             "voter-address",
@@ -621,6 +623,7 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = election;
         AddRosterEntries(store, rosterEntry);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.ActivateRosterEntryAsync(new ActivateElectionRosterEntryRequest(
             election.ElectionId,
             "owner-address",
@@ -656,6 +659,7 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = election;
         AddRosterEntries(store, rosterEntry);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.ActivateRosterEntryAsync(new ActivateElectionRosterEntryRequest(
             election.ElectionId,
             "owner-address",
@@ -680,6 +684,7 @@ public class ElectionLifecycleServiceTests
 
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.ActivateRosterEntryAsync(new ActivateElectionRosterEntryRequest(
             election.ElectionId,
             "owner-address",
@@ -698,6 +703,7 @@ public class ElectionLifecycleServiceTests
         var service = CreateService(store);
         var scenario = SeedOpenElectionForCast(store);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
             scenario.Election.ElectionId,
             "voter-address",
@@ -723,6 +729,7 @@ public class ElectionLifecycleServiceTests
         };
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
             election.ElectionId,
             "voter-address",
@@ -752,6 +759,7 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = election;
         AddRosterEntries(store, secondEntry);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
             election.ElectionId,
             "voter-address",
@@ -777,6 +785,7 @@ public class ElectionLifecycleServiceTests
             BallotDefinitionSealedAt = null,
         };
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
             scenario.Election.ElectionId,
             "voter-address",
@@ -800,6 +809,7 @@ public class ElectionLifecycleServiceTests
             currentlyActive: false,
             createCommitmentRegistration: false);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
             scenario.Election.ElectionId,
             "voter-address",
@@ -817,6 +827,7 @@ public class ElectionLifecycleServiceTests
         var service = CreateService(store);
         var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
             scenario.Election.ElectionId,
             "voter-address",
@@ -839,6 +850,7 @@ public class ElectionLifecycleServiceTests
         var precommittedAt = DateTime.UtcNow.AddMinutes(-2);
         var preparedBallotId = Guid.NewGuid();
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RegisterPreparedBallotCommitmentAsync(CreatePreparedBallotRequest(
             scenario,
             preparedBallotId: preparedBallotId,
@@ -866,6 +878,7 @@ public class ElectionLifecycleServiceTests
         var service = CreateService(store);
         var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: false);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RegisterPreparedBallotCommitmentAsync(CreatePreparedBallotRequest(scenario));
 
         result.IsSuccess.Should().BeFalse();
@@ -905,6 +918,7 @@ public class ElectionLifecycleServiceTests
             createCommitmentRegistration: true,
             seedSp04CastGate: false);
         var preparedBallotId = Guid.NewGuid();
+        SeedExistingOpenAuthorizationFixture(store);
         var preparedResult = await service.RegisterPreparedBallotCommitmentAsync(CreatePreparedBallotRequest(
             scenario,
             preparedBallotId: preparedBallotId,
@@ -949,6 +963,7 @@ public class ElectionLifecycleServiceTests
             seedSp04CastGate: false);
         var preparedBallotId = Guid.NewGuid();
         var preparedAt = DateTime.UtcNow.AddMinutes(-20);
+        SeedExistingOpenAuthorizationFixture(store);
         await service.RegisterPreparedBallotCommitmentAsync(CreatePreparedBallotRequest(
             scenario,
             preparedBallotId: preparedBallotId,
@@ -980,6 +995,7 @@ public class ElectionLifecycleServiceTests
         var service = CreateService(store);
         var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(CreateCastRequest(
             scenario,
             idempotencyKey: "cast-key-1",
@@ -1019,6 +1035,7 @@ public class ElectionLifecycleServiceTests
             store,
             createCommitmentRegistration: true,
             seedSp04CastGate: false);
+        SeedExistingOpenAuthorizationFixture(store);
         var preparedResult = await service.RegisterPreparedBallotCommitmentAsync(CreatePreparedBallotRequest(
             scenario,
             preparedBallotHash: "prepared-hash-no-challenge"));
@@ -1055,6 +1072,7 @@ public class ElectionLifecycleServiceTests
             PreparedBallotHash = spoiledPrepared.PreparedBallotHash,
         };
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(request);
 
         result.IsSuccess.Should().BeFalse();
@@ -1085,6 +1103,7 @@ public class ElectionLifecycleServiceTests
             BallotDefinitionHash = scenario.Election.BallotDefinitionHash!.ToArray(),
         };
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(request);
 
         result.IsSuccess.Should().BeFalse();
@@ -1102,6 +1121,7 @@ public class ElectionLifecycleServiceTests
         var removedFinalPrepared = scenario.PreparedBallotCommitment!;
         store.PreparedBallotCommitments.RemoveAll(x => x.PreparedBallotId == removedFinalPrepared.PreparedBallotId);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(CreateCastRequest(
             scenario,
             idempotencyKey: "cast-key-inline-final",
@@ -1134,6 +1154,7 @@ public class ElectionLifecycleServiceTests
             ExpiresAt = DateTime.UtcNow.AddMinutes(-1),
         });
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(CreateCastRequest(
             scenario,
             idempotencyKey: "cast-key-expired-prepared",
@@ -1159,6 +1180,7 @@ public class ElectionLifecycleServiceTests
             ReceiptCommitment = null,
         };
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(request);
 
         result.IsSuccess.Should().BeFalse();
@@ -1181,6 +1203,7 @@ public class ElectionLifecycleServiceTests
             BallotDefinitionHash = [9, 9, 9],
         };
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(request);
 
         result.IsSuccess.Should().BeFalse();
@@ -1203,6 +1226,7 @@ public class ElectionLifecycleServiceTests
             PreparedBallotHash = "prepared-hash-tampered",
         };
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(request);
 
         result.IsSuccess.Should().BeFalse();
@@ -1230,6 +1254,7 @@ public class ElectionLifecycleServiceTests
             FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
         });
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(CreateCastRequest(
             scenario,
             idempotencyKey: "cast-key-finalized-ceremony",
@@ -1282,6 +1307,7 @@ public class ElectionLifecycleServiceTests
             Election = nonBindingElection,
         };
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(CreateCastRequest(
             scenario,
             encryptedBallotPackage: CreateDevModeAcceptedBallotPackageForTests(),
@@ -1322,6 +1348,7 @@ public class ElectionLifecycleServiceTests
             openedAt,
             finalPreparedBallotHash: "prepared-hash-final-2");
 
+        SeedExistingOpenAuthorizationFixture(store);
         var firstResult = await service.AcceptBallotCastAsync(CreateCastRequest(
             scenario,
             idempotencyKey: "cast-key-1",
@@ -1366,6 +1393,7 @@ public class ElectionLifecycleServiceTests
             TallyPublicKeyFingerprint = "wrong-tally",
         };
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(request);
 
         result.IsSuccess.Should().BeFalse();
@@ -1395,6 +1423,7 @@ public class ElectionLifecycleServiceTests
             TallyPublicKeyFingerprint = syntheticBinding.TallyPublicKeyFingerprint,
         };
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(request);
 
         result.IsSuccess.Should().BeTrue();
@@ -1416,6 +1445,7 @@ public class ElectionLifecycleServiceTests
             ballotNullifier: "nullifier-1",
             acceptedAt: DateTime.UtcNow.AddMinutes(-1)));
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(CreateCastRequest(
             scenario,
             idempotencyKey: "cast-key-2",
@@ -1438,6 +1468,7 @@ public class ElectionLifecycleServiceTests
             ComputeScopedHash("cast-key-3"),
             DateTime.UtcNow.AddMinutes(-1)));
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(CreateCastRequest(
             scenario,
             idempotencyKey: "cast-key-3",
@@ -1457,6 +1488,7 @@ public class ElectionLifecycleServiceTests
         var service = CreateService(store, castIdempotencyCacheService: cacheService.Object);
         var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(CreateCastRequest(
             scenario,
             idempotencyKey: "cast-key-cache",
@@ -1481,6 +1513,7 @@ public class ElectionLifecycleServiceTests
         var service = CreateService(store, castIdempotencyCacheService: cacheService.Object);
         var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(CreateCastRequest(
             scenario,
             idempotencyKey: "cast-key-cache-failure",
@@ -1512,6 +1545,7 @@ public class ElectionLifecycleServiceTests
         var service = CreateService(store);
         var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptBallotCastAsync(CreateCastRequest(
             scenario,
             idempotencyKey: $"cast-key-fail-{failingOperation}",
@@ -1543,6 +1577,7 @@ public class ElectionLifecycleServiceTests
             idempotencyKey: "cast-key-pending",
             ballotNullifier: "nullifier-pending");
 
+        SeedExistingOpenAuthorizationFixture(store);
         var firstAttempt = service.AcceptBallotCastAsync(request);
         await store.GetElectionForUpdateEntered.Task;
 
@@ -1593,6 +1628,7 @@ public class ElectionLifecycleServiceTests
 
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.CreateReportAccessGrantAsync(new CreateElectionReportAccessGrantRequest(
             ElectionId: election.ElectionId,
             ActorPublicAddress: "owner-address",
@@ -3067,6 +3103,13 @@ public class ElectionLifecycleServiceTests
             .Be(ElectionAdminOnlyProtectedTallyCustodyLifecycleState.RetryRequired);
         custodyAuthority.CreatedEnvelopeCount.Should().Be(1);
 
+        var governanceChange = await service.UpdateDraftAsync(new(election.ElectionId, "owner-address", "Attempt after custody evidence",
+            CreateAdminDraftSpecification() with { SelectedProfileId = "dkg-prod-3of5",
+                GovernanceMode = ElectionGovernanceMode.TrusteeThreshold, RequiredApprovalCount = 3 }));
+        governanceChange.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+        store.Elections[election.ElectionId].SelectedProfileId.Should().Be(election.SelectedProfileId);
+        store.AdminOnlyProtectedTallyEnvelopes.Should().ContainSingle();
+
         custodyAuthority.FailOpen = false;
         store.ExecutionContext = store.ExecutionContext! with { TransactionId = Guid.NewGuid() };
         var retriedOpen = await service.OpenElectionAsync(new OpenElectionRequest(
@@ -3188,6 +3231,7 @@ public class ElectionLifecycleServiceTests
 
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.StartGovernedProposalAsync(new StartElectionGovernedProposalRequest(
             election.ElectionId,
             ElectionGovernedActionType.Close,
@@ -3297,6 +3341,25 @@ public class ElectionLifecycleServiceTests
         (await service.OpenElectionAsync(request)).IsSuccess.Should().BeTrue();
         store.EntitlementCaptures.Should().ContainSingle().Which.Should().Be(capture);
         store.BoundaryArtifacts.Should().ContainSingle();
+        // T018-3-04: the original authorization remains valid independently of current rights.
+        var opened = store.Elections[election.ElectionId];
+        var boundary = store.BoundaryArtifacts.Single();
+        var basis = result.EligibilitySnapshot!;
+        ElectionCapturedEntitlementAuthority.Check(opened, capture, boundary, basis).Should().Be(ElectionEntitlementReason.None);
+        ElectionCapturedEntitlementAuthority.Check(opened, null, boundary, basis).Should().Be(ElectionEntitlementReason.CaptureUnavailable);
+        ElectionCapturedEntitlementAuthority.Check(opened, capture, null, basis).Should().Be(ElectionEntitlementReason.CaptureUnavailable);
+        ElectionCapturedEntitlementAuthority.Check(opened, capture, boundary, null).Should().Be(ElectionEntitlementReason.CaptureUnavailable);
+        foreach (var invalid in new[] {
+            capture with { ElectionId = ElectionId.NewElectionId }, capture with { SelectedProfileId = "another-profile" },
+            capture with { OpenTransactionId = Guid.NewGuid() }, capture with { OpenBlockId = Guid.NewGuid() },
+            capture with { OpenBlockHeight = capture.OpenBlockHeight + 1 },
+            capture with { FrozenRosterBasisId = Guid.NewGuid() }, capture with { FrozenEligibleVoterCount = 2 },
+            capture with { SchemaVersion = 999 }
+        }) ElectionCapturedEntitlementAuthority.Check(opened, invalid, boundary, basis).Should().Be(ElectionEntitlementReason.SemanticsUnsupported);
+        ElectionCapturedEntitlementAuthority.Check(opened, capture, boundary with { ElectionId = ElectionId.NewElectionId }, basis)
+            .Should().Be(ElectionEntitlementReason.SemanticsUnsupported);
+        ElectionCapturedEntitlementAuthority.Check(opened, capture, boundary, basis with { BoundaryArtifactId = Guid.NewGuid() })
+            .Should().Be(ElectionEntitlementReason.SemanticsUnsupported);
     }
 
     [Fact]
@@ -3672,6 +3735,7 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = election;
         AddRosterEntries(store, CreateRosterEntry(election, "4001").FreezeAtOpen(election.OpenedAt!.Value));
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.CloseElectionAsync(new CloseElectionRequest(
             election.ElectionId,
             "owner-address"));
@@ -3926,6 +3990,7 @@ public class ElectionLifecycleServiceTests
         var election = CreateTrusteeElection(requiredApprovalCount: 1);
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RecordKeyLostTrusteeContinuityDecisionAsync(
             CreateRecordKeyLostTrusteeContinuityDecisionRequest(election.ElectionId));
 
@@ -3950,6 +4015,7 @@ public class ElectionLifecycleServiceTests
         var election = CreateTrusteeElection(requiredApprovalCount: 1);
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RecordKeyLostTrusteeContinuityDecisionAsync(
             CreateRecordKeyLostTrusteeContinuityDecisionRequest(
                 election.ElectionId,
@@ -3980,6 +4046,7 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = election;
         store.TrusteeContinuityDecisions.Add(existingDecision);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RecordKeyLostTrusteeContinuityDecisionAsync(
             CreateRecordKeyLostTrusteeContinuityDecisionRequest(election.ElectionId));
 
@@ -4020,6 +4087,7 @@ public class ElectionLifecycleServiceTests
         store.TrusteeInvitations[acceptedTrustee.Id] = acceptedTrustee;
         store.GovernedProposals[proposal.Id] = proposal;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
             openElection.ElectionId,
             proposal.Id,
@@ -4094,6 +4162,7 @@ public class ElectionLifecycleServiceTests
         store.TrusteeInvitations[acceptedTrusteeB.Id] = acceptedTrusteeB;
         store.GovernedProposals[proposal.Id] = proposal;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var approvalResult = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
             openElection.ElectionId,
             proposal.Id,
@@ -4111,6 +4180,7 @@ public class ElectionLifecycleServiceTests
 
         store.Elections[openElection.ElectionId] = openElection;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var retryResult = await service.RetryGovernedProposalExecutionAsync(new RetryElectionGovernedProposalExecutionRequest(
             openElection.ElectionId,
             proposal.Id,
@@ -4130,7 +4200,8 @@ public class ElectionLifecycleServiceTests
         retryResult.BoundaryArtifact!.SourceTransactionId.Should().Be(retryTransactionId);
         retryResult.BoundaryArtifact.SourceBlockHeight.Should().Be(52);
         store.GovernedProposalApprovals.Should().ContainSingle();
-        store.BoundaryArtifacts.Should().ContainSingle();
+        store.BoundaryArtifacts.Select(a => a.ArtifactType).Should().Equal(
+            ElectionBoundaryArtifactType.Open, ElectionBoundaryArtifactType.Close);
     }
 
     [Fact]
@@ -4150,6 +4221,7 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = election;
         store.GovernedProposals[governedProposal.Id] = governedProposal;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.VoidElectionAsync(new VoidElectionRequest(
             election.ElectionId,
             "owner-address",
@@ -4204,6 +4276,7 @@ public class ElectionLifecycleServiceTests
         var election = CreateOpenElection();
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.VoidElectionAsync(new VoidElectionRequest(
             election.ElectionId,
             "owner-address",
@@ -4227,6 +4300,7 @@ public class ElectionLifecycleServiceTests
         var election = CreateOpenElection();
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.VoidElectionAsync(new VoidElectionRequest(
             election.ElectionId,
             "owner-address",
@@ -4286,6 +4360,7 @@ public class ElectionLifecycleServiceTests
             };
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.VoidElectionAsync(new VoidElectionRequest(
             election.ElectionId,
             "owner-address",
@@ -4307,6 +4382,7 @@ public class ElectionLifecycleServiceTests
         var election = CreateOpenElection();
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.VoidElectionAsync(new VoidElectionRequest(
             election.ElectionId,
             "trustee-a",
@@ -4352,6 +4428,7 @@ public class ElectionLifecycleServiceTests
         };
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.VoidElectionAsync(new VoidElectionRequest(
             election.ElectionId,
             "owner-address",
@@ -4371,6 +4448,7 @@ public class ElectionLifecycleServiceTests
         var election = CreateOpenElection();
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var firstResult = await service.VoidElectionAsync(new VoidElectionRequest(
             election.ElectionId,
             "owner-address",
@@ -4416,6 +4494,7 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = election;
         store.ReportPackages[reportPackage.Id] = reportPackage;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.VoidElectionAsync(new VoidElectionRequest(
             election.ElectionId,
             "owner-address",
@@ -4440,6 +4519,7 @@ public class ElectionLifecycleServiceTests
         var service = CreateService(store);
         var election = CreateOpenElection();
         store.Elections[election.ElectionId] = election;
+        SeedExistingOpenAuthorizationFixture(store);
         var voidResult = await service.VoidElectionAsync(new VoidElectionRequest(
             election.ElectionId,
             "owner-address",
@@ -4472,6 +4552,7 @@ public class ElectionLifecycleServiceTests
         var election = CreateOpenElection();
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var voidResult = await service.VoidElectionAsync(new VoidElectionRequest(
             election.ElectionId,
             "owner-address",
@@ -4515,6 +4596,7 @@ public class ElectionLifecycleServiceTests
             electionReportPackageService: reportPackageService);
         var approvalTransactionId = Guid.NewGuid();
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
             scenario.Election.ElectionId,
             scenario.Proposal.Id,
@@ -4580,6 +4662,7 @@ public class ElectionLifecycleServiceTests
             sourceBlockHeight: 71,
             sourceBlockId: Guid.NewGuid());
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.SubmitFinalizationShareAsync(request);
 
         result.IsSuccess.Should().BeTrue();
@@ -4632,6 +4715,7 @@ public class ElectionLifecycleServiceTests
             "owner-address");
         store.TrusteeContinuityDecisions.Add(keyLostDecision);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -4684,6 +4768,7 @@ public class ElectionLifecycleServiceTests
             credentialsProvider: rotatedCredentials,
             closeCountingExecutorEnvelopeCrypto: envelopeCrypto);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -4728,6 +4813,7 @@ public class ElectionLifecycleServiceTests
             credentialsProvider: new FakeCredentialsProvider(),
             closeCountingExecutorEnvelopeCrypto: new UnavailableCloseCountingExecutorEnvelopeCrypto());
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -4759,6 +4845,7 @@ public class ElectionLifecycleServiceTests
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
         var shareTransactionId = Guid.NewGuid();
 
+        SeedExistingOpenAuthorizationFixture(store);
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -4817,6 +4904,7 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -4866,6 +4954,7 @@ public class ElectionLifecycleServiceTests
             publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(),
             publicationProofSessionRunner: proofSessionRunner);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -4935,6 +5024,7 @@ public class ElectionLifecycleServiceTests
             publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(),
             publicationProofSessionRunner: proofSessionRunner);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -4997,6 +5087,7 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5044,6 +5135,7 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5087,6 +5179,7 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5162,6 +5255,7 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([0, 0, 0], scenario.FinalEncryptedTallyHash),
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5209,6 +5303,7 @@ public class ElectionLifecycleServiceTests
                 ["trustee-a"]),
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var wrongSubsetSubmitResult = await service.SubmitFinalizationShareAsync(
             CreateExecutorBoundFinalizationShareRequest(
                 scenario,
@@ -5280,6 +5375,7 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
             closeCountingExecutorKeyRegistry: new InMemoryCloseCountingExecutorKeyRegistry());
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5358,6 +5454,7 @@ public class ElectionLifecycleServiceTests
             store,
             electionResultCryptoService: new DevModeFallbackElectionResultCryptoService(),
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
+        SeedExistingOpenAuthorizationFixture(store);
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5436,6 +5533,7 @@ public class ElectionLifecycleServiceTests
             store,
             electionResultCryptoService: new DevModeFallbackElectionResultCryptoService(),
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
+        SeedExistingOpenAuthorizationFixture(store);
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5483,6 +5581,7 @@ public class ElectionLifecycleServiceTests
             createdByPublicAddress: "owner-address");
         store.FinalizationSessions[session.Id] = session;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
             ElectionId: scenario.Election.ElectionId,
             FinalizationSessionId: session.Id,
@@ -5517,6 +5616,7 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
         var session = scenario.Session;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5546,6 +5646,7 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
         var session = scenario.Session;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5581,6 +5682,7 @@ public class ElectionLifecycleServiceTests
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
         var session = scenario.Session;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var firstResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5628,6 +5730,7 @@ public class ElectionLifecycleServiceTests
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
         var session = scenario.Session;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5657,6 +5760,7 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
         var session = scenario.Session;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
             scenario,
             actorPublicAddress: "trustee-a",
@@ -5693,6 +5797,7 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
         var session = scenario.Session;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
             ElectionId: scenario.Election.ElectionId,
             FinalizationSessionId: session.Id,
@@ -5757,6 +5862,7 @@ public class ElectionLifecycleServiceTests
                 ElectionParticipationStatus.Blank,
                 openedAt.AddMinutes(4)));
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.CloseElectionAsync(new CloseElectionRequest(
             election.ElectionId,
             "owner-address"));
@@ -5809,6 +5915,7 @@ public class ElectionLifecycleServiceTests
                 ElectionParticipationStatus.Blank,
                 openedAt.AddMinutes(4)));
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.CloseElectionAsync(new CloseElectionRequest(
             election.ElectionId,
             "owner-address"));
@@ -5845,6 +5952,7 @@ public class ElectionLifecycleServiceTests
 
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var closeResult = await service.CloseElectionAsync(new CloseElectionRequest(
             ElectionId: election.ElectionId,
             ActorPublicAddress: "owner-address",
@@ -5937,20 +6045,21 @@ public class ElectionLifecycleServiceTests
         closeResult.Election!.VoteAcceptanceLockedAt.Should().NotBeNull();
         finalizeResult.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Finalized);
         store.BoundaryArtifacts.Select(x => x.ArtifactType).Should().Equal(
+            ElectionBoundaryArtifactType.Open,
             ElectionBoundaryArtifactType.Close,
             ElectionBoundaryArtifactType.TallyReady,
             ElectionBoundaryArtifactType.Finalize);
-        store.BoundaryArtifacts[0].AcceptedBallotSetHash.Should().BeNull();
-        store.BoundaryArtifacts[0].SourceTransactionId.Should().Be(closeTransactionId);
-        store.BoundaryArtifacts[0].SourceBlockHeight.Should().Be(52);
-        store.BoundaryArtifacts[1].AcceptedBallotSetHash.Should().Equal(acceptedBallotHash);
-        store.BoundaryArtifacts[1].PublishedBallotStreamHash.Should().Equal(publishedBallotHash);
-        store.BoundaryArtifacts[1].FinalEncryptedTallyHash.Should().Equal(finalTallyHash);
-        store.BoundaryArtifacts[1].SourceTransactionId.Should().Be(tallyReadyTransactionId);
-        store.BoundaryArtifacts[1].SourceBlockHeight.Should().Be(52);
-        store.BoundaryArtifacts[2].FinalEncryptedTallyHash.Should().Equal(finalTallyHash);
-        store.BoundaryArtifacts[2].SourceTransactionId.Should().Be(finalizeTransactionId);
-        store.BoundaryArtifacts[2].SourceBlockHeight.Should().Be(53);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.Close).AcceptedBallotSetHash.Should().BeNull();
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.Close).SourceTransactionId.Should().Be(closeTransactionId);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.Close).SourceBlockHeight.Should().Be(52);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).AcceptedBallotSetHash.Should().Equal(acceptedBallotHash);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).PublishedBallotStreamHash.Should().Equal(publishedBallotHash);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).FinalEncryptedTallyHash.Should().Equal(finalTallyHash);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).SourceTransactionId.Should().Be(tallyReadyTransactionId);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.TallyReady).SourceBlockHeight.Should().Be(52);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.Finalize).FinalEncryptedTallyHash.Should().Equal(finalTallyHash);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.Finalize).SourceTransactionId.Should().Be(finalizeTransactionId);
+        store.BoundaryArtifacts.Single(a => a.ArtifactType == ElectionBoundaryArtifactType.Finalize).SourceBlockHeight.Should().Be(53);
         store.Elections[election.ElectionId].VoteAcceptanceLockedAt.Should().NotBeNull();
         store.Elections[election.ElectionId].CloseArtifactId.Should().Be(closeResult.BoundaryArtifact!.Id);
         store.Elections[election.ElectionId].TallyReadyArtifactId.Should().Be(tallyReadyArtifact.Id);
@@ -5997,6 +6106,7 @@ public class ElectionLifecycleServiceTests
         store.AdminOnlyProtectedTallyEnvelopes[setup.Election.ElectionId] =
             custodyPreparation.EnvelopeToPersist!;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.FinalizeElectionAsync(new FinalizeElectionRequest(
             ElectionId: setup.Election.ElectionId,
             ActorPublicAddress: "owner-address",
@@ -6035,6 +6145,7 @@ public class ElectionLifecycleServiceTests
             store,
             electionReportPackageService: reportPackageService);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.FinalizeElectionAsync(new FinalizeElectionRequest(
             ElectionId: setup.Election.ElectionId,
             ActorPublicAddress: "owner-address",
@@ -6077,6 +6188,7 @@ public class ElectionLifecycleServiceTests
             "owner-address");
         store.TrusteeContinuityDecisions.Add(keyLostDecision);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptFixedUnofficialResultWithAnomalyAsync(
             CreateAcceptFixedUnofficialResultWithAnomalyRequest(setup, keyLostDecision.Id));
 
@@ -6151,6 +6263,7 @@ public class ElectionLifecycleServiceTests
         var setup = await SeedClosedAdminElectionReadyForFinalizeAsync(store);
         var service = CreateService(store);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptFixedUnofficialResultWithAnomalyAsync(
             CreateAcceptFixedUnofficialResultWithAnomalyRequest(
                 setup,
@@ -6171,6 +6284,7 @@ public class ElectionLifecycleServiceTests
         var setup = await SeedClosedAdminElectionReadyForFinalizeAsync(store);
         var service = CreateService(store);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptFixedUnofficialResultWithAnomalyAsync(
             CreateAcceptFixedUnofficialResultWithAnomalyRequest(
                 setup,
@@ -6191,6 +6305,7 @@ public class ElectionLifecycleServiceTests
         var setup = await SeedClosedAdminElectionReadyForFinalizeAsync(store);
         var service = CreateService(store);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.AcceptFixedUnofficialResultWithAnomalyAsync(
             CreateAcceptFixedUnofficialResultWithAnomalyRequest(
                 setup,
@@ -6224,6 +6339,7 @@ public class ElectionLifecycleServiceTests
             "owner-address");
         store.TrusteeContinuityDecisions.Add(keyLostDecision);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
             CreateRecordFailedFinalizeContinuityDecisionRequest(setup, keyLostDecision.Id));
 
@@ -6256,6 +6372,7 @@ public class ElectionLifecycleServiceTests
         var setup = SeedClosedElectionForFailedFinalize(store);
         var service = CreateService(store);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
             CreateRecordFailedFinalizeContinuityDecisionRequest(setup, actorPublicAddress: "other-address"));
 
@@ -6273,6 +6390,7 @@ public class ElectionLifecycleServiceTests
         var setup = SeedClosedElectionForFailedFinalize(store);
         var service = CreateService(store);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
             CreateRecordFailedFinalizeContinuityDecisionRequest(
                 setup,
@@ -6306,6 +6424,7 @@ public class ElectionLifecycleServiceTests
             "Clean finalization could not be verified.",
             missingFinalizeEvidenceRefs: ["missing:clean-finalization-proof"]));
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
             CreateRecordFailedFinalizeContinuityDecisionRequest(setup));
 
@@ -6322,6 +6441,7 @@ public class ElectionLifecycleServiceTests
         var setup = SeedClosedElectionForFailedFinalize(store, ElectionLifecycleState.Finalized);
         var service = CreateService(store);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
             CreateRecordFailedFinalizeContinuityDecisionRequest(setup));
 
@@ -6342,6 +6462,7 @@ public class ElectionLifecycleServiceTests
         };
         var service = CreateService(store);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
             CreateRecordFailedFinalizeContinuityDecisionRequest(setup));
 
@@ -6360,6 +6481,7 @@ public class ElectionLifecycleServiceTests
         store.ReportPackages[sealedPackage.Id] = sealedPackage;
         var service = CreateService(store);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
             CreateRecordFailedFinalizeContinuityDecisionRequest(setup));
 
@@ -6380,6 +6502,7 @@ public class ElectionLifecycleServiceTests
             store,
             electionReportPackageService: reportPackageService);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var result = await service.FinalizeElectionAsync(new FinalizeElectionRequest(
             ElectionId: setup.Election.ElectionId,
             ActorPublicAddress: "owner-address",
@@ -6420,6 +6543,7 @@ public class ElectionLifecycleServiceTests
             store,
             electionReportPackageService: reportPackageService);
 
+        SeedExistingOpenAuthorizationFixture(store);
         var firstResult = await service.FinalizeElectionAsync(new FinalizeElectionRequest(
             ElectionId: setup.Election.ElectionId,
             ActorPublicAddress: "owner-address",
@@ -6747,12 +6871,14 @@ public class ElectionLifecycleServiceTests
 
         store.Elections[election.ElectionId] = election;
 
+        SeedExistingOpenAuthorizationFixture(store);
         var closeResult = await service.CloseElectionAsync(new CloseElectionRequest(
             ElectionId: election.ElectionId,
             ActorPublicAddress: "owner-address",
             SourceTransactionId: closeTransactionId,
             SourceBlockHeight: 52,
             SourceBlockId: Guid.NewGuid()));
+        closeResult.IsSuccess.Should().BeTrue(closeResult.ErrorMessage);
         var closedElection = store.Elections[election.ElectionId];
         var tallyReadyAt = DateTime.UtcNow;
         var tallyReadyArtifact = ElectionModelFactory.CreateBoundaryArtifact(
@@ -7023,6 +7149,47 @@ public class ElectionLifecycleServiceTests
         JsonSerializer.Deserialize<T>(
             export.Files.Single(x => x.RelativePath == relativePath).Content,
             VerificationJson.Options)!;
+
+    private static void SeedExistingOpenAuthorizationFixture(ElectionStore store) =>
+        HistoricalOpenAuthorizationFixture.Seed(store.Elections, store.EntitlementCaptures,
+            store.BoundaryArtifacts, store.EligibilitySnapshots, store.RosterEntries);
+
+    [Fact]
+    public async Task CapturedOperations_RejectMissingAuthorityEvenWhenCurrentLicenceIsActive()
+    {
+        var store = new ElectionStore();
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        var service = CreateService(store);
+        // Deliberately no historical capture: this is the missing-authority regression.
+        var cast = await service.AcceptBallotCastAsync(CreateCastRequest(scenario, "missing-capture", "missing-capture-nullifier"));
+        cast.IsSuccess.Should().BeFalse();
+        cast.EntitlementReason.Should().Be(ElectionEntitlementReason.CaptureUnavailable);
+        var close = await service.CloseElectionAsync(new(scenario.Election.ElectionId, "owner-address"));
+        close.EntitlementReason.Should().Be(ElectionEntitlementReason.CaptureUnavailable);
+        store.AcceptedBallots.Should().BeEmpty();
+        store.CheckoffConsumptions.Should().BeEmpty();
+        store.Elections[scenario.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Open);
+    }
+
+    [Fact]
+    public async Task CapturedOperations_DoNotRequireCurrentAuthority_AndStillEnforceRoleAndClose()
+    {
+        var store = new ElectionStore();
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        SeedExistingOpenAuthorizationFixture(store);
+        store.OwnerAuthority = IndexedEntitlementReadResult.Unavailable("offline", "No current authority in this fixture.");
+        var service = CreateService(store);
+        var forgedClose = await service.CloseElectionAsync(new(scenario.Election.ElectionId, "another-actor"));
+        forgedClose.ErrorCode.Should().Be(ElectionCommandErrorCode.Forbidden);
+        var cast = await service.AcceptBallotCastAsync(CreateCastRequest(scenario, "captured-cast", "captured-nullifier"));
+        cast.IsSuccess.Should().BeTrue(cast.ErrorMessage);
+        var close = await service.CloseElectionAsync(new(scenario.Election.ElectionId, "owner-address"));
+        close.IsSuccess.Should().BeTrue(close.ErrorMessage);
+        var afterClose = await service.AcceptBallotCastAsync(CreateCastRequest(scenario, "after-close", "another-nullifier"));
+        afterClose.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.ClosePersisted);
+        store.AcceptedBallots.Should().ContainSingle();
+        store.EntitlementCaptures.Should().ContainSingle();
+    }
 
     private static ElectionRecord CreateAdminElection(
         string title = "Board Election",

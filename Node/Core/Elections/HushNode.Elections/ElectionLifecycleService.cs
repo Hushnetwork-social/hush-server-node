@@ -327,11 +327,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
             || existing.ControlDomainProfileId != request.Draft.ControlDomainProfileId
             || existing.ControlDomainProfileVersion != request.Draft.ControlDomainProfileVersion
             || existing.ThresholdProfileId != (request.Draft.ThresholdProfileId ?? request.Draft.SelectedProfileId);
-        if (changesGovernance && ((await repository.GetTrusteeInvitationsAsync(request.ElectionId)).Count > 0
-            || (await repository.GetCeremonyVersionsAsync(request.ElectionId)).Count > 0))
-            return ElectionCommandResult.Failure(ElectionCommandErrorCode.Conflict,
-                "The first ceremony artifact locks this election's governance choice.",
-                [HushShared.HushVoting.Licensing.Model.HushVotingGovernanceLockEvaluator.GovernanceLockedByArtifact]);
+        if (changesGovernance)
+        {
+            var hasArtifact = (await repository.GetTrusteeInvitationsAsync(request.ElectionId)).Count > 0
+                || (await repository.GetCeremonyVersionsAsync(request.ElectionId)).Count > 0
+                || await repository.GetAdminOnlyProtectedTallyEnvelopeAsync(request.ElectionId) is not null;
+            var governanceLock = HushShared.HushVoting.Licensing.Model.HushVotingGovernanceLockEvaluator
+                .EvaluateBoundary(isOpen: false, hasCeremonyArtifact: hasArtifact);
+            if (!governanceLock.Allowed)
+                return ElectionCommandResult.Failure(ElectionCommandErrorCode.Conflict,
+                    governanceLock.SafeReason, [governanceLock.StableCode!]);
+        }
 
         var selectedProfileResult = await ValidateSelectedProfileAsync(repository, request.Draft);
         if (selectedProfileResult.ErrorResult is not null)
@@ -660,6 +666,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "This Hush account is already linked to a different roster entry for the election.");
         }
 
+        if (ElectionCapturedEntitlementAuthority.RequiresCapture(election))
+        {
+            var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+            if (captureFailure is not null) return captureFailure;
+        }
+
         ElectionRosterEntryRecord updatedEntry;
         try
         {
@@ -735,6 +747,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ElectionCommandErrorCode.InvalidState,
                 "Late activation is only allowed while the election remains open.");
         }
+
+        var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+        if (captureFailure is not null) return captureFailure;
 
         var rosterEntry = await repository.GetRosterEntryAsync(request.ElectionId, request.OrganizationVoterId);
         if (rosterEntry is null)
@@ -893,6 +908,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Voting commitment registration is only available while the election is open.");
         }
 
+        var captureReason = await ElectionCapturedEntitlementAuthority.CheckAsync(repository, election);
+        if (captureReason != ElectionEntitlementReason.None)
+            return ElectionCommitmentRegistrationResult.Failure(ElectionCommitmentRegistrationFailureReason.ValidationFailed,
+                ElectionEntitlementResults.Reject(captureReason).ErrorMessage!) with { EntitlementReason = captureReason };
+
         if (!HasSealedBallotDefinition(election))
         {
             return ElectionCommitmentRegistrationResult.Failure(
@@ -1036,6 +1056,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ElectionPreparedBallotCommitmentFailureReason.BallotDefinitionHashMismatch,
                 "Prepared ballot registration is bound to a different ballot definition than the open election.");
         }
+
+        var captureReason = await ElectionCapturedEntitlementAuthority.CheckAsync(repository, election);
+        if (captureReason != ElectionEntitlementReason.None)
+            return ElectionPreparedBallotCommitmentResult.Failure(ElectionPreparedBallotCommitmentFailureReason.ValidationFailed,
+                ElectionEntitlementResults.Reject(captureReason).ErrorMessage!) with { EntitlementReason = captureReason };
 
         var rosterEntryResolution = await ResolveLinkedRosterEntryAsync(
             repository,
@@ -1206,6 +1231,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ElectionSpoilPreparedBallotFailureReason.ElectionNotOpen,
                 "Prepared ballot spoil is only available while the election is open.");
         }
+
+        var captureReason = await ElectionCapturedEntitlementAuthority.CheckAsync(repository, election);
+        if (captureReason != ElectionEntitlementReason.None)
+            return ElectionSpoilPreparedBallotResult.Failure(ElectionSpoilPreparedBallotFailureReason.ValidationFailed,
+                ElectionEntitlementResults.Reject(captureReason).ErrorMessage!) with { EntitlementReason = captureReason };
 
         var rosterEntryResolution = await ResolveLinkedRosterEntryAsync(
             repository,
@@ -1423,6 +1453,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     ElectionCastAcceptanceFailureReason.WrongElectionContext,
                     "Votes can only be accepted while the election is open.");
             }
+
+            var captureReason = await ElectionCapturedEntitlementAuthority.CheckAsync(repository, election);
+            if (captureReason != ElectionEntitlementReason.None)
+                return ElectionCastAcceptanceResult.Failure(ElectionCastAcceptanceFailureReason.ValidationFailed,
+                    ElectionEntitlementResults.Reject(captureReason).ErrorMessage!) with { EntitlementReason = captureReason };
 
             var existingIdempotency = await repository.GetCastIdempotencyRecordAsync(request.ElectionId, idempotencyKeyHash);
             if (existingIdempotency is not null)
@@ -1694,6 +1729,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.NotFound,
                 $"Election {request.ElectionId} was not found.");
+        }
+
+        if (ElectionCapturedEntitlementAuthority.RequiresCapture(election))
+        {
+            var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+            if (captureFailure is not null) return captureFailure;
         }
 
         if (!string.Equals(election.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
@@ -2524,6 +2565,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return validationResult;
         }
 
+        if (request.ActionType != ElectionGovernedActionType.Open)
+        {
+            var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+            if (captureFailure is not null) return captureFailure;
+        }
+
         var proposalCreatedAt = DateTime.UtcNow;
         var proposal = ElectionModelFactory.CreateGovernedProposal(
             election,
@@ -2613,6 +2660,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.Conflict,
                 "Trustee approval is already recorded and immutable.");
+        }
+
+        if (proposal.ActionType != ElectionGovernedActionType.Open
+            && ElectionCapturedEntitlementAuthority.RequiresCapture(election))
+        {
+            var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+            if (captureFailure is not null) return captureFailure;
         }
 
         var approval = ElectionModelFactory.CreateGovernedProposalApproval(
@@ -2886,6 +2940,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 $"Election {request.ElectionId} was not found.");
         }
 
+        var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+        if (captureFailure is not null) return captureFailure;
+
         if (!string.Equals(election.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
         {
             return ElectionCommandResult.Failure(
@@ -3067,6 +3124,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 $"Election {request.ElectionId} was not found.");
         }
 
+        if (ElectionCapturedEntitlementAuthority.RequiresCapture(election))
+        {
+            var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+            if (captureFailure is not null) return captureFailure;
+        }
+
         if (!string.Equals(election.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
         {
             return ElectionCommandResult.Failure(
@@ -3156,6 +3219,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.NotFound,
                 $"Election {request.ElectionId} was not found.");
+        }
+
+        if (ElectionCapturedEntitlementAuthority.RequiresCapture(election))
+        {
+            var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+            if (captureFailure is not null) return captureFailure;
         }
 
         if (!string.Equals(election.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
@@ -3327,6 +3396,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 $"Election {request.ElectionId} was not found.");
         }
 
+        if (ElectionCapturedEntitlementAuthority.RequiresCapture(election))
+        {
+            var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+            if (captureFailure is not null) return captureFailure;
+        }
+
         if (!string.Equals(election.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
         {
             return ElectionCommandResult.Failure(
@@ -3399,6 +3474,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ElectionCommandErrorCode.NotFound,
                 $"Election {request.ElectionId} was not found.");
         }
+
+        var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+        if (captureFailure is not null) return captureFailure;
 
         if (election.LifecycleState != ElectionLifecycleState.Closed)
         {
@@ -3678,6 +3756,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.NotFound,
                 $"Close-counting job {request.CloseCountingJobId} was not found.");
+        }
+
+        var authorizedElection = await repository.GetElectionForUpdateAsync(closeCountingJob.ElectionId);
+        if (authorizedElection is not null)
+        {
+            var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, authorizedElection);
+            if (captureFailure is not null) return captureFailure;
         }
 
         if (closeCountingJob.Status == ElectionCloseCountingJobStatus.Completed)
@@ -6752,6 +6837,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 });
         }
 
+        var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+        if (captureFailure is not null) return captureFailure;
+
         if (artifactType == ElectionBoundaryArtifactType.Finalize && !election.TallyReadyAt.HasValue)
         {
             return ElectionCommandResult.Failure(
@@ -6869,6 +6957,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ElectionCommandErrorCode.InvalidState,
                 "Election finalize is only allowed from the closed state.");
         }
+
+        var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+        if (captureFailure is not null) return captureFailure;
 
         if (!election.TallyReadyAt.HasValue)
         {
@@ -7174,6 +7265,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionRecord election,
         AcceptFixedUnofficialResultWithAnomalyRequest request)
     {
+        var captureFailure = await ElectionCapturedEntitlementAuthority.RequireAsync(repository, election);
+        if (captureFailure is not null) return captureFailure;
+
         var validationErrors = ValidateAcceptFixedUnofficialResultWithAnomalyRequest(request);
         if (validationErrors.Count > 0)
         {

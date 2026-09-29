@@ -316,6 +316,9 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 registerAction.CommitmentHash,
                 registerAction.OrganizationVoterId));
 
+        if (result.EntitlementReason != ElectionEntitlementReason.None)
+            return ElectionEntitlementResults.Reject(result.EntitlementReason);
+
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(result.Election, rosterEntry: result.RosterEntry)
             : ElectionCommandResult.Failure(
@@ -364,6 +367,9 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 acceptAction.BallotDefinitionHash,
                 acceptAction.OrganizationVoterId));
 
+        if (result.EntitlementReason != ElectionEntitlementReason.None)
+            return ElectionEntitlementResults.Reject(result.EntitlementReason);
+
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(result.Election)
             : ElectionCommandResult.Failure(
@@ -411,6 +417,9 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 _blockchainCache.CurrentBlockId.Value,
                 registerAction.OrganizationVoterId));
 
+        if (result.EntitlementReason != ElectionEntitlementReason.None)
+            return ElectionEntitlementResults.Reject(result.EntitlementReason);
+
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(result.Election)
             : ElectionCommandResult.Failure(
@@ -454,6 +463,9 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 _blockchainCache.LastBlockIndex.Value,
                 _blockchainCache.CurrentBlockId.Value,
                 spoilAction.OrganizationVoterId));
+
+        if (result.EntitlementReason != ElectionEntitlementReason.None)
+            return ElectionEntitlementResults.Reject(result.EntitlementReason);
 
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(result.Election)
