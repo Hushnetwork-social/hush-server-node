@@ -29,6 +29,20 @@ internal sealed partial class EntitlementEnforcementTwinSteps
     private AcceptElectionBallotCastActionPayload _completionCast = null!;
 
     private static string Digest(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+    private async Task<HushNetwork.proto.GetElectionResponse> SignedElectionAccess(DerivedKeys actor)
+    {
+        var signedAt = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+        var payload = JsonSerializer.Serialize(new { actorAddress = actor.SigningPublicKey,
+            method = "GetElection", request = new { ElectionId = _id.ToString() }, signedAt });
+        var headers = new Grpc.Core.Metadata
+        {
+            { "x-hush-election-query-signatory", actor.SigningPublicKey },
+            { "x-hush-election-query-signed-at", signedAt },
+            { "x-hush-election-query-signature", DigitalSignature.SignMessageCompactBase64(payload, actor.SigningPrivateKey) },
+        };
+        return await scenario.Elections.GetElectionAsync(new HushNetwork.proto.GetElectionRequest { ElectionId = _id.ToString() },
+            headers, DateTime.UtcNow.AddSeconds(10));
+    }
     private async Task<HushNetwork.proto.GetElectionVotingViewResponse> VotingView(DerivedKeys? voter = null)
     {
         var response = await scenario.Node.Services.GetRequiredService<IElectionQueryApplicationService>()
@@ -69,6 +83,11 @@ internal sealed partial class EntitlementEnforcementTwinSteps
             .ResolveEffectiveAsync(subject!, scenario.HistoricalBlockClock.GetUtcNow().UtcDateTime, default);
         current.Outcome.Should().Be(IndexedEntitlementReadOutcome.NoActive);
 
+        var ownerAccess = await SignedElectionAccess(_owner);
+        ownerAccess.ScopedAccess.AllowedOperations.Should().Contain("close").And.Contain("vote");
+        var voterAccess = await SignedElectionAccess(_secondVoter);
+        voterAccess.ScopedAccess.AllowedOperations.Should().Contain("vote").And.NotContain("close");
+        (await scenario.Elections.GetElectionAsync(new HushNetwork.proto.GetElectionRequest { ElectionId = _id.ToString() })).ScopedAccess.Should().BeNull();
         _completionCast = await CastAfterExpiry(_owner, "v0");
         await CastAfterExpiry(_secondVoter, "peer0");
         (await Read(db => db.ElectionAcceptedBallots.CountAsync(b => b.ElectionId == _id))).Should().Be(2);
@@ -145,6 +164,8 @@ internal sealed partial class EntitlementEnforcementTwinSteps
         var proofStates = await Read(db => db.ElectionPublicationProofSessions.Where(b => b.ElectionId == _id)
             .Select(b => b.Status).ToArrayAsync());
         closed.TallyReadyAt.Should().NotBeNull($"real counting must complete; progress={closed.ClosedProgressStatus}, pending={pending}, published={published}, issues={string.Join(',', issues)}, proof states={string.Join(',', proofStates)}");
+        var closedAccess = await SignedElectionAccess(_owner);
+        closedAccess.ScopedAccess.AllowedOperations.Should().Contain("finalize").And.NotContain("vote");
         var afterClose = _completionCast with { IdempotencyKey = Guid.NewGuid().ToString(), BallotNullifier = Digest(Guid.NewGuid().ToString()) };
         var rejectedCast = await SignAction(EncryptedElectionEnvelopeActionTypes.AcceptBallotCast, afterClose);
         var admission = await scenario.Blockchain.SubmitSignedTransactionAsync(

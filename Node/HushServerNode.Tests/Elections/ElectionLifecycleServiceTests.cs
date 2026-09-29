@@ -7191,6 +7191,32 @@ public class ElectionLifecycleServiceTests
         store.EntitlementCaptures.Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task CapturedAccessProjection_IsRoleStateAndElectionBoundWithoutCurrentLicence()
+    {
+        var store = new ElectionStore();
+        var fixture = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        var repository = new FakeElectionsRepository(store);
+        var election = store.Elections[fixture.Election.ElectionId];
+        (await ElectionScopedAccessProjector.ReadAsync(repository, election, null)).Should().BeNull();
+        var missing = await ElectionScopedAccessProjector.ReadAsync(repository, election, "owner-address");
+        missing!.AllowedOperations.Should().BeEmpty();
+        missing.EntitlementReason.Should().Be("ENTITLEMENT_CAPTURE_UNAVAILABLE");
+        SeedExistingOpenAuthorizationFixture(store);
+        election = store.Elections[election.ElectionId];
+        store.OwnerAuthority = IndexedEntitlementReadResult.Unavailable("offline", "No current licence authority");
+        var voter = await ElectionScopedAccessProjector.ReadAsync(repository, election, "voter-address");
+        voter!.AllowedOperations.Should().Contain("vote").And.Contain("results").And.NotContain("close");
+        var owner = await ElectionScopedAccessProjector.ReadAsync(repository, election, "owner-address");
+        owner!.AllowedOperations.Should().Contain("close").And.Contain("audit").And.NotContain("vote");
+        (await ElectionScopedAccessProjector.ReadAsync(repository, election, "other-actor"))!.AllowedOperations.Should().BeEmpty();
+        var closed = election with { LifecycleState = ElectionLifecycleState.Closed, TallyReadyAt = DateTime.UtcNow };
+        (await ElectionScopedAccessProjector.ReadAsync(repository, closed, "voter-address"))!.AllowedOperations.Should().NotContain("vote");
+        (await ElectionScopedAccessProjector.ReadAsync(repository, closed, "owner-address"))!.AllowedOperations.Should().Contain("finalize");
+        var different = election with { ElectionId = ElectionId.NewElectionId };
+        (await ElectionScopedAccessProjector.ReadAsync(repository, different, "owner-address"))!.AllowedOperations.Should().BeEmpty();
+    }
+
     private static ElectionRecord CreateAdminElection(
         string title = "Board Election",
         IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null,

@@ -30,6 +30,7 @@ internal sealed class HushVotingScenario : IAsyncDisposable
     public HushIdentity.HushIdentityClient Identities { get; private set; } = null!;
     public HushBlockchain.HushBlockchainClient Blockchain { get; private set; } = null!;
     public HushNetwork.proto.HushVotingLicence.HushVotingLicenceClient Licences { get; private set; } = null!;
+    public HushElections.HushElectionsClient Elections { get; private set; } = null!;
     public string BaseUrl { get; private set; } = "";
     private string _redis = "";
     private HushVotingTestRun? _run;
@@ -89,6 +90,7 @@ internal sealed class HushVotingScenario : IAsyncDisposable
         Blockchain = new HushBlockchain.HushBlockchainClient(_channel);
         Identities = new HushIdentity.HushIdentityClient(_channel);
         Licences = new HushNetwork.proto.HushVotingLicence.HushVotingLicenceClient(_channel);
+        Elections = new HushElections.HushElectionsClient(_channel);
 
         // Backend Twins share only the owned server/database lifecycle.
         if (!includeBrowser) return;
